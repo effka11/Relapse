@@ -2281,7 +2281,7 @@ end
 
 function GM:PlayerFootstep(pl, vFootPos, iFoot, strSoundName, fVolume)
 	if self.Stride and self.Stride:UsesStride(pl) then
-		if not self.Stride:AllowFootstepSound(pl, iFoot) then
+		if self.Stride.AllowFootstepSound and not self.Stride:AllowFootstepSound(pl, iFoot) then
 			return true
 		end
 

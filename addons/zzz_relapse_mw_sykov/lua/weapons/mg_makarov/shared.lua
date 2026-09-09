@@ -49,6 +49,7 @@ SWEP.ParticleEffects = {
     ["Ejection"] = "mwb_shell_eject",
 }
 
+SWEP.Primary = SWEP.Primary or {}
 SWEP.Primary.Sound = Sound("weap_mike_fire_plr")
 SWEP.Primary.Ammo = "pistol"
 SWEP.Primary.Damage = R.Damage
@@ -179,5 +180,9 @@ SWEP.WalkSpeed = SPEED_NORMAL or 95
 SWEP.NoDeploySpeedChange = true
 SWEP.RequiredClip = 1
 SWEP.Description = "A compact 9x18mm pistol."
+
+function SWEP:GetWalkSpeed()
+    return self.WalkSpeed or SPEED_NORMAL or 95
+end
 
 DEFINE_BASECLASS("mg_base")

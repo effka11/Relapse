@@ -30,7 +30,6 @@ local math_sin = math.sin
 local math_cos = math.cos
 local math_pi = math.pi
 local Lerp = Lerp
-local FrameTime = FrameTime
 local TickInterval = engine.TickInterval
 local CurTime = CurTime
 local hook_Add = hook.Add
@@ -41,12 +40,14 @@ local M_Entity = FindMetaTable("Entity")
 local M_CMoveData = FindMetaTable("CMoveData")
 local P_Team = M_Player.Team
 local P_Alive = M_Player.Alive
-local P_OnGround = M_Player.OnGround
 local P_Crouching = M_Player.Crouching
 local P_KeyDown = M_Player.KeyDown
 local P_GetWalkSpeed = M_Player.GetWalkSpeed
 local P_GetRunSpeed = M_Player.GetRunSpeed
-local P_GetVelocity = M_Player.GetVelocity
+-- OnGround / GetVelocity live on Entity. Player.__index falls through, but
+-- M_Player.OnGround is nil if cached from the Player metatable.
+local P_OnGround = M_Entity.OnGround or M_Entity.IsOnGround
+local P_GetVelocity = M_Entity.GetVelocity
 local E_GetTable = M_Entity.GetTable
 local M_GetVelocity = M_CMoveData.GetVelocity
 local M_Vector = FindMetaTable("Vector")
@@ -66,6 +67,7 @@ Stride.MinPlaybackRate = 0.25
 Stride.MaxPlaybackRate = 2
 Stride.MinStepMs = 240
 Stride.MaxStepMs = 720
+Stride.BobFreq = 0.5
 
 local function GetState(pl)
 	local pt = E_GetTable(pl)
@@ -165,8 +167,8 @@ function Stride:GetBob(pl)
 		return 0, 0, 0, 0
 	end
 
-	local gait = st.cycle * math_pi * 2
-	-- Dip on each footfall (cycle 0 and 0.5).
+	-- BobFreq 0.5 = one sway / plant per two steps, not a shake on every footfall.
+	local gait = st.cycle * math_pi * 2 * (self.BobFreq or 0.5)
 	local vertical = -math_abs(math_cos(gait)) * a
 	local lateral = math_sin(gait) * a
 
@@ -182,21 +184,16 @@ function Stride:OnFootstep(pl, iFoot)
 	hook_Run("RelapseStrideFootstep", pl, st.foot, st)
 end
 
--- Engine movement AND player-model anim events both call PlayerFootstep.
--- Keep the first hit in a stride window, swallow the rest.
+-- Engine + anim events both hit PlayerFootstep. Play the first, swallow extras.
 function Stride:AllowFootstepSound(pl, iFoot)
 	if not self:UsesStride(pl) then
 		return true
 	end
 
 	local st = GetState(pl)
-	if not st.grounded or st.intensity < 0.12 then
-		return false
-	end
-
 	local now = CurTime()
-	local gap = math_max(0.22, (st.interval or 0.4) * 0.78)
-	if st.lastStepTime and now - st.lastStepTime < gap then
+	local gap = math_max(0.2, (st.interval or 0.4) * 0.7)
+	if st.lastStepTime >= 0 and now - st.lastStepTime < gap then
 		return false
 	end
 
@@ -218,7 +215,7 @@ function Stride:FinishMove(pl, mv)
 
 	local st = GetState(pl)
 	local speed = V_Length2D(M_GetVelocity(mv))
-	local grounded = P_OnGround(pl)
+	local grounded = pl:OnGround()
 	local sprinting = P_KeyDown(pl, IN_SPEED) and not P_Crouching(pl)
 	local dt = TickInterval()
 	if dt <= 0 then
@@ -233,6 +230,10 @@ function Stride:FinishMove(pl, mv)
 	st.intensity = math_Approach(st.intensity, want, dt * self.IntensityRate)
 
 	if want > 0 then
+		if CLIENT and not IsFirstTimePredicted() then
+			return
+		end
+
 		st.interval = self:ComputeInterval(pl, speed, sprinting, P_Crouching(pl))
 		st.cycle = (st.cycle + dt / (st.interval * 2)) % 1
 		st.foot = (st.cycle >= 0.5) and 1 or 0
@@ -263,10 +264,10 @@ function Stride:ApplyCamera(pl, origin, angles)
 	local vertical, lateral, _, amp = self:GetBob(pl)
 	if amp < 0.001 then return origin, angles end
 
-	origin = origin + angles:Up() * (vertical * 0.28)
+	origin = origin + angles:Up() * (vertical * 0.16)
 	angles = Angle(angles.p, angles.y, angles.r)
-	angles.p = angles.p + vertical * 0.14
-	angles.r = angles.r + lateral * 0.22
+	angles.p = angles.p + vertical * 0.08
+	angles.r = angles.r + lateral * 0.12
 
 	return origin, angles
 end
@@ -285,9 +286,9 @@ function Stride:ApplyViewModel(pl, wep, pos, ang)
 	end
 
 	ang = Angle(ang.p, ang.y, ang.r)
-	pos = pos + ang:Up() * (vertical * 0.55 * mul) + ang:Right() * (lateral * 0.32 * mul)
-	ang:RotateAroundAxis(ang:Right(), vertical * 0.4 * mul)
-	ang:RotateAroundAxis(ang:Forward(), lateral * 0.45 * mul)
+	pos = pos + ang:Up() * (vertical * 0.32 * mul) + ang:Right() * (lateral * 0.18 * mul)
+	ang:RotateAroundAxis(ang:Right(), vertical * 0.22 * mul)
+	ang:RotateAroundAxis(ang:Forward(), lateral * 0.24 * mul)
 
 	return pos, ang
 end

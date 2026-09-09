@@ -1040,7 +1040,7 @@ function meta:AddPoints(points, floatingscoreobject, fmtype, nomul)
 		end
 	end
 
-	self:AddZSXP(xp * (self.RedeemBonus and 1.15 or 1))
+	self:AddZSXP(xp)
 
 	gamemode.Call("PlayerPointsAdded", self, wholepoints)
 end
@@ -1241,10 +1241,6 @@ function meta:Redeem(silent, noequip)
 	self:KillSilent()
 
 	self:ChangeTeam(TEAM_HUMAN)
-	if not GAMEMODE.InitialVolunteers[self:UniqueID()] then
-		self:AddZSXP(50 * (GAMEMODE.ZombieXPMulti or 1))
-		self.RedeemBonus = true
-	end
 	if not noequip then self.m_PreRedeem = true end
 
 	self:Spawn()

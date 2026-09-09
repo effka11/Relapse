@@ -43,6 +43,21 @@ end
 local remainingworth = 0
 local WorthButtons = {}
 
+local function CartHasItems()
+	for _, btn in pairs(WorthButtons) do
+		if IsValid(btn) and btn.On then
+			return true
+		end
+	end
+	return false
+end
+
+local function SyncWorthCheckout()
+	if pWorth and pWorth:IsValid() and IsValid(pWorth.Checkout) then
+		pWorth.Checkout.RelapseArmed = CartHasItems()
+	end
+end
+
 local function Checkout(tobuy)
 	if tobuy and #tobuy > 0 then
 		gamemode.Call("SuppressArsenalUpgrades", 1)
@@ -69,16 +84,6 @@ local function CheckoutDoClick(self)
 		Checkout(tobuy)
 	else
 		surface.PlaySound("buttons/button8.wav")
-	end
-end
-
-local function RandDoClick(self)
-	gamemode.Call("SuppressArsenalUpgrades", 1)
-
-	RunConsoleCommand("worthrandom")
-
-	if pWorth and pWorth:IsValid() then
-		pWorth:Close()
 	end
 end
 
@@ -170,7 +175,7 @@ local function SaveDoClick(self)
 	function(strTextOut) end,
 	"OK", "Cancel")
 
-	frame:GetChildren()[5]:GetChildren()[2]:SetTextColor(Color(30, 30, 30))
+	frame:GetChildren()[5]:GetChildren()[2]:SetTextColor(RelapseUI.Col.Ink)
 end
 
 local function DeleteDoClick(self)
@@ -203,16 +208,21 @@ function MakepWorth()
 	remainingworth = GetStartingWorth()
 	RelapseUI.CreateFonts()
 
-	local wid, hei, m = RelapseUI.FrameSize(76, 50)
+	local m = RelapseUI.M()
+	local gridW = RelapseUI.Cells(45)
+	local cardGap = m.cardGap
+	local cardW = math.floor((gridW - cardGap) / 2)
+	local sheetW = gridW + m.scroll
+	local needW = 2 * m.pad + sheetW + RelapseUI.ViewerGap() + m.sidebar
+	local cols = math.ceil(needW / m.step)
+	local wid, hei, m = RelapseUI.FrameSize(cols, 51)
 	local pad = m.pad
 	local headerh = m.header
 	local footerh = m.footer
 	local tabhei = m.tabs
+	local tabGap = m.tabGap
 	local innerW = wid - 2 * pad
-	local sheetW = innerW - m.sidebar - m.gutter
 	local sheetH = hei - headerh - footerh
-	local gridW = math.floor(sheetW - m.step)
-	local cardW = math.floor((gridW - m.gutter) / 2)
 
 	local frame = vgui.Create("DFrame")
 	pWorth = frame
@@ -257,7 +267,7 @@ function MakepWorth()
 
 	local list = vgui.Create("DPanelList", propertysheet)
 	local sheet = propertysheet:AddSheet("Favorites", list, "icon16/heart.png", false, false)
-	sheet.Panel:SetPos(0, tabhei)
+	sheet.Panel:SetPos(0, tabhei + tabGap)
 	list:EnableVerticalScrollbar(true)
 	RelapseUI.StyleScroll(list)
 	list:SetWide(sheetW)
@@ -359,13 +369,13 @@ function MakepWorth()
 		local trinkets = catid == ITEMCAT_TRINKETS
 
 		list = vgui.Create("DGrid", itemframe)
-		list:SetSize(gridW, sheetH - tabhei)
+		list:SetSize(gridW, sheetH - tabhei - tabGap)
 		list:SetCols(2)
-		list:SetColWide(cardW + m.gutter)
-		list:SetRowHeight((trinkets and m.trinketH or m.cardH) + m.gutter)
+		list:SetColWide(cardW + cardGap)
+		list:SetRowHeight((trinkets and m.trinketH or m.cardH) + cardGap)
 
 		sheet = propertysheet:AddSheet(catname, itemframe, GAMEMODE.ItemCategoryIcons[catid], false, false)
-		sheet.Panel:SetPos(0, tabhei)
+		sheet.Panel:SetPos(0, tabhei + tabGap)
 
 		for i, tab in ipairs(GAMEMODE.Items) do
 			if tab.Category == catid and tab.WorthShop then
@@ -382,43 +392,37 @@ function MakepWorth()
 	checkout:SetFont("Relapse15")
 	checkout:SetText("Checkout")
 	checkout:SetSize(RelapseUI.Cells(12), m.btnH)
-	checkout:AlignRight(0)
-	checkout:CenterVertical()
+	RelapseUI.AlignFooterRight(checkout)
+	RelapseUI.AlignFooterBottom(checkout)
 	checkout.Paint = RelapseUI.PaintPrimaryButton
 	checkout.DoClick = CheckoutDoClick
-
-	local randombutton = vgui.Create("DButton", bottomspace)
-	randombutton:SetFont("Relapse15")
-	randombutton:SetText("Random")
-	randombutton:SetSize(RelapseUI.Cells(6), m.btnH)
-	randombutton:MoveLeftOf(checkout, m.gutter)
-	randombutton:CenterVertical()
-	randombutton.Paint = RelapseUI.PaintGhostButton
-	randombutton.DoClick = RandDoClick
+	checkout.RelapseArmed = false
+	frame.Checkout = checkout
 
 	local clearbutton = vgui.Create("DButton", bottomspace)
 	clearbutton:SetFont("Relapse15")
 	clearbutton:SetText("Clear")
 	clearbutton:SetSize(RelapseUI.Cells(6), m.btnH)
-	clearbutton:MoveLeftOf(randombutton, m.gutter)
-	clearbutton:CenterVertical()
+	clearbutton:MoveLeftOf(checkout, m.gutter)
+	RelapseUI.AlignFooterBottom(clearbutton)
 	clearbutton.Paint = RelapseUI.PaintGhostButton
 	clearbutton.DoClick = ClearCartDoClick
 
 	local worthbox = vgui.Create("DPanel", bottomspace)
 	worthbox:SetPaintBackground(false)
-	worthbox:SetSize(RelapseUI.Cells(10), m.footer - RelapseUI.Grid5(2))
-	worthbox:AlignLeft(0)
-	worthbox:CenterVertical()
 
-	local worthcap = EasyLabel(worthbox, "WORTH", "Relapse13", RelapseUI.Col.Muted)
-	worthcap:AlignLeft(0)
-	worthcap:AlignTop(0)
+	local worthcap = EasyLabel(worthbox, "WORTH:", "Relapse30", RelapseUI.Col.Muted)
+	worthcap:SetVisible(false)
 
-	local worthlab = EasyLabel(worthbox, tostring(remainingworth), "Relapse22", RelapseUI.Col.Accent)
-	worthlab.RelapseAlignLeft = true
-	worthlab:AlignLeft(0)
-	worthlab:MoveBelow(worthcap, RelapseUI.Grid5())
+	local worthlab = EasyLabel(worthbox, tostring(remainingworth), "Relapse45", RelapseUI.Col.Ok)
+	worthlab:SetVisible(false)
+	worthlab.RelapseAfter = worthcap
+	worthlab.RelapseBottomOf = checkout
+	worthbox.Paint = function(me, w, h)
+		RelapseUI.PaintWorthChip(worthcap, worthlab, w, h)
+		return true
+	end
+	RelapseUI.LayoutWorthChip(worthlab)
 	frame.WorthLab = worthlab
 	frame.WorthChip = worthbox
 
@@ -509,7 +513,7 @@ function PANEL:Init()
 	self.ModelFrame:SetMouseInputEnabled(false)
 	self.ModelFrame.Paint = function() end
 
-	self.NameLabel = EasyLabel(self, "", "Relapse15")
+	self.NameLabel = EasyLabel(self, "", "Relapse20")
 	self.NameLabel:SetContentAlignment(4)
 	self.NameLabel:SetTextColor(RelapseUI.Col.Text)
 	self.NameLabel:DockPadding(0, 0, 0, 0)
@@ -624,12 +628,7 @@ function PANEL:SetWorthID(id)
 
 	self:SetTooltip(tab.Description)
 
-	if missing_skill or tab.NoClassicMode and GAMEMODE:IsClassicMode() or tab.NoZombieEscape and GAMEMODE.ZombieEscape then
-		self:SetAlpha(140)
-		self.Locked = true
-	else
-		self:SetAlpha(255)
-	end
+	self.Locked = missing_skill or tab.NoClassicMode and GAMEMODE:IsClassicMode() or tab.NoZombieEscape and GAMEMODE.ZombieEscape
 
 	if not nottrinkets and tab.SubCategory then
 		local catlabel = EasyLabel(self, GAMEMODE.ItemSubCategories[tab.SubCategory], "Relapse13", RelapseUI.Col.Muted)
@@ -695,6 +694,7 @@ function PANEL:DoClick(silent, force)
 	end
 
 	RelapseUI.UpdateWorthLabel(pWorth.WorthLab, remainingworth, GetStartingWorth())
+	SyncWorthCheckout()
 
 	return goodcart
 end

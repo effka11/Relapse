@@ -69,7 +69,7 @@ local function SetWeaponViewerSWEP(self, swep, category, comps)
 		local recipe = EasyLabel(viewer, "", "ZSBodyTextFont", COLOR_TAN)
 		recipe:SetContentAlignment(8)
 		recipe:SetSize(viewer:GetWide(), 16 * screenscale)
-		recipe:MoveBelow(viewer.ItemStatBars[6], 20)
+		recipe:MoveBelow(viewer.ItemStatBars[#viewer.ItemStatBars], 20)
 		viewer.m_Recipe1 = recipe
 	end
 

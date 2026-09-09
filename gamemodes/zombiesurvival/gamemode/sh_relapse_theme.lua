@@ -1,35 +1,60 @@
 -- Relapse colour tokens. Change this table to retheme the whole UI.
 -- Layout (5/15) lives in vgui/relapse_ui.lua and reads only these colours.
+--
+-- The shop is one opaque slab. No glass over the world — that is what
+-- read as dirt. Cards are a slight lift on the same ash. Khaki = on.
 
 RelapseUI = RelapseUI or {}
 
+local Ash    = Color(22, 23, 22)      -- charcoal, fully opaque in the shop
+local Bone   = Color(236, 232, 224)   -- beige, closer to paper-white
+local Khaki  = Color(158, 160, 118)   -- faded military olive
+local Blood  = Color(148, 48, 52)     -- oxblood
+local Sulfur = Color(186, 162, 62)    -- hazard yellow
+
+local function With(c, a)
+	return Color(c.r, c.g, c.b, a)
+end
+
+local function AshAt(n)
+	return Color(Ash.r + n, Ash.g + n, Ash.b + n, 255)
+end
+
 RelapseUI.Col = {
-	-- Surfaces. Slight glass, dense enough that type does not fight the world.
-	Bg        = Color(16, 14, 13, 242),
-	Header    = Color(16, 14, 13, 242),
-	Panel     = Color(30, 27, 24, 236),
-	Card      = Color(48, 44, 40, 250),
-	CardHover = Color(60, 55, 50, 255),
-	CardOn    = Color(184, 156, 108, 70),
+	Bg        = AshAt(0),
+	Header    = AshAt(0),
+	Panel     = AshAt(0),
+	Card      = AshAt(16),
+	CardHover = AshAt(28),
+	CardOn    = With(Khaki, 255),
 
-	-- Kept for rare fills (stat tracks). Do not use as window chrome.
-	Hairline  = Color(255, 255, 255, 18),
-	Border    = Color(255, 255, 255, 18),
-	Track     = Color(255, 255, 255, 16),
+	Hairline  = AshAt(28),
+	Border    = AshAt(28),
+	Track     = AshAt(28),
+	Hover     = AshAt(28),
+	TabOn     = AshAt(28),
+	Lock      = Color(0, 0, 0, 80),
+	HudTrack  = Color(0, 0, 0, 80),
+	Shadow    = Color(0, 0, 0, 255),
+	Wash      = With(Bone, 40),
+	DangerDim = With(Blood, 40),
 
-	Text      = Color(236, 232, 224, 255),
-	Muted     = Color(160, 154, 146, 255),
+	Text      = With(Bone, 255),
+	Muted     = Color(152, 150, 142, 255),
+	Ink       = With(Ash, 255),
 
-	Accent    = Color(184, 156, 108, 255),
-	AccentDim = Color(184, 156, 108, 88),
+	Accent    = With(Bone, 255),
+	AccentDim = AshAt(16),
+	AccentSoft = AshAt(28),
 
-	Ok        = Color(184, 156, 108, 255),
-	Warn      = Color(196, 154, 86, 255),
-	Danger    = Color(196, 86, 78, 255),
+	Ok        = With(Khaki, 255),
+	Warn      = With(Sulfur, 255),
+	Danger    = With(Blood, 255),
 
-	-- Health: olive / warm red derived from Accent (H≈38°, muted).
-	HealthMax = Color(136, 166, 108, 255),
-	HealthMin = Color(196, 90, 78, 255)
+	HealthMax = With(Khaki, 255),
+	HealthMin = Color(156, 50, 54, 255),
+	Phantom   = Color(128, 130, 122, 130),
+	Armor     = Color(120, 40, 46, 230)
 }
 
 -- Flora-like radii in reference px (sPx). Fills only — no 1px outlines.

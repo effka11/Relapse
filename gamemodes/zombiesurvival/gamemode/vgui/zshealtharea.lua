@@ -1,8 +1,7 @@
 local PANEL = {}
 
-local colPhantom = Color(160, 154, 146, 140)
-local colArmor = Color(196, 86, 78, 230)
-local colHealth = Color(184, 156, 108, 255)
+-- Scratch buffer for HealthCol. Colours come from sh_relapse_theme.lua.
+local colHealth = Color(0, 0, 0, 255)
 
 function PANEL:Init()
 	self:SetMouseInputEnabled(false)
@@ -41,6 +40,7 @@ function PANEL:Paint(w, h)
 	if not lp:IsValid() then return true end
 
 	RelapseUI.CreateFonts()
+	local c = RelapseUI.Col
 	local pad = RelapseUI.sPx(8)
 	local barw = RelapseUI.Cells(26)
 	local barh = RelapseUI.sPx(10)
@@ -60,7 +60,7 @@ function PANEL:Paint(w, h)
 	local phantomfrac = math.Clamp(phantom / maxhealth, 0, 1 - self.LerpFrac)
 	local hpcol = RelapseUI.HealthCol(self.LerpFrac, colHealth)
 
-	RelapseUI.PaintHudHairBar(x, y - barh, barw, barh, self.LerpFrac, hpcol, phantomfrac, colPhantom, 4)
+	RelapseUI.PaintHudHairBar(x, y - barh, barw, barh, self.LerpFrac, hpcol, phantomfrac, c.Phantom, 4)
 	y = y - barh - RelapseUI.sPx(10)
 
 	RelapseUI.HudText(tostring(math.Round(self.LerpHP)), "Relapse64", x, y, hpcol, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
@@ -72,8 +72,8 @@ function PANEL:Paint(w, h)
 
 		local ax = pad
 		local ay = h - pad
-		RelapseUI.PaintHudHairBar(ax, ay - RelapseUI.sPx(5), barw, RelapseUI.sPx(5), self.LerpArmor, colArmor, nil, nil, 4)
-		RelapseUI.HudText(translate.Get("hud_armor") .. "  " .. math.ceil(armor), "Relapse15", ax, ay - RelapseUI.sPx(8), colArmor, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
+		RelapseUI.PaintHudHairBar(ax, ay - RelapseUI.sPx(5), barw, RelapseUI.sPx(5), self.LerpArmor, c.Armor, nil, nil, 4)
+		RelapseUI.HudText(translate.Get("hud_armor") .. "  " .. math.ceil(armor), "Relapse15", ax, ay - RelapseUI.sPx(8), c.Armor, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
 	end
 
 	return true

@@ -5,10 +5,10 @@ hook.Add("Initialize", "RelapseMWSykovZS", function()
 	local wep = weapons.GetStored("mg_makarov")
 	if not wep then return end
 
-	wep.WalkSpeed = wep.WalkSpeed or 225
+	wep.WalkSpeed = SPEED_NORMAL
 	wep.NoDeploySpeedChange = true
 	if not wep.Description then
-		wep.Description = "A compact 9mm pistol."
+		wep.Description = "A compact 9x18mm pistol."
 	end
 
 	if wep.Primary and GAMEMODE and GAMEMODE.SetupDefaultClip and not wep.Primary.DefaultClip then

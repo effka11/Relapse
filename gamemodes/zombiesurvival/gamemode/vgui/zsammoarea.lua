@@ -1,9 +1,7 @@
 local PANEL = {}
 
-local colAmmo = Color(184, 156, 108, 255)
-local colCap = Color(160, 154, 146, 255)
-local colSpare = Color(160, 154, 146, 255)
-local colStripe = Color(236, 232, 224, 255)
+-- Scratch buffer for HealthCol. Colours come from sh_relapse_theme.lua.
+local colAmmo = Color(0, 0, 0, 255)
 
 local function AmmoCounts(lp)
 	if not lp:IsValid() or not lp:Alive() or lp:Team() ~= TEAM_HUMAN then return end
@@ -59,42 +57,49 @@ function PANEL:Paint(w, h)
 	local pad = RelapseUI.sPx(8)
 	local y = h - pad - RelapseUI.sPx(4) - RelapseUI.sPx(10) - RelapseUI.sPx(10)
 	local rx = w - pad
+	local step = RelapseUI.Grid15()
+	local fine = RelapseUI.Grid5()
 
 	self.LerpClip = Lerp(FrameTime() * 12, self.LerpClip or clip, clip)
+	self.LerpSpare = Lerp(FrameTime() * 12, self.LerpSpare or spare, spare)
+
+	local clipstr = tostring(math.Round(self.LerpClip))
+	local sparestr = tostring(math.Round(self.LerpSpare))
+	local capstr = tostring(maxclip)
 
 	local frac = math.Clamp(clip / maxclip, 0, 1)
-	local col = RelapseUI.HealthCol(frac, colAmmo)
-	local clipstr = tostring(math.Round(self.LerpClip))
-	local suffix = "/" .. tostring(maxclip)
+	local clipcol = RelapseUI.HealthCol(frac, colAmmo)
+	local colMuted = RelapseUI.Col.Muted
 
-	colCap.r, colCap.g, colCap.b = RelapseUI.Col.Muted.r, RelapseUI.Col.Muted.g, RelapseUI.Col.Muted.b
-	surface.SetFont("Relapse32")
-	local sw = select(1, surface.GetTextSize(suffix))
-	surface.SetFont("Relapse64")
-	local _, ch = surface.GetTextSize(clipstr)
-
-	RelapseUI.HudText(suffix, "Relapse32", rx, y, colCap, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
-	RelapseUI.HudText(clipstr, "Relapse64", rx - sw, y, col, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
-
-	if not infinite then
-		local span = RelapseUI.Grid15(4)
-		local thick = math.max(2, RelapseUI.sPx(2))
-		local ox = rx - span
-		local oy = y - ch
-
-		colStripe.r, colStripe.g, colStripe.b = RelapseUI.Col.Muted.r, RelapseUI.Col.Muted.g, RelapseUI.Col.Muted.b
-		colStripe.a = 255
-		RelapseUI.PaintHudDiagBand(ox, oy, span, thick, colStripe, 2)
-
-		self.LerpSpare = Lerp(FrameTime() * 12, self.LerpSpare or spare, spare)
-		if spare <= 0 then
-			colSpare.r, colSpare.g, colSpare.b = RelapseUI.Col.Danger.r, RelapseUI.Col.Danger.g, RelapseUI.Col.Danger.b
-		else
-			colSpare.r, colSpare.g, colSpare.b = RelapseUI.Col.Muted.r, RelapseUI.Col.Muted.g, RelapseUI.Col.Muted.b
-		end
-
-		RelapseUI.HudText(tostring(math.Round(self.LerpSpare)), "Relapse32", rx, oy, colSpare, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP, 4)
+	if infinite then
+		RelapseUI.HudText(clipstr, "Relapse64", rx, y, clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+		return true
 	end
+
+	surface.SetFont("Relapse32")
+	local spareW = surface.GetTextSize(sparestr)
+	local capW = surface.GetTextSize(capstr)
+	local threeDigitW = surface.GetTextSize("000")
+	local colW = math.max(capW, step * 2)
+	colW = math.ceil(colW / step) * step
+
+	-- Fixed three-digit reserve column: short values grow right, without moving
+	-- the clip/capacity block. Its far edge mirrors the health HUD inset.
+	local spareColW = math.ceil(math.max(spareW, threeDigitW) / step) * step
+	local spareLeft = rx - spareColW
+	local capRight = spareLeft - step * 2
+	local clipRight = capRight - colW - step
+	RelapseUI.HudText(clipstr, "Relapse64", clipRight, y, clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+	RelapseUI.HudText(capstr, "Relapse32", capRight, y, colMuted, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+
+	local spareY = y - step * 3
+	RelapseUI.HudText(sparestr, "Relapse32", spareLeft, spareY, colMuted, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
+
+	-- \ on the first digit's bottom-left. Slightly longer than one 15-cell.
+	local span = step + fine
+	local hx = math.floor(spareLeft - span + 0.5)
+	local hy = math.floor(spareY - span + fine * 2 + 0.5)
+	RelapseUI.PaintHudDiagHair(hx, hy, span, colMuted, RelapseUI.sPx(1), 1)
 
 	return true
 end

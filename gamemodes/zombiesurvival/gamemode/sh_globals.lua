@@ -123,6 +123,10 @@ GM.PulsePointsMultiplier = 1.25
 GM.HumanoidZombiePointRatio = 45
 -- Extra arsenal points (and XP) for the player who lands the killing blow.
 GM.ZombieFinishPoints = 1
+-- Round win XP. Not a point; does not buy from the arsenal. See usefulness-point.md.
+GM.WinXP = 300
+-- XP for a zombie landing the killing blow on a human. Not a point.
+GM.ZombieKillXP = 100
 GM.PoisonZombiePointRatio = 60 -- Has an enormous head hitbox
 GM.HeadcrabZombiePointRatio = 30
 GM.NoHeadboxZombiePointRatio = 38

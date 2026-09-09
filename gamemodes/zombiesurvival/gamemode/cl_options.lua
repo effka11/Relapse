@@ -61,6 +61,19 @@ GM.WeaponStatBarVals = {
 	{"WalkSpeed", "Move Speed", 65, 125, false}
 }
 
+-- Relapse guns. Keys match SWEP.Relapse. BadHigh = bigger number is worse.
+GM.RelapseWeaponStatBarVals = {
+	{"Damage", "Damage", 1, 105, false},
+	{"Delay", "Fire Delay", 0.05, 1, true},
+	{"Reload", "Reload", 0.5, 3, true},
+	{"Kinetic", "Kinetic", 0, 1, true},
+	{"Recoil", "Recoil", 0, 3, true},
+	{"Accuracy", "Spread", 0.25, 5, true},
+	{"Weight", "Weight", 0.2, 5, true},
+}
+
+GM.WeaponStatBarCount = 7
+
 GM.LifeStatsLifeTime = 5
 
 GM.RewardIcons = {}

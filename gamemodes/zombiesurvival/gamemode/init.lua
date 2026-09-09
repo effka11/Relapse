@@ -1772,6 +1772,7 @@ function GM:RestartLua()
 	self.PeakPopulation = 0
 
 	self.StartingZombie = {}
+	self.InitialVolunteers = {}
 	self.CheckedOut = {}
 	self.PreviouslyDied = {}
 	self.StoredUndeadFrags = {}
@@ -1946,12 +1947,18 @@ local function EndRoundSetupPlayerVisibility(pl)
 	end
 end
 
+function GM:IsPrepZombie(pl)
+	return self.StartingZombie[pl:UniqueID()] and true or false
+end
+
 function GM:OnPlayerWin(pl)
-	local xp = math.Clamp(#player.GetAll() * 6, 20, 200) * (GAMEMODE.WinXPMulti or 1)
-	if self.ZombieEscape then
-		xp = xp / 4
+	if not pl:IsValid() or pl.WinXPGiven then return end
+	pl.WinXPGiven = true
+
+	local xp = math.floor((self.WinXP or 300) * (self.WinXPMulti or 1))
+	if xp > 0 then
+		pl:AddZSXP(xp)
 	end
-	pl:AddZSXP(xp)
 end
 
 function GM:OnPlayerLose(pl)
@@ -2005,8 +2012,19 @@ function GM:EndRound(winner)
 	elseif winner == TEAM_UNDEAD then
 		hook.Add("PlayerShouldTakeDamage", "EndRoundShouldTakeDamage", EndRoundPlayerCanSuicide)
 
+		-- Wave 0 wipe: SetClosestsToZombie never ran, everyone undead is still a prep zombie.
+		if self:GetWave() <= 0 then
+			for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do
+				self.StartingZombie[pl:UniqueID()] = true
+			end
+		end
+
 		for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do
-			gamemode.Call("OnPlayerLose", pl)
+			if self:IsPrepZombie(pl) then
+				gamemode.Call("OnPlayerWin", pl)
+			else
+				gamemode.Call("OnPlayerLose", pl)
+			end
 		end
 	end
 
@@ -3324,6 +3342,12 @@ function GM:SetClosestsToZombie()
 		self.StartingZombie[pl:UniqueID()] = true
 		pl:UnSpectateAndSpawn()
 	end
+
+	-- Remaining undead at the end of prep are the original infection.
+	self.StartingZombie = {}
+	for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do
+		self.StartingZombie[pl:UniqueID()] = true
+	end
 end
 
 function GM:AllowPlayerPickup(pl, ent)
@@ -3632,7 +3656,6 @@ function GM:ZombieKilledHuman(pl, attacker, inflictor, dmginfo, headshot, suicid
 
 	local plpos = pl:GetPos()
 	local dist = 999999999
-	local xp = 18 * (GAMEMODE.ZombieXPMulti or 1)
 	for _, ent in pairs(team.GetValidSpawnPoint(TEAM_UNDEAD)) do
 		dist = math.min(ent:GetPos():DistToSqr(plpos), dist)
 	end
@@ -3640,7 +3663,7 @@ function GM:ZombieKilledHuman(pl, attacker, inflictor, dmginfo, headshot, suicid
 
 	attacker:AddBrains(1)
 	attacker:AddLifeBrainsEaten(1)
-	attacker:AddZSXP(self.InitialVolunteers[attacker:UniqueID()] and xp or math.floor(xp/4))
+	attacker:AddZSXP(self.ZombieKillXP or 100)
 
 	local classtab = attacker:GetZombieClassTable()
 	if classtab and classtab.Name then
@@ -3912,7 +3935,6 @@ end
 -- Again, don't bother overriding anything due to above.
 function GM:PlayerFootstep(pl, vPos, iFoot, strSoundName, fVolume, pFilter)
 	if self.Stride and self.Stride:UsesStride(pl) then
-		-- Client already plays the surface sound. Server copies stacked on top of anim events.
 		return true
 	end
 end

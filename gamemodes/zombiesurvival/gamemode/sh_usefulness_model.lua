@@ -93,18 +93,9 @@ function GM:ComputeUsefulness(kind, values)
 	return self:ComputeUsefulnessRaw(kind, values)
 end
 
-function GM:ExtractRangedUsefulnessValues(swep)
-	if not swep then return nil end
-
-	local prim = swep.Primary or {}
-	local delay = math.max(prim.Delay or 0.2, 0.05)
-	local shots = math.max(prim.NumShots or 1, 1)
-	local cone_max = swep.ConeMax or 1.5
-	local cone_min = swep.ConeMin or cone_max
-	local walk = swep.WalkSpeed or SPEED_NORMAL
-
+local function rangedWeaponClass(swep, prim, shots)
 	local class = "default"
-	local hold = swep.HoldType
+	local hold = string.lower(swep.HoldType or "")
 	if shots >= 4 then
 		class = "shotgun"
 	elseif prim.Ammo == "pulse" then
@@ -117,6 +108,41 @@ function GM:ExtractRangedUsefulnessValues(swep)
 		class = "pistol"
 	end
 
+	return class
+end
+
+function GM:ExtractRangedUsefulnessValues(swep)
+	if not swep then return nil end
+
+	local prim = swep.Primary or {}
+	local shots = math.max(prim.NumShots or 1, 1)
+	local class = rangedWeaponClass(swep, prim, shots)
+
+	-- Relapse table is seconds / kg / falloff. Convert into the stick units the model already uses.
+	local r = swep.Relapse
+	if r then
+		return {
+			Type = class,
+			Damage = (r.Damage or 0) * shots,
+			FireRate = 1 / math.max(r.Delay or 0.2, 0.05),
+			Reload = 2 / math.max(r.Reload or 2, 0.2),
+			Mag = prim.ClipSize or 1,
+			Accuracy = r.Accuracy or 1.625,
+			Recoil = r.Recoil or 0,
+			Kinetic = 1 - math.Clamp(r.Kinetic or 0, 0, 1),
+			Weight = math.max(r.Weight or 1, 0.1),
+		}
+	end
+
+	local delay = math.max(prim.Delay or 0.2, 0.05)
+	local cone_max = swep.ConeMax or 1.5
+	local cone_min = swep.ConeMin or cone_max
+	local walk = swep.WalkSpeed or SPEED_NORMAL
+	local recoil = swep.Recoil
+	if type(recoil) == "table" then
+		recoil = 1
+	end
+
 	return {
 		Type = class,
 		Damage = (prim.Damage or 0) * shots,
@@ -124,7 +150,7 @@ function GM:ExtractRangedUsefulnessValues(swep)
 		Reload = swep.ReloadSpeed or 1,
 		Mag = prim.ClipSize or 1,
 		Accuracy = (cone_min + cone_max) / 2,
-		Recoil = swep.Recoil or 0,
+		Recoil = recoil or 0,
 		Kinetic = prim.KnockbackScale or 1,
 		Weight = SPEED_NORMAL / math.max(walk, 1),
 	}

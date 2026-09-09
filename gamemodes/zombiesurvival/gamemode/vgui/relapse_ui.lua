@@ -51,10 +51,13 @@ function RelapseUI.M()
 		fine = RelapseUI.Grid5(),
 		pad = RelapseUI.Grid15(3),
 		header = RelapseUI.Grid15(6),
-		tabs = RelapseUI.Grid15(4),
-		footer = RelapseUI.Grid15(5),
+		tabs = RelapseUI.Grid15(3),
+		tabGap = RelapseUI.Grid15(2),
+		footer = RelapseUI.Grid15(5) + RelapseUI.sPx(15),
 		sidebar = RelapseUI.Grid15(20),
-		gutter = RelapseUI.Grid15(2),
+		gutter = RelapseUI.Grid15(),
+		cardGap = RelapseUI.Grid15(2),
+		scroll = RelapseUI.ScrollGap() + RelapseUI.ScrollBarW(),
 		cardH = RelapseUI.Grid15(7),
 		trinketH = RelapseUI.Grid15(5),
 		cardPad = RelapseUI.Grid15(),
@@ -63,9 +66,21 @@ function RelapseUI.M()
 	}
 end
 
+function RelapseUI.ScrollBarW()
+	return RelapseUI.sPx(10)
+end
+
+function RelapseUI.ScrollGap()
+	return RelapseUI.Grid15(2)
+end
+
+function RelapseUI.ViewerGap()
+	return RelapseUI.sPx(30)
+end
+
 function RelapseUI.CreateFonts()
 	local s = RelapseUI.S()
-	local rev = 5
+	local rev = 8
 	if RelapseUI._FontS == s and RelapseUI._FontRev == rev then return end
 	RelapseUI._FontS = s
 	RelapseUI._FontRev = rev
@@ -84,9 +99,14 @@ function RelapseUI.CreateFonts()
 	mk("Relapse13", 13, 400)
 	mk("Relapse15", 15, 400)
 	mk("Relapse16", 16, 400)
+	mk("Relapse20", 20, 400)
 	mk("Relapse17", 17, 400)
 	mk("Relapse22", 22, 400)
+	mk("Relapse28", 28, 400)
+	mk("Relapse30", 30, 400)
 	mk("Relapse32", 32, 400)
+	mk("Relapse40", 40, 400)
+	mk("Relapse45", 45, 400)
 	mk("Relapse64", 64, 500)
 end
 
@@ -121,6 +141,13 @@ function RelapseUI.RoundFill(r, x, y, w, h, col)
 	surface.DrawPoly(pts)
 end
 
+function RelapseUI.RoundRing(r, x, y, w, h, col, inner, thick)
+	thick = math.max(1, math.floor((thick or RelapseUI.sPx(2)) + 0.5))
+	RelapseUI.RoundFill(r, x, y, w, h, col)
+	if w <= thick * 2 or h <= thick * 2 then return end
+	RelapseUI.RoundFill(math.max(0, r - thick), x + thick, y + thick, w - 2 * thick, h - 2 * thick, inner)
+end
+
 function RelapseUI.HideChrome(frame)
 	frame:ShowCloseButton(false)
 	frame:SetPaintBackgroundEnabled(false)
@@ -146,24 +173,24 @@ function RelapseUI.PaintSheet(self, w, h)
 end
 
 function RelapseUI.PaintInsetPanel(self, w, h)
-	RelapseUI.RoundFill(RelapseUI.RadPx("Panel"), 0, 0, w, h, RelapseUI.Col.Panel)
 	return true
 end
 
 function RelapseUI.PaintCard(self, w, h, selected, locked, unaffordable)
 	local c = RelapseUI.Col
 	local fill = c.Card
-	if selected then
-		fill = c.CardOn
-	elseif self.Hovered and unaffordable then
-		fill = Color(c.Danger.r, c.Danger.g, c.Danger.b, 40)
-	elseif self.Hovered then
+	if self.Hovered then
 		fill = c.CardHover
 	end
-	RelapseUI.RoundFill(RelapseUI.RadPx("Card"), 0, 0, w, h, fill)
+	local r = RelapseUI.RadPx("Card")
+	if selected then
+		RelapseUI.RoundRing(r, 0, 0, w, h, c.CardOn, fill)
+	else
+		RelapseUI.RoundFill(r, 0, 0, w, h, fill)
+	end
 
 	if locked then
-		RelapseUI.RoundFill(RelapseUI.RadPx("Card"), 0, 0, w, h, Color(0, 0, 0, 80))
+		RelapseUI.RoundFill(RelapseUI.RadPx("Card"), 0, 0, w, h, c.Lock)
 	end
 
 	return true
@@ -171,32 +198,144 @@ end
 
 function RelapseUI.PaintPrimaryButton(self, w, h)
 	local c = RelapseUI.Col
-	local fill = self.Hovered and Color(c.Accent.r, c.Accent.g, c.Accent.b, 120) or c.AccentDim
-	RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, fill)
-	DrawCentered(self, w, h, self.Hovered and c.Text or c.Accent)
+	if self.RelapseArmed then
+		RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, self.Hovered and c.Ok or c.CardOn)
+		DrawCentered(self, w, h, c.Ink)
+		return true
+	end
+	RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, self.Hovered and c.CardHover or c.Card)
+	DrawCentered(self, w, h, c.Accent)
 	return true
 end
 
 function RelapseUI.PaintGhostButton(self, w, h)
 	local c = RelapseUI.Col
 	if self.Hovered then
-		RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, Color(255, 255, 255, 16))
+		RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, c.CardHover)
 	end
 	DrawCentered(self, w, h, self.Hovered and c.Text or c.Muted)
 	return true
 end
 
+-- Flora --flora-ease-out / energetic settle: cubic-bezier(0.33, 1, 0.2, 1)
+-- --flora-duration-3 = 3 × 150ms
+local TAB_EASE_X1, TAB_EASE_X2 = 0.33, 0.2
+local TAB_ANIM = 0.45
+local TabInk = Color(255, 255, 255, 255)
+
+local function Bez(t, a, b)
+	local u = 1 - t
+	return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t
+end
+
+local function BezD(t, a, b)
+	local u = 1 - t
+	return 3 * u * u * a + 6 * u * t * (b - a) + 3 * t * t * (1 - b)
+end
+
+function RelapseUI.EaseOut(t)
+	t = math.Clamp(t, 0, 1)
+	if t == 0 or t == 1 then return t end
+	local s = t
+	for _ = 1, 8 do
+		local x = Bez(s, TAB_EASE_X1, TAB_EASE_X2) - t
+		if math.abs(x) < 1e-6 then break end
+		local d = BezD(s, TAB_EASE_X1, TAB_EASE_X2)
+		if math.abs(d) < 1e-6 then break end
+		s = math.Clamp(s - x / d, 0, 1)
+	end
+	local u = 1 - s
+	return 1 - u * u * u
+end
+
+function RelapseUI.StepTabIndicator(sheet)
+	if not IsValid(sheet) then return end
+	local tab = sheet.GetActiveTab and sheet:GetActiveTab()
+	if not IsValid(tab) then return end
+
+	local sx = select(1, sheet:ScreenToLocal(tab:LocalToScreen(0, 0)))
+	local tw = tab:GetWide()
+	local now = RealTime()
+	local st = sheet._TabInd
+	if not st then
+		sheet._TabInd = {
+			x = sx, w = tw,
+			fromX = sx, fromW = tw,
+			toX = sx, toW = tw,
+			t0 = now, primed = tw > 1
+		}
+		return
+	end
+
+	if tw > 1 and (not st.primed or math.abs(sx - st.toX) > 0.5 or math.abs(tw - st.toW) > 0.5) then
+		if st.primed then
+			st.fromX, st.fromW = st.x, st.w
+			st.t0 = now
+		else
+			st.fromX, st.fromW = sx, tw
+			st.t0 = now - TAB_ANIM
+		end
+		st.toX, st.toW = sx, tw
+		st.primed = true
+	end
+
+	local e = RelapseUI.EaseOut(math.Clamp((now - st.t0) / TAB_ANIM, 0, 1))
+	st.x = st.fromX + (st.toX - st.fromX) * e
+	st.w = st.fromW + (st.toW - st.fromW) * e
+end
+
+function RelapseUI.PaintTabIndicator(sheet, w)
+	local st = sheet._TabInd
+	if not st or not st.primed or st.w < 1 then return end
+
+	local thick = math.max(2, RelapseUI.sPx(2))
+	local tabhei = sheet._RelapseTabHei or RelapseUI.M().tabs
+	local y = tabhei
+	local x1 = math.max(0, st.x)
+	local x2 = math.min(w, st.x + st.w)
+	local dw = x2 - x1
+	if dw < 2 then return end
+
+	local r = math.min(RelapseUI.RadPx("Bar"), math.floor(math.min(dw, thick) * 0.5))
+	RelapseUI.RoundFill(r, x1, y, dw, thick, RelapseUI.Col.Accent)
+end
+
+function RelapseUI.BindTabIndicator(sheet)
+	if not IsValid(sheet) or sheet._RelapseTabInd then return end
+	sheet._RelapseTabInd = true
+
+	local prevThink = sheet.Think
+	sheet.Think = function(me)
+		if prevThink then prevThink(me) end
+		RelapseUI.StepTabIndicator(me)
+	end
+
+	local prevOver = sheet.PaintOver
+	sheet.PaintOver = function(me, w, h)
+		if prevOver then prevOver(me, w, h) end
+		RelapseUI.PaintTabIndicator(me, w)
+	end
+end
+
 function RelapseUI.PaintTab(self, w, h)
 	local c = RelapseUI.Col
-	local inset = math.min(RelapseUI.Grid5(2), math.max(1, math.floor((h - RelapseUI.sPx(18)) * 0.5)))
-	local active = self.IsActive and self:IsActive()
-	if active then
-		RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, inset, w, h - 2 * inset, Color(255, 255, 255, 22))
+	local act = 0
+	local sheet = self.GetPropertySheet and self:GetPropertySheet()
+	local st = IsValid(sheet) and sheet._TabInd
+	if st and st.primed and st.w > 1 then
+		local sx = select(1, sheet:ScreenToLocal(self:LocalToScreen(0, 0)))
+		local ov = math.max(0, math.min(st.x + st.w, sx + w) - math.max(st.x, sx))
+		act = ov / math.max(1, math.min(st.w, w))
+	elseif self.IsActive and self:IsActive() then
+		act = 1
 	end
-	local col = active and c.Text or (self.Hovered and c.Text or c.Muted)
+	if self.Hovered then
+		act = math.max(act, 1)
+	end
+	RelapseUI.LerpCol(c.Muted, c.Text, act, TabInk)
 	local text = self.GetText and self:GetText() or ""
 	if text ~= "" then
-		draw.SimpleText(text, "Relapse15", w * 0.5, h * 0.5, col, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		draw.SimpleText(text, self:GetFont() or "Relapse20", w * 0.5, h * 0.5, TabInk, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 	end
 	return true
 end
@@ -223,8 +362,6 @@ end
 
 RelapseUI.Shadow = 3
 
-local colHudShadow = Color(0, 0, 0, 255)
-
 function RelapseUI.EachShadow(fn, n)
 	n = n or RelapseUI.Shadow
 	for i = 1, n do
@@ -245,28 +382,30 @@ function RelapseUI.FillQuad(x1, y1, x2, y2, x3, y3, x4, y4, col)
 	surface.DrawPoly(quadPts)
 end
 
--- 45° \ band. x, y, span, thick on the 5-grid. thick is the axis offset (Grid5 / Grid15).
-function RelapseUI.PaintHudDiagBand(x, y, span, thick, col, shadow)
+-- Tiny 45° \ hairline. span on the 15-grid. sPx stroke; shadow is thickness down-right.
+function RelapseUI.PaintHudDiagHair(x, y, span, col, thick, shadow)
 	x = math.floor(x + 0.5)
 	y = math.floor(y + 0.5)
 	span = math.floor(span + 0.5)
-	thick = math.max(1, math.floor(thick + 0.5))
-	if span <= thick * 2 then return end
+	local t = math.max(1, thick or RelapseUI.sPx(1))
+	if span <= t * 2 then return end
 
-	local function band(ox, oy, c)
+	local function quad(ox, oy, fill)
 		RelapseUI.FillQuad(
-			x + thick + ox, y + oy,
-			x + span + ox, y + span - thick + oy,
-			x + span - thick + ox, y + span + oy,
-			x + ox, y + thick + oy,
-			c
+			x + ox + t, y + oy,
+			x + ox + span, y + oy + span - t,
+			x + ox + span - t, y + oy + span,
+			x + ox, y + oy + t,
+			fill
 		)
 	end
 
-	RelapseUI.EachShadow(function(ox, oy)
-		band(ox, oy, colHudShadow)
-	end, shadow)
-	band(0, 0, col)
+	if shadow and shadow > 0 then
+		RelapseUI.EachShadow(function(ox, oy)
+			quad(ox, oy, RelapseUI.Col.Shadow)
+		end, shadow)
+	end
+	quad(0, 0, col)
 end
 
 function RelapseUI.HudText(text, font, x, y, col, ax, ay, shadow)
@@ -291,7 +430,8 @@ function RelapseUI.HudText(text, font, x, y, col, ax, ay, shadow)
 	px = math.floor(px + 0.5)
 	py = math.floor(py + 0.5)
 
-	surface.SetTextColor(0, 0, 0, col.a or 255)
+	local sh = RelapseUI.Col.Shadow
+	surface.SetTextColor(sh.r, sh.g, sh.b, col.a or 255)
 	RelapseUI.EachShadow(function(ox, oy)
 		surface.SetTextPos(px + ox, py + oy)
 		surface.DrawText(text)
@@ -306,10 +446,11 @@ function RelapseUI.PaintHudHairBar(x, y, w, h, frac, col, extrafrac, extracol, s
 	frac = math.Clamp(frac or 0, 0, 1)
 	extrafrac = math.Clamp(extrafrac or 0, 0, 1 - frac)
 	local r = math.min(RelapseUI.RadPx("Bar"), math.floor(math.min(w, h) * 0.5))
+	local c = RelapseUI.Col
 	RelapseUI.EachShadow(function(ox, oy)
-		RelapseUI.RoundFill(r, x + ox, y + oy, w, h, colHudShadow)
+		RelapseUI.RoundFill(r, x + ox, y + oy, w, h, c.Shadow)
 	end, shadow)
-	RelapseUI.RoundFill(r, x, y, w, h, Color(0, 0, 0, 90))
+	RelapseUI.RoundFill(r, x, y, w, h, c.HudTrack)
 	local extraW = extrafrac > 0 and math.floor(w * (frac + extrafrac) + 0.5) or 0
 	local fillW = frac >= 0.995 and w or math.floor(w * frac + 0.5)
 	if extraW > fillW and extracol then
@@ -320,8 +461,9 @@ function RelapseUI.PaintHudHairBar(x, y, w, h, frac, col, extrafrac, extracol, s
 	end
 end
 
+-- Scratch buffers only. Values are always overwritten from RelapseUI.Col.
 local colHealthA = Color(0, 0, 0, 255)
-local colUrgent = Color(196, 86, 78, 255)
+local colUrgent = Color(0, 0, 0, 255)
 
 function RelapseUI.LerpCol(a, b, t, out)
 	t = math.Clamp(t or 0, 0, 1)
@@ -371,20 +513,19 @@ function RelapseUI.StyleScroll(pnl)
 	local bar = pnl.GetVBar and pnl:GetVBar() or pnl.VBar
 	if not IsValid(bar) then return end
 
-	local wide = math.max(6, RelapseUI.sPx(8))
+	local wide = RelapseUI.ScrollBarW()
 	bar:SetWide(wide)
+	bar:DockMargin(RelapseUI.ScrollGap(), 0, 0, 0)
 	if bar.SetHideButtons then
 		bar:SetHideButtons(true)
 	end
 
-	bar.Paint = function(me, w, h)
-		RelapseUI.RoundFill(w * 0.5, 0, 0, w, h, Color(255, 255, 255, 12))
+	bar.Paint = function()
+		return true
 	end
 	if IsValid(bar.btnGrip) then
 		bar.btnGrip.Paint = function(me, w, h)
-			local c = RelapseUI.Col
-			local col = me.Depressed and c.Text or (me.Hovered and c.Accent or Color(c.Accent.r, c.Accent.g, c.Accent.b, 140))
-			RelapseUI.RoundFill(w * 0.5, 0, 0, w, h, col)
+			RelapseUI.RoundFill(w * 0.5, 0, 0, w, h, RelapseUI.Col.Text)
 		end
 	end
 	if IsValid(bar.btnUp) then
@@ -395,6 +536,105 @@ function RelapseUI.StyleScroll(pnl)
 		bar.btnDown:SetVisible(false)
 		bar.btnDown.Paint = function() return true end
 	end
+end
+
+function RelapseUI.PinTabContent(sheet, tabhei, gap)
+	if not IsValid(sheet) or sheet._RelapseTabGap then return end
+	tabhei = tabhei or RelapseUI.M().tabs
+	gap = gap or RelapseUI.M().tabGap
+	sheet._RelapseTabGap = gap
+	sheet._RelapseTabHei = tabhei
+	RelapseUI.BindTabIndicator(sheet)
+	local prev = sheet.PerformLayout
+	sheet.PerformLayout = function(me, w, h)
+		if prev then
+			prev(me, w, h)
+		end
+		local top = tabhei + gap
+		if IsValid(me.tabScroller) then
+			me.tabScroller:SetParent(me)
+			me.tabScroller:SetPos(0, 0)
+			me.tabScroller:SetSize(me:GetWide(), tabhei)
+		end
+		for _, item in ipairs(me.Items or {}) do
+			local pan = item.Panel
+			if IsValid(pan) then
+				pan:SetPos(0, top)
+				pan:SetSize(me:GetWide(), math.max(0, me:GetTall() - top))
+			end
+		end
+	end
+	sheet:InvalidateLayout(true)
+end
+
+function RelapseUI.FooterInset()
+	return RelapseUI.sPx(30)
+end
+
+function RelapseUI.FooterSideInset()
+	return RelapseUI.sPx(45)
+end
+
+function RelapseUI.AlignFooterBottom(pnl)
+	if not IsValid(pnl) then return end
+	local host = pnl:GetParent()
+	if not IsValid(host) then return end
+	pnl:SetY(host:GetTall() - RelapseUI.FooterInset() - pnl:GetTall())
+end
+
+function RelapseUI.AlignFooterLeft(pnl)
+	if not IsValid(pnl) then return end
+	local host = pnl:GetParent()
+	if not IsValid(host) then return end
+	pnl:SetX(RelapseUI.FooterSideInset() - host:GetX())
+end
+
+function RelapseUI.AlignFooterRight(pnl)
+	if not IsValid(pnl) then return end
+	local host = pnl:GetParent()
+	if not IsValid(host) then return end
+	local frame = host:GetParent()
+	local fw = IsValid(frame) and frame:GetWide() or (host:GetX() + host:GetWide())
+	pnl:SetX(fw - RelapseUI.FooterSideInset() - pnl:GetWide() - host:GetX())
+end
+
+function RelapseUI.LayoutWorthChip(lab)
+	if not IsValid(lab) then return end
+	local cap = lab.RelapseAfter
+	local box = lab:GetParent()
+	if not IsValid(cap) or not IsValid(box) then return end
+	local gap = RelapseUI.Grid15()
+	surface.SetFont("Relapse30")
+	local capW, capH = surface.GetTextSize(cap:GetText() or "")
+	surface.SetFont("Relapse45")
+	local numW, numH = surface.GetTextSize(lab:GetText() or "")
+	local nudge = RelapseUI.WorthNumNudge(capH, numH)
+	local h = math.max(capH, numH)
+	box:SetSize(capW + gap + numW, h)
+	local host = box:GetParent()
+	if IsValid(host) then
+		box:SetY(host:GetTall() - RelapseUI.FooterInset() - h)
+		RelapseUI.AlignFooterLeft(box)
+	end
+	box._WorthNudge = nudge
+	box:NoClipping(true)
+end
+
+-- Larger type keeps more empty cell below the glyph. Drop the counter onto the cap line.
+function RelapseUI.WorthNumNudge(capH, numH)
+	return math.max(0, math.floor((numH - capH) * 0.34 + 0.5))
+end
+
+function RelapseUI.PaintWorthChip(cap, lab, w, h)
+	if not IsValid(cap) or not IsValid(lab) then return end
+	local gap = RelapseUI.Grid15()
+	surface.SetFont("Relapse30")
+	local capW, capH = surface.GetTextSize(cap:GetText() or "")
+	surface.SetFont("Relapse45")
+	local _, numH = surface.GetTextSize(lab:GetText() or "0")
+	local y = h
+	draw.SimpleText(cap:GetText(), "Relapse30", 0, y, RelapseUI.Col.Muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM)
+	draw.SimpleText(lab:GetText(), "Relapse45", capW + gap, y + RelapseUI.WorthNumNudge(capH, numH), lab:GetTextColor(), TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM)
 end
 
 function RelapseUI.WarmPropertySheet(sheet)
@@ -436,13 +676,13 @@ function RelapseUI.UpdateWorthLabel(lab, remaining, starting)
 	lab:SetText(tostring(remaining))
 	if remaining <= 0 then
 		lab:SetTextColor(RelapseUI.Col.Danger)
-	elseif remaining < starting then
-		lab:SetTextColor(RelapseUI.Col.Warn)
 	else
-		lab:SetTextColor(RelapseUI.Col.Accent)
+		lab:SetTextColor(RelapseUI.Col.Ok)
 	end
 	lab:SizeToContents()
-	if lab.RelapseAlignRight then
+	if IsValid(lab.RelapseAfter) then
+		RelapseUI.LayoutWorthChip(lab)
+	elseif lab.RelapseAlignRight then
 		lab:AlignRight(0)
 	elseif lab.RelapseAlignLeft then
 		lab:AlignLeft(0)

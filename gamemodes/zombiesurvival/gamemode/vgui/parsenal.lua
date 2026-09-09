@@ -94,23 +94,65 @@ local function ItemPanelPaint(self, w, h)
 	RelapseUI.PaintCard(self, w, h, selected, false, unaffordable)
 
 	if self.ShopTabl.SWEP and MySelf:HasInventoryItem(self.ShopTabl.SWEP) then
-		surface.SetDrawColor(RelapseUI.Col.Accent.r, RelapseUI.Col.Accent.g, RelapseUI.Col.Accent.b, 40)
+		local wash = RelapseUI.Col.Wash
+		surface.SetDrawColor(wash.r, wash.g, wash.b, wash.a or 40)
 		surface.DrawRect(0, 0, w, h)
 	end
 
 	return true
 end
 
+local function FormatRelapseStat(id, val)
+	if id == "Delay" or id == "Reload" then
+		return string.format("%.2fs", val)
+	end
+	if id == "Weight" then
+		return string.format("%.2f kg", val)
+	end
+	if id == "Kinetic" or id == "Recoil" or id == "Accuracy" then
+		return string.format("%.2f", val)
+	end
+
+	return tostring(val)
+end
+
 function GM:ViewerStatBarUpdate(viewer, display, sweptable)
-	local done, statshow = {}
-	local speedtotext = GAMEMODE.SpeedToText
-	for i = 1, 6 do
-		if display then
+	local barCount = viewer.ItemStatBars and #viewer.ItemStatBars or 0
+	if barCount < 1 then return end
+	if display then
+		for i = 1, barCount do
 			viewer.ItemStats[i]:SetText("")
 			viewer.ItemStatValues[i]:SetText("")
 			viewer.ItemStatBars[i]:SetVisible(false)
-			continue
 		end
+		return
+	end
+
+	if sweptable.Relapse then
+		local specs = GAMEMODE.RelapseWeaponStatBarVals
+		for i = 1, barCount do
+			local spec = specs and specs[i]
+			local val = spec and sweptable.Relapse[spec[1]]
+			if not spec or val == nil then
+				viewer.ItemStats[i]:SetText("")
+				viewer.ItemStatValues[i]:SetText("")
+				viewer.ItemStatBars[i]:SetVisible(false)
+			else
+				viewer.ItemStats[i]:SetText(spec[2])
+				viewer.ItemStatValues[i]:SetText(FormatRelapseStat(spec[1], val))
+				viewer.ItemStatBars[i].Stat = val
+				viewer.ItemStatBars[i].StatMin = spec[3]
+				viewer.ItemStatBars[i].StatMax = spec[4]
+				viewer.ItemStatBars[i].BadHigh = spec[5]
+				viewer.ItemStatBars[i]:SetVisible(true)
+			end
+		end
+		return
+	end
+
+	local done, statshow = {}
+	local speedtotext = GAMEMODE.SpeedToText
+	for i = 1, barCount do
 		local statshowbef = statshow
 		for k, stat in pairs(GAMEMODE.WeaponStatBarVals) do
 			local statval = stat[6] and sweptable[stat[6]][stat[1]] or sweptable[stat[1]]
@@ -205,7 +247,7 @@ function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
 		local ki = killicon.Get(self.AmmoIcons[lower])
 
 		viewer.m_AmmoIcon:SetImage(ki[1])
-		if ki[2] then viewer.m_AmmoIcon:SetImageColor(ki[2]) end
+		viewer.m_AmmoIcon:SetImageColor(RelapseUI.Col.Text)
 
 		viewer.m_AmmoIcon:SetVisible(true)
 	else
@@ -296,9 +338,7 @@ function GM:AttachKillicon(kitbl, itempan, mdlframe, ammo, missing_skill)
 		local img = vgui.Create("DImage", mdlframe)
 		Material(kitbl[1])
 		img:SetImage(kitbl[1])
-		if kitbl[2] then
-			img:SetImageColor(kitbl[2])
-		end
+		img:SetImageColor(RelapseUI.Col.Text)
 		if missing_skill then img:SetAlpha(50) end
 
 		imgAdj(img, mdlframe:GetWide() - 6, mdlframe:GetTall() - 3)
@@ -310,7 +350,7 @@ function GM:AttachKillicon(kitbl, itempan, mdlframe, ammo, missing_skill)
 		local label = vgui.Create("DLabel", mdlframe)
 		label:SetText(kitbl[2])
 		label:SetFont(kitbl[1] .. "pa" or DefaultFont)
-		label:SetTextColor(kitbl[3] or color_white)
+		label:SetTextColor(RelapseUI.Col.Text)
 		label:SizeToContents()
 		label:SetContentAlignment(8)
 		label:DockMargin(0, label:GetTall() * 0.05, 0, 0)
@@ -321,7 +361,7 @@ function GM:AttachKillicon(kitbl, itempan, mdlframe, ammo, missing_skill)
 	if missing_skill then
 		local img = vgui.Create("DImage", mdlframe)
 		img:SetImage("zombiesurvival/padlock.png")
-		img:SetImageColor(Color(255, 30, 30))
+		img:SetImageColor(RelapseUI.Col.Muted)
 		imgAdj(img, mdlframe:GetWide(), mdlframe:GetTall())
 
 		img:Center()
@@ -380,7 +420,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 	end
 
 	local name = tab.Name or ""
-	local namelab = EasyLabel(itempan, name, "Relapse15", RelapseUI.Col.Text)
+	local namelab = EasyLabel(itempan, name, "Relapse20", RelapseUI.Col.Text)
 	namelab:SetPos(12 * screenscale, itempan:GetTall() * (nottrinkets and 0.8 or 0.7) - namelab:GetTall() * 0.5)
 	if missing_skill then
 		namelab:SetAlpha(30)
@@ -447,7 +487,7 @@ function GM:ConfigureMenuTabs(tabs, tabhei, callback)
 				me.Image:SetVisible(false)
 				me.Image:SetSize(0, 0)
 			end
-			surface.SetFont(me.m_FontName or "Relapse15")
+			surface.SetFont(me.m_FontName or "Relapse20")
 			local tw = surface.GetTextSize(me:GetText() or "")
 			local w = tw + RelapseUI.Grid15(3)
 			local h = me:GetTabHeight()
@@ -464,7 +504,7 @@ function GM:ConfigureMenuTabs(tabs, tabhei, callback)
 				me.Image:SetSize(0, 0)
 			end
 		end
-		tab:SetFont("Relapse15")
+		tab:SetFont("Relapse20")
 		tab:SetTextColor(RelapseUI.Col.Muted)
 		tab.DoClick = function(me)
 			me:GetPropertySheet():SetActiveTab(me)
@@ -477,6 +517,7 @@ function GM:ConfigureMenuTabs(tabs, tabhei, callback)
 			if IsValid(sheet.tabScroller) then
 				sheet.tabScroller:SetTall(tabhei)
 			end
+			RelapseUI.PinTabContent(sheet, tabhei, RelapseUI.M().tabGap)
 		end
 	end
 end
@@ -528,7 +569,7 @@ function GM:CreateItemViewerGenericElems(viewer)
 	vbg:CenterHorizontal()
 	vbg:MoveBelow(vammot, m.gutter)
 	vbg:SetPaintBackground(false)
-	vbg.Paint = RelapseUI.PaintInsetPanel
+	vbg.Paint = function() return true end
 	vbg:SetVisible(false)
 	viewer.m_VBG = vbg
 
@@ -555,7 +596,8 @@ function GM:CreateItemViewerGenericElems(viewer)
 	local statGap = RelapseUI.Grid15()
 	local statFirst = RelapseUI.Grid15(7)
 	local itemstats, itemsbs, itemsvs = {}, {}, {}
-	for i = 1, 6 do
+	local statCount = GAMEMODE.WeaponStatBarCount or 6
+	for i = 1, statCount do
 		local itemstat = vgui.Create("DLabel", viewer)
 		itemstat:SetFont("Relapse13")
 		itemstat:SetTextColor(RelapseUI.Col.Muted)
@@ -614,8 +656,8 @@ function GM:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, me
 	else
 		local sheetX, sheetY = propertysheet:GetPos()
 		local sheetW, sheetH = propertysheet:GetSize()
-		viewer:SetSize(m.sidebar, math.max(m.step, sheetH - m.tabs))
-		viewer:SetPos(sheetX + sheetW + m.gutter, sheetY + m.tabs)
+		viewer:SetSize(m.sidebar, math.max(m.step, sheetH - m.tabs - m.tabGap))
+		viewer:SetPos(sheetX + sheetW + RelapseUI.ViewerGap(), sheetY + m.tabs + m.tabGap)
 	end
 	frame.Viewer = viewer
 
