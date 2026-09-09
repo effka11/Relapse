@@ -248,12 +248,20 @@ function RelapseUI.EaseOut(t)
 	return 1 - u * u * u
 end
 
+function RelapseUI.TabStrip(sheet)
+	if IsValid(sheet) and IsValid(sheet.tabScroller) then
+		return sheet.tabScroller
+	end
+	return sheet
+end
+
 function RelapseUI.StepTabIndicator(sheet)
 	if not IsValid(sheet) then return end
 	local tab = sheet.GetActiveTab and sheet:GetActiveTab()
 	if not IsValid(tab) then return end
 
-	local sx = select(1, sheet:ScreenToLocal(tab:LocalToScreen(0, 0)))
+	local host = RelapseUI.TabStrip(sheet)
+	local sx = select(1, host:ScreenToLocal(tab:LocalToScreen(0, 0)))
 	local tw = tab:GetWide()
 	local now = RealTime()
 	local st = sheet._TabInd
@@ -284,20 +292,20 @@ function RelapseUI.StepTabIndicator(sheet)
 	st.w = st.fromW + (st.toW - st.fromW) * e
 end
 
-function RelapseUI.PaintTabIndicator(sheet, w)
+function RelapseUI.PaintTabIndicator(sheet, w, h)
 	local st = sheet._TabInd
 	if not st or not st.primed or st.w < 1 then return end
 
 	local thick = math.max(2, RelapseUI.sPx(2))
-	local tabhei = sheet._RelapseTabHei or RelapseUI.M().tabs
-	local y = tabhei
 	local x1 = math.max(0, st.x)
 	local x2 = math.min(w, st.x + st.w)
 	local dw = x2 - x1
 	if dw < 2 then return end
 
 	local r = math.min(RelapseUI.RadPx("Bar"), math.floor(math.min(dw, thick) * 0.5))
-	RelapseUI.RoundFill(r, x1, y, dw, thick, RelapseUI.Col.Accent)
+	DisableClipping(true)
+	RelapseUI.RoundFill(r, x1, h, dw, thick, RelapseUI.Col.Accent)
+	DisableClipping(false)
 end
 
 function RelapseUI.BindTabIndicator(sheet)
@@ -310,10 +318,13 @@ function RelapseUI.BindTabIndicator(sheet)
 		RelapseUI.StepTabIndicator(me)
 	end
 
-	local prevOver = sheet.PaintOver
-	sheet.PaintOver = function(me, w, h)
+	local scroller = sheet.tabScroller
+	if not IsValid(scroller) or scroller._RelapseTabIndPaint then return end
+	scroller._RelapseTabIndPaint = true
+	local prevOver = scroller.PaintOver
+	scroller.PaintOver = function(me, w, h)
 		if prevOver then prevOver(me, w, h) end
-		RelapseUI.PaintTabIndicator(me, w)
+		RelapseUI.PaintTabIndicator(sheet, w, h)
 	end
 end
 
@@ -323,7 +334,8 @@ function RelapseUI.PaintTab(self, w, h)
 	local sheet = self.GetPropertySheet and self:GetPropertySheet()
 	local st = IsValid(sheet) and sheet._TabInd
 	if st and st.primed and st.w > 1 then
-		local sx = select(1, sheet:ScreenToLocal(self:LocalToScreen(0, 0)))
+		local host = RelapseUI.TabStrip(sheet)
+		local sx = select(1, host:ScreenToLocal(self:LocalToScreen(0, 0)))
 		local ov = math.max(0, math.min(st.x + st.w, sx + w) - math.max(st.x, sx))
 		act = ov / math.max(1, math.min(st.w, w))
 	elseif self.IsActive and self:IsActive() then
@@ -552,9 +564,27 @@ function RelapseUI.PinTabContent(sheet, tabhei, gap)
 		end
 		local top = tabhei + gap
 		if IsValid(me.tabScroller) then
-			me.tabScroller:SetParent(me)
-			me.tabScroller:SetPos(0, 0)
-			me.tabScroller:SetSize(me:GetWide(), tabhei)
+			local host = me:GetParent()
+			local scroller = me.tabScroller
+			scroller:Dock(NODOCK)
+			scroller:DockMargin(0, 0, 0, 0)
+			if scroller.SetOverlap then
+				scroller:SetOverlap(0)
+			end
+			if IsValid(host) then
+				local sx, sy = me:GetPos()
+				local span = math.max(me:GetWide(), host:GetWide() - sx - RelapseUI.FooterSideInset())
+				scroller:SetParent(host)
+				scroller:Dock(NODOCK)
+				scroller:DockMargin(0, 0, 0, 0)
+				scroller:SetPos(sx, sy)
+				scroller:SetSize(span, tabhei)
+				scroller:InvalidateLayout(true)
+			else
+				scroller:SetParent(me)
+				scroller:SetPos(0, 0)
+				scroller:SetSize(me:GetWide(), tabhei)
+			end
 		end
 		for _, item in ipairs(me.Items or {}) do
 			local pan = item.Panel

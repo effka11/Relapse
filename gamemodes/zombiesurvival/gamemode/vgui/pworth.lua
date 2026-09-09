@@ -389,7 +389,7 @@ function MakepWorth()
 	end
 
 	local checkout = vgui.Create("DButton", bottomspace)
-	checkout:SetFont("Relapse15")
+	checkout:SetFont("Relapse20")
 	checkout:SetText("Checkout")
 	checkout:SetSize(RelapseUI.Cells(12), m.btnH)
 	RelapseUI.AlignFooterRight(checkout)
@@ -400,7 +400,7 @@ function MakepWorth()
 	frame.Checkout = checkout
 
 	local clearbutton = vgui.Create("DButton", bottomspace)
-	clearbutton:SetFont("Relapse15")
+	clearbutton:SetFont("Relapse20")
 	clearbutton:SetText("Clear")
 	clearbutton:SetSize(RelapseUI.Cells(6), m.btnH)
 	clearbutton:MoveLeftOf(checkout, m.gutter)
