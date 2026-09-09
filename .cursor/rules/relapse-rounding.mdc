@@ -1,0 +1,35 @@
+---
+description: Relapse rounded fills — never use Source RoundedBox/corner textures
+globs: gamemodes/zombiesurvival/gamemode/**/*.lua
+alwaysApply: false
+---
+
+# Relapse закругления
+
+Скруглённые заливки (шоп, HUD-полоски, карточки) рисуются только через `RelapseUI.RoundFill`. Радиусы — токены `RelapseUI.Rad` / `RelapseUI.RadPx` в `sh_relapse_theme.lua` (`Bar` = 8).
+
+## Почему не `draw.RoundedBox`
+
+В этом режиме `draw.RoundedBox` подменён в `buffthefps.lua` на `gui/corner8` / `gui/corner16`. На тонкой полоске (`r ≈ h/2`) капсюли **отрываются от тела**: щели, ступеньки, «обрезанные» концы. То же было в шопе.
+
+Не чинить это квадратным `surface.DrawRect` — закругление нужно, как в шопе.
+
+## Как рисовать
+
+`RelapseUI.RoundFill` — выпуклый полигон, четверти окружности, **по часовой** (так требует `surface.DrawPoly` в GMod), `draw.NoTexture()`, без градиентных материалов.
+
+```lua
+-- ❌ Source-капсула: края полоски отвалятся
+draw.RoundedBox(h * 0.5, x, y, w, h, col)
+
+-- ❌ Квадрат вместо скругления
+surface.DrawRect(x, y, w, h)
+
+-- ✅ Как шоп
+local r = math.min(RelapseUI.RadPx("Bar"), math.floor(math.min(w, h) * 0.5))
+RelapseUI.RoundFill(r, x, y, w, h, col)
+```
+
+Для заполнения полоски почти под 100% рисуй на всю ширину (`frac >= 0.995 → w`), иначе справа остаётся щель трека и конец снова выглядит обрезанным.
+
+Не подменяй `RoundFill` обратно на `RoundedBox`. Не рисуй круги через `RoundedBox` с `r = w/2` (крест-оси).

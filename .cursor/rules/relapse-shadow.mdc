@@ -1,0 +1,39 @@
+---
+description: Relapse HUD shadows — px is thickness only, never a shifted copy
+globs: gamemodes/zombiesurvival/gamemode/**/*.lua
+alwaysApply: false
+---
+
+# Relapse тени HUD
+
+Тень — сплошной чёрный выступ **вниз-вправо (135°)**. Элемент остаётся на своих `x, y`. Меняется только `RelapseUI.Shadow` (толщина в px).
+
+Один шаг для текста и полосок. Рисовать через `RelapseUI.EachShadow`.
+
+## Толщина, не сдвиг
+
+`Shadow = n` значит копии на `(1,1) … (n,n)` одной непрозрачностью `Color(0,0,0,255)`. Так выступ нарастает, щели нет.
+
+```lua
+-- ❌ сдвиг: одна копия на n px — тень отрывается
+draw.SimpleText(text, font, x + n, y + n, color_black)
+
+-- ❌ blur / несколько альф — полоски
+draw.SimpleText(text, "Relapse64Shadow", x, y, Color(0, 0, 0, 180))
+
+-- ✅ толщина n, элемент на месте
+RelapseUI.EachShadow(function(ox, oy)
+	surface.SetTextPos(px + ox, py + oy)
+	surface.DrawText(text)
+end)
+-- затем сам текст/заливка на px, py
+```
+
+Полоска: тот же цикл, `RoundFill` на `x+ox, y+oy`, потом заливка на `x, y`.
+
+## Запрещено
+
+- Одна копия только на `(n,n)`
+- `blursize`, glow, градиентный scrim, серая альфа «для мягкости»
+- Разный `n` у цифр и у полоски
+- Сдвигать сам элемент, чтобы «компенсировать» тень

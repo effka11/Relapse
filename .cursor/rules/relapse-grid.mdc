@@ -1,0 +1,44 @@
+---
+description: Relapse layout uses Flora 5/15 grid (Grid5 / Grid15), not raw pixels
+globs: gamemodes/zombiesurvival/gamemode/**/*.lua
+alwaysApply: false
+---
+
+# Relapse сетка 5/15
+
+Как Flora `--flora-grid-step-fine` / `--flora-grid-step`. Раскладка в шагах сетки, не в пикселях. Эталон `s = 1`:
+
+| Шаг | Функция | Размер |
+|-----|---------|--------|
+| Fine | `RelapseUI.Grid5(n)` | `n × 5s` |
+| Primary | `RelapseUI.Grid15(n)` | `n × 15s` |
+
+`primary = 3 × fine`. `n` по умолчанию 1. `RelapseUI.Cells(n)` — алиас `Grid15` (старый код).
+
+`s = k/5` (уже в `RelapseUI.S()`), чтобы оба шага были целыми.
+
+## Что класть на сетку
+
+Ширина/высота панелей, отступы от края, зазоры между блоками, колонки шопа, HUD inset:
+
+```lua
+self:SetSize(RelapseUI.Grid15(32), RelapseUI.Grid15(13))
+self:AlignLeft(RelapseUI.Grid15(3))
+y = y + RelapseUI.Grid5(2)
+```
+
+## Что не сетка — `sPx`
+
+Кегль, иконки, радиусы (`RadPx`), тонкие полоски/hairline, тень в 2–4px. `sPx(N) = round(N × s)`. Не хардкодить `15`, `30`, `45` и не писать `sPx(15)` / `sPx(5)` вместо шага сетки.
+
+```lua
+-- ❌
+self:SetWide(45)
+pad = RelapseUI.sPx(15)
+
+-- ✅
+self:SetWide(RelapseUI.Grid15(3))
+pad = RelapseUI.Grid15()
+```
+
+Не плодить третий шаг. Не масштабировать 1px-штрих как клетку сетки.
