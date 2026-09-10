@@ -693,11 +693,10 @@ local function assembledPreviewBounds(pnl, ent)
 		ent:SetupBones()
 	end
 
-	local rootBone = "tag_pistol_offset"
-	if not ent:LookupBone(rootBone) then
-		rootBone = "j_gun"
-	end
-	local mins, maxs = meshAABB(ent:GetModel(), bonePosAng(ent, rootBone))
+	-- Dummy WM mesh is already in bind-pose model space (same as DrawModel at
+	-- identity). tag_pistol_offset is the mesh origin on 1911 (pos 0) but a
+	-- child offset on 357 — applying it there sinks the orbit pivot.
+	local mins, maxs = meshAABB(ent:GetModel())
 
 	local extras = pnl.RelapsePreviewEnts
 	if istable(extras) then

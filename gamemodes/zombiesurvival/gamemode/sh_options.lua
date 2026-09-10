@@ -136,6 +136,7 @@ GM.AmmoResupply = table.ToAssoc({"ar2", "pistol", "smg1", "357", "xbowbolt", "bu
 
 GM:AddStartingItem("makarov",			ITEMCAT_GUNS,			15,				"mg_makarov")
 GM:AddStartingItem("m1911",				ITEMCAT_GUNS,			15,				"mg_m1911")
+GM:AddStartingItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357")
 
 GM:AddStartingItem("2pcp",				ITEMCAT_AMMO,			15,				nil,			"28 pistol ammo",				nil,		"ammo_pistol",			function(pl) pl:GiveAmmo(28, "pistol", true) end)
 GM:AddStartingItem("3pcp",				ITEMCAT_AMMO,			20,				nil,			"42 pistol ammo",				nil,		"ammo_pistol",			function(pl) pl:GiveAmmo(42, "pistol", true) end)
@@ -289,6 +290,7 @@ GM:AddStartingItem("bloodshot",			ITEMCAT_OTHER,			35,				"weapon_zs_bloodshotbo
 -- Tier 1
 GM:AddPointShopItem("makarov",			ITEMCAT_GUNS,			15,				"mg_makarov", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_makarov") end)
 GM:AddPointShopItem("m1911",			ITEMCAT_GUNS,			15,				"mg_m1911", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_m1911") end)
+GM:AddPointShopItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_357") end)
 
 GM:AddPointShopItem("pistolammo",		ITEMCAT_AMMO,			9,				nil,							"14 pistol ammo",				nil,									"ammo_pistol",						function(pl) pl:GiveAmmo(14, "pistol", true) end)
 GM:AddPointShopItem("shotgunammo",		ITEMCAT_AMMO,			9,				nil,							"12 shotgun ammo",				nil,									"ammo_shotgun",						function(pl) pl:GiveAmmo(12, "buckshot", true) end)

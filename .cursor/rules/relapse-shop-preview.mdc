@@ -8,30 +8,47 @@ alwaysApply: false
 
 Эталон — Макаров. Один пистолет, профиль сбоку, орбита вокруг **видимого** центра, `DrawModel` (не Mesh вьюмодели). Код: `RelapseUI.SetShopPreview` → `DrawShopPreviewGun`. Иконки — отдельное правило.
 
-Сначала выясни, **какие mdl — сам ствол**, и в **каком пространстве** их origin. Не копируй углы и список частей с соседнего ствола.
+Сначала выясни, **какие mdl — сам ствол**, и в **каком пространстве** их origin. Не копируй углы и список частей с соседнего ствола: у 1911 и .357 один пайплайн, разные кости и разный набор мешей на WM.
+
+## Перед сборкой
+
+Открой `customization.lua` (слоты по умолчанию — первые в каждом ряду) и mdl:
+
+1. Что уже на `w_*.mdl` (bodygroups / материалы: frame, grip, loader, rail). Это не аттач.
+2. Какие дефолтные аттачи реально рисуют пушку (barrel, slide, mag, grip).
+3. У аттача `ShowOnWorldModel = false`? Кость `GetBoneName(0)` есть на WM? Нет → в превью не класть.
+4. Вершины: VVD AABB. Один origin (Макаров: всё вдоль −X) или разные кости (WM + аттачи).
 
 ## Что рисовать
 
-MW `v_` / `w_` часто пустые: руки + stub. Пушка сидит в аттачах.
+MW `v_` / `w_` часто пустые: руки + stub. Пушка сидит в аттачах **или** на WM-рамке.
 
-| Сборка | Как |
-|---|---|
-| Все части в одном origin (Макаров: barrel + grip) | `RelapsePreviewParts` строками, без bone merge. Dummy = `[1]`. |
-| Рамка на WM, затвор/магазин — аттачи с другими костями (1911) | `[1]` = `w_*.mdl` (не `v_`), `RelapsePreviewBoneMerge = true`, остальные EF_BONEMERGE на dummy. Как MW: нет `VElement` → bone merge. |
-| Нет отдельного grip-аттача | Рамка — bodygroup receiver на `w_`, не выдумывай grip.mdl. |
+| Сборка | Когда | Как |
+|---|---|---|
+| Один origin | Аттачи делят пространство (Макаров: barrel + grip вдоль −X) | `RelapsePreviewParts` строками, **без** bone merge. Dummy = `[1]`. |
+| Bone merge | Рамка на WM, куски на других костях (1911: slide/mag; .357: barrel) | `[1]` = `w_*.mdl` (не `v_`), `RelapsePreviewBoneMerge = true`, остальные EF_BONEMERGE на dummy. Как MW: нет `VElement` → bone merge. |
+| Кусок уже на WM | .357: цилиндр/grip на `w_357`; mag `ShowOnWorldModel=false` | Не дублировать. Лишний mdl без кости WM зависает в origin и уводит пивот. |
+| Нет отдельного grip-аттача | Рамка = bodygroup receiver на `w_` | Не выдумывай grip.mdl. |
 
 ```lua
 -- ❌ вьюмодель в панели (idle/руки = второй ствол)
 RelapsePreviewParts = { "models/viper/mw/weapons/v_m1911.mdl", slide, mag }
 
 -- ❌ все mdl в одном origin, если кости разные (слипшиеся/два ствола)
--- ✅ Макаров
+-- ❌ bone-merge VM-магазина без костей на WM (летающий спидлоадер)
+-- ✅ Макаров — один origin
 RelapsePreviewParts = { barrel, grip }
 RelapsePreviewAngle = Angle(8, 90, 0)
 
--- ✅ 1911
+-- ✅ 1911 — рамка WM, затвор и магазин на костях
 RelapsePreviewBoneMerge = true
 RelapsePreviewParts = { w_m1911, slide, mag }
+RelapsePreviewAngle = Angle(0, 0, 0)
+RelapsePreviewLocalAng = Angle(0, 0, 90)
+
+-- ✅ .357 — цилиндр уже на w_357; только рамка + ствол
+RelapsePreviewBoneMerge = true
+RelapsePreviewParts = { w_357, barrel }
 RelapsePreviewAngle = Angle(0, 0, 0)
 RelapsePreviewLocalAng = Angle(0, 0, 90)
 ```
@@ -47,12 +64,25 @@ Dummy = `parts[1]`. Для shop `DModelPanelEx` **не** вызывает engine
 
 Не складывай в один Euler `Angle(8, 90, 90)`. В `OrbitShopPreview`: матрица `orbit * local`, пивот той же матрицей. Не `Vector:Rotate` при ненулевом roll.
 
+Ось смотри по **этому** mdl (VVD / identity), не по соседу. 1911 и .357 оба WM, но меш в разном пространстве; roll 90 у обоих сработал только после проверки, не как копия.
+
 ## Центр орбиты
 
-Не объединять локальные AABB аттачей до parenting. Для bone merge: identity + `SetupBones`, AABB по `GetModelMeshes`, сдвинутым матрицей кости dummy (`tag_pistol_offset` / `j_gun` для рамки, `GetBoneName(0)` аттача на родителе). Камера смотрит в origin; dummy `SetPos` так, чтобы этот центр там оставался.
+Не объединять локальные AABB аттачей до parenting.
+
+Bone merge, `assembledPreviewBounds`: identity + `SetupBones`.
+
+| Что | AABB |
+|---|---|
+| Рамка dummy (`w_*`) | `GetModelMeshes` **без** сдвига. Bind pose = `DrawModel` при identity. |
+| Аттачи | `GetBoneName(0)` аттача, матрица **этой** кости на родителе. |
+
+Не множить рамку на `tag_pistol_offset`. У 1911 кость в origin — сдвиг случайно нулевой. У .357 bind pos ≈ `(−1, +2, +1)` — пивот уезжает, ствол **проваливается** ниже 1911.
+
+Камера смотрит в origin; dummy `SetPos` так, чтобы посчитанный центр там оставался. Лишний mdl в origin раздувает span → камера уезжает, пушка мелкая и в углу.
 
 ## Куда писать
 
 Одинаковые `PreviewParts` / `PreviewBoneMerge` / `PreviewAngle` / `PreviewLocalAng` в SWEP, `GM.RelapseWeapons`, `BindRelapseWeapon`, `ApplyOne` (`relapse_mw_sykov_zs.lua`).
 
-Проверка: `changelevel` (не `restart`). Рядом с Макаровым: один ствол, бок, крутится вокруг середины, тот же свет.
+Проверка: `changelevel` (не `restart`). Рядом с Макаровым и 1911: один ствол, бок, крутится вокруг середины (не вокруг рукояти и не вокруг пустой точки), тот же свет, визуальный размер тот же.

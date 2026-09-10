@@ -126,7 +126,7 @@ function GM:ExtractRangedUsefulnessValues(swep)
 			Damage = (r.Damage or 0) * shots,
 			FireRate = 1 / math.max(r.Delay or 0.2, 0.05),
 			Reload = 2 / math.max(r.Reload or 2, 0.2),
-			Mag = prim.ClipSize or 1,
+			Mag = r.Clip or prim.ClipSize or 1,
 			Accuracy = r.Accuracy or 1.625,
 			Recoil = r.Recoil or 0,
 			Kinetic = 1 - math.Clamp(r.Kinetic or 0, 0, 1),
@@ -286,6 +286,31 @@ GM.RelapseWeapons = {
 			Accuracy = 1.25,
 			Weight = 1.10,
 			Clip = 7,
+		}
+	},
+	mg_357 = {
+		PrintName = "Револьвер .357",
+		Description = "A magnum revolver. Six in the cylinder\194\160\194\160–\194\160\194\160it never learned to hurry.",
+		TranslationName = "wep_357",
+		TranslationDescription = "wep_357_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_python357.png",
+		PreviewBoneMerge = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_357.mdl",
+			"models/viper/mw/attachments/attachment_vm_pi_cpapa_barrel.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		Ammo = "pistol",
+		Relapse = {
+			Damage = 42,
+			Delay = 0.43,
+			Reload = 3.00,
+			Kinetic = 0.28,
+			Recoil = 1.20,
+			Accuracy = 1.05,
+			Weight = 1.30,
+			Clip = 6,
 		}
 	}
 }
