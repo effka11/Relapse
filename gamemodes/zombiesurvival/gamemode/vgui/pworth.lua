@@ -43,21 +43,6 @@ end
 local remainingworth = 0
 local WorthButtons = {}
 
-local function CartHasItems()
-	for _, btn in pairs(WorthButtons) do
-		if IsValid(btn) and btn.On then
-			return true
-		end
-	end
-	return false
-end
-
-local function SyncWorthCheckout()
-	if pWorth and pWorth:IsValid() and IsValid(pWorth.Checkout) then
-		pWorth.Checkout.RelapseArmed = CartHasItems()
-	end
-end
-
 local function Checkout(tobuy)
 	if tobuy and #tobuy > 0 then
 		gamemode.Call("SuppressArsenalUpgrades", 1)
@@ -170,10 +155,15 @@ local function SaveCurrentCart(name)
 end
 
 local function SaveDoClick(self)
-	local frame = Derma_StringRequest("Save cart", "Enter a name for this cart.", "Name",
-	function(strTextOut) SaveCurrentCart(strTextOut) end,
-	function(strTextOut) end,
-	"OK", "Cancel")
+	local frame = Derma_StringRequest(
+		RelapseUI.T("shop_save_cart_title"),
+		RelapseUI.T("shop_save_cart_prompt"),
+		RelapseUI.T("shop_save_cart_default"),
+		function(strTextOut) SaveCurrentCart(strTextOut) end,
+		function(strTextOut) end,
+		RelapseUI.T("shop_ok"),
+		RelapseUI.T("shop_cancel")
+	)
 
 	frame:GetChildren()[5]:GetChildren()[2]:SetTextColor(RelapseUI.Col.Ink)
 end
@@ -213,7 +203,7 @@ function MakepWorth()
 	local cardGap = m.cardGap
 	local cardW = math.floor((gridW - cardGap) / 2)
 	local sheetW = gridW + m.scroll
-	local needW = 2 * m.pad + sheetW + RelapseUI.ViewerGap() + m.sidebar
+	local needW = m.pad + sheetW + RelapseUI.ViewerGap() + RelapseUI.ViewerW() + RelapseUI.FooterSideInset()
 	local cols = math.ceil(needW / m.step)
 	local wid, hei, m = RelapseUI.FrameSize(cols, 51)
 	local pad = m.pad
@@ -237,8 +227,18 @@ function MakepWorth()
 	frame.Paint = RelapseUI.PaintWindow
 	RelapseUI.HideChrome(frame)
 
-	local title = EasyLabel(frame, "Worth Shop", "Relapse32", RelapseUI.Col.Text)
-	title:SetPos(pad, (headerh - title:GetTall()) * 0.5)
+	local title = EasyLabel(frame, RelapseUI.T("shop_worth_title"), "Relapse32", RelapseUI.Col.Text)
+	-- 45px optical: title glyph bottoms → tab capital tops.
+	-- Relapse32 cell keeps ~6px under the baseline; Relapse20 sits ~5px above
+	-- caps and is vertically centered in the strip.
+	surface.SetFont("Relapse20")
+	local _, tabCell = surface.GetTextSize("Ay")
+	if not tabCell or tabCell < 1 then
+		tabCell = RelapseUI.sPx(20)
+	end
+	local titleCell = title:GetTall()
+	local tabCapY = headerh + math.ceil((tabhei - tabCell) * 0.5) + RelapseUI.sPx(5)
+	title:SetPos(pad, math.max(0, tabCapY - RelapseUI.sPx(45) - (titleCell - RelapseUI.sPx(6))))
 
 	local close = vgui.Create("DButton", frame)
 	close:SetText("×")
@@ -266,7 +266,8 @@ function MakepWorth()
 	propertysheet.Paint = RelapseUI.PaintSheet
 
 	local list = vgui.Create("DPanelList", propertysheet)
-	local sheet = propertysheet:AddSheet("Favorites", list, "icon16/heart.png", false, false)
+	local favName = RelapseUI.T("shop_favorites")
+	local sheet = propertysheet:AddSheet(favName, list, "icon16/heart.png", false, false)
 	sheet.Panel:SetPos(0, tabhei + tabGap)
 	list:EnableVerticalScrollbar(true)
 	RelapseUI.StyleScroll(list)
@@ -274,7 +275,7 @@ function MakepWorth()
 	list:SetSpacing(m.gutter)
 	list:SetPadding(m.cardPad)
 
-	local savebutton = EasyButton(nil, "Save current loadout", RelapseUI.sPx(8), RelapseUI.sPx(6))
+	local savebutton = EasyButton(nil, RelapseUI.T("shop_save_loadout"), RelapseUI.sPx(8), RelapseUI.sPx(6))
 	savebutton.DoClick = SaveDoClick
 	savebutton:SetFont("Relapse15")
 	savebutton:SetTextColor(RelapseUI.Col.Text)
@@ -305,7 +306,7 @@ function MakepWorth()
 			defimage:SizeToContents()
 			defimage:SetSize(16 * limitedscale, 16 * limitedscale)
 			defimage:SetMouseInputEnabled(true)
-			defimage:SetTooltip("This is your default cart.\nIf you join the game late then you'll spawn with this cart.")
+			defimage:SetTooltip(RelapseUI.T("shop_cart_default"))
 			defimage:SetPos(x, cartpan:GetTall() * 0.5 - defimage:GetTall() * 0.5)
 			x = x + defimage:GetWide() + 8
 		end
@@ -319,7 +320,7 @@ function MakepWorth()
 		checkbutton:SetImage("icon16/accept.png")
 		checkbutton:SizeToContents()
 		checkbutton:SetSize(16 * limitedscale, 16 * limitedscale)
-		checkbutton:SetTooltip("Purchase this saved cart.")
+		checkbutton:SetTooltip(RelapseUI.T("shop_cart_purchase"))
 		x = x - checkbutton:GetWide() - 12
 		checkbutton:SetPos(x, cartpan:GetTall() * 0.5 - checkbutton:GetTall() * 0.5)
 		checkbutton.ID = i
@@ -329,7 +330,7 @@ function MakepWorth()
 		loadbutton:SetImage("icon16/folder_go.png")
 		loadbutton:SizeToContents()
 		loadbutton:SetSize(16 * limitedscale, 16 * limitedscale)
-		loadbutton:SetTooltip("Load this saved cart.")
+		loadbutton:SetTooltip(RelapseUI.T("shop_cart_load"))
 		x = x - loadbutton:GetWide() - 8
 		loadbutton:SetPos(x, cartpan:GetTall() * 0.5 - loadbutton:GetTall() * 0.5)
 		loadbutton.ID = i
@@ -340,9 +341,9 @@ function MakepWorth()
 		defaultbutton:SizeToContents()
 		defaultbutton:SetSize(16 * limitedscale, 16 * limitedscale)
 		if cartname == defaultcart then
-			defaultbutton:SetTooltip("Remove this cart as your default.")
+			defaultbutton:SetTooltip(RelapseUI.T("shop_cart_unset_default"))
 		else
-			defaultbutton:SetTooltip("Make this cart your default.")
+			defaultbutton:SetTooltip(RelapseUI.T("shop_cart_set_default"))
 		end
 		x = x - defaultbutton:GetWide() - 8
 		defaultbutton:SetPos(x, cartpan:GetTall() * 0.5 - defaultbutton:GetTall() * 0.5)
@@ -353,7 +354,7 @@ function MakepWorth()
 		deletebutton:SetImage("icon16/bin.png")
 		deletebutton:SizeToContents()
 		deletebutton:SetSize(16 * limitedscale, 16 * limitedscale)
-		deletebutton:SetTooltip("Delete this saved cart.")
+		deletebutton:SetTooltip(RelapseUI.T("shop_cart_delete"))
 		x = x - deletebutton:GetWide() - 8
 		deletebutton:SetPos(x, cartpan:GetTall() * 0.5 - loadbutton:GetTall() * 0.5)
 		deletebutton.ID = i
@@ -374,7 +375,7 @@ function MakepWorth()
 		list:SetColWide(cardW + cardGap)
 		list:SetRowHeight((trinkets and m.trinketH or m.cardH) + cardGap)
 
-		sheet = propertysheet:AddSheet(catname, itemframe, GAMEMODE.ItemCategoryIcons[catid], false, false)
+		sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), itemframe, GAMEMODE.ItemCategoryIcons[catid], false, false)
 		sheet.Panel:SetPos(0, tabhei + tabGap)
 
 		for i, tab in ipairs(GAMEMODE.Items) do
@@ -390,18 +391,17 @@ function MakepWorth()
 
 	local checkout = vgui.Create("DButton", bottomspace)
 	checkout:SetFont("Relapse20")
-	checkout:SetText("Checkout")
+	checkout:SetText(RelapseUI.T("shop_checkout"))
 	checkout:SetSize(RelapseUI.Cells(12), m.btnH)
 	RelapseUI.AlignFooterRight(checkout)
 	RelapseUI.AlignFooterBottom(checkout)
 	checkout.Paint = RelapseUI.PaintPrimaryButton
 	checkout.DoClick = CheckoutDoClick
-	checkout.RelapseArmed = false
 	frame.Checkout = checkout
 
 	local clearbutton = vgui.Create("DButton", bottomspace)
 	clearbutton:SetFont("Relapse20")
-	clearbutton:SetText("Clear")
+	clearbutton:SetText(RelapseUI.T("shop_clear"))
 	clearbutton:SetSize(RelapseUI.Cells(6), m.btnH)
 	clearbutton:MoveLeftOf(checkout, m.gutter)
 	RelapseUI.AlignFooterBottom(clearbutton)
@@ -411,7 +411,7 @@ function MakepWorth()
 	local worthbox = vgui.Create("DPanel", bottomspace)
 	worthbox:SetPaintBackground(false)
 
-	local worthcap = EasyLabel(worthbox, "WORTH:", "Relapse30", RelapseUI.Col.Muted)
+	local worthcap = EasyLabel(worthbox, RelapseUI.T("shop_worth_label"), "Relapse30", RelapseUI.Col.Muted)
 	worthcap:SetVisible(false)
 
 	local worthlab = EasyLabel(worthbox, tostring(remainingworth), "Relapse45", RelapseUI.Col.Ok)
@@ -441,7 +441,7 @@ function MakepWorth()
 	if #GAMEMODE.SavedCarts == 0 then
 		propertysheet:SetActiveTab(propertysheet.Items[math.min(2, #propertysheet.Items)].Tab)
 	else
-		propertysheet:SwitchToName("Favorites")
+		propertysheet:SwitchToName(favName)
 	end
 
 	GAMEMODE:PrecacheKillicons()
@@ -496,7 +496,9 @@ local function PlaceKilliconFrame(frame, cardw, cardh)
 	local fw = math.min(cardw - 2 * pad, RelapseUI.Grid15(10))
 	local fh = math.max(m.step, cardh - top - pad)
 	frame:SetSize(fw, fh)
-	frame:SetPos(math.floor((cardw - fw) * 0.5 + 0.5), top)
+	local x = math.floor(cardw * (2 / 3) - fw * 0.5 + 0.5)
+	x = math.Clamp(x, pad, math.max(pad, cardw - pad - fw))
+	frame:SetPos(x, top)
 end
 
 function PANEL:Init()
@@ -519,7 +521,7 @@ function PANEL:Init()
 	self.NameLabel:DockPadding(0, 0, 0, 0)
 	self.NameLabel:DockMargin(0, 0, 0, 0)
 
-	self.PriceLabel = EasyLabel(self, "", "Relapse15")
+	self.PriceLabel = EasyLabel(self, "", "Relapse20")
 	self.PriceLabel:SetContentAlignment(6)
 	self.PriceLabel:SetTextColor(RelapseUI.Col.Accent)
 	self.PriceLabel:DockPadding(0, 0, 0, 0)
@@ -596,24 +598,21 @@ function PANEL:SetWorthID(id)
 			if IsValid(ch) then ch:Remove() end
 		end
 		local kitbl = killicon.Get(GAMEMODE.ZSInventoryItemData[tab.SWEP] and "weapon_zs_craftables" or tab.SWEP or tab.Model)
-		if kitbl then
-			GAMEMODE:AttachKillicon(kitbl, self, self.ModelFrame, tab.Category == ITEMCAT_AMMO, missing_skill)
-		elseif tab.Model then
-			local mdlpanel = vgui.Create("DModelPanel", self.ModelFrame)
-			mdlpanel:SetSize(self.ModelFrame:GetSize())
-			mdlpanel:SetModel(tab.Model)
-			local mins, maxs = mdlpanel.Entity:GetRenderBounds()
-			mdlpanel:SetCamPos(mins:Distance(maxs) * Vector(0.75, 0.75, 0.5))
-			mdlpanel:SetLookAt((mins + maxs) / 2)
+		if not RelapseUI.TryAttachCardIcon(self, self.ModelFrame, tab, missing_skill) then
+			if kitbl then
+				GAMEMODE:AttachKillicon(kitbl, self, self.ModelFrame, tab.Category == ITEMCAT_AMMO, missing_skill)
+			elseif tab.Model then
+				local mdlpanel = vgui.Create("DModelPanel", self.ModelFrame)
+				mdlpanel:SetSize(self.ModelFrame:GetSize())
+				mdlpanel:SetModel(tab.Model)
+				local mins, maxs = mdlpanel.Entity:GetRenderBounds()
+				mdlpanel:SetCamPos(mins:Distance(maxs) * Vector(0.75, 0.75, 0.5))
+				mdlpanel:SetLookAt((mins + maxs) / 2)
+			end
 		end
 	end
 
-	if tab.SWEP or tab.Countables then
-		self.ItemCounter:SetItemID(id)
-		self.ItemCounter:SetVisible(true)
-	else
-		self.ItemCounter:SetVisible(false)
-	end
+	self.ItemCounter:SetVisible(false)
 
 	if missing_skill then
 		self.PriceLabel:SetTextColor(RelapseUI.Col.Danger)
@@ -626,17 +625,17 @@ function PANEL:SetWorthID(id)
 	end
 	self.PriceLabel:SizeToContents()
 
-	self:SetTooltip(tab.Description)
+	self:SetTooltip(RelapseUI.WepDesc(tab))
 
 	self.Locked = missing_skill or tab.NoClassicMode and GAMEMODE:IsClassicMode() or tab.NoZombieEscape and GAMEMODE.ZombieEscape
 
 	if not nottrinkets and tab.SubCategory then
-		local catlabel = EasyLabel(self, GAMEMODE.ItemSubCategories[tab.SubCategory], "Relapse13", RelapseUI.Col.Muted)
+		local catlabel = EasyLabel(self, RelapseUI.ShopSubCat(tab.SubCategory), "Relapse13", RelapseUI.Col.Muted)
 		catlabel:SizeToContents()
 		catlabel:SetPos(inset, self:GetTall() * 0.55 - catlabel:GetTall() * 0.5)
 	end
 
-	self.NameLabel:SetText(tab.Name or "")
+	self.NameLabel:SetText(RelapseUI.WepName(tab))
 	self.NameLabel:SetTextColor(RelapseUI.Col.Text)
 	self.NameLabel:SizeToContents()
 	self:InvalidateLayout()
@@ -694,7 +693,6 @@ function PANEL:DoClick(silent, force)
 	end
 
 	RelapseUI.UpdateWorthLabel(pWorth.WorthLab, remainingworth, GetStartingWorth())
-	SyncWorthCheckout()
 
 	return goodcart
 end

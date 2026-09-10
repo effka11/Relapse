@@ -3,75 +3,48 @@ local meta = FindMetaTable("Weapon")
 function meta:DrawWeaponCrosshair()
 	if GetConVar("crosshair"):GetInt() ~= 1 then return end
 
-	self:DrawCrosshairCross()
 	self:DrawCrosshairDot()
 end
 
-local ironsightscrosshair = CreateClientConVar("zs_ironsightscrosshair", "0", true, false):GetBool()
-cvars.AddChangeCallback("zs_ironsightscrosshair", function(cvar, oldvalue, newvalue)
-	ironsightscrosshair = tonumber(newvalue) == 1
-end)
-
---local CrossHairScale = 1
-local matGrad = Material("VGUI/gradient-r")
-local function DrawLine(x, y, rot)
-	local thickness = GAMEMODE.CrosshairThickness
-
-	rot = 270 - rot
-	surface.SetMaterial(matGrad)
-	surface.SetDrawColor(0, 0, 0, GAMEMODE.CrosshairColor.a)
-	surface.DrawTexturedRectRotated(x, y, 14, math.max(4 * thickness, 2 + 2 * thickness), rot)
-	surface.SetDrawColor(GAMEMODE.CrosshairColor)
-	surface.DrawTexturedRectRotated(x, y, 12, 2 * thickness, rot)
+function meta:DrawCrosshairCross()
 end
 
-local baserot = 0
-function meta:DrawCrosshairCross()
+local CIRCLE_SEGS = 16
+local unitCircle = {}
+for i = 0, CIRCLE_SEGS do
+	local a = (i / CIRCLE_SEGS) * math.pi * 2
+	unitCircle[i + 1] = {c = math.cos(a), s = math.sin(a)}
+end
+
+local function FillCircle(x, y, radius, r, g, b, a)
+	local poly = {{x = x, y = y}}
+	for i = 1, #unitCircle do
+		local p = unitCircle[i]
+		poly[i + 1] = {x = x + p.c * radius, y = y + p.s * radius}
+	end
+
+	draw.NoTexture()
+	surface.SetDrawColor(r, g, b, a)
+	surface.DrawPoly(poly)
+end
+
+function GM:DrawRelapseCrosshairDot()
+	if GetConVar("crosshair"):GetInt() ~= 1 then return end
+	if not MySelf:Alive() then return end
+
 	local x = ScrW() * 0.5
 	local y = ScrH() * 0.5
-
-	local ironsights = self.GetIronsights and self:GetIronsights()
-
-	local cone = self:GetCone()
-
-	if cone <= 0 or ironsights and not ironsightscrosshair then return end
-
-	--cone = ScrH() / 76.8 * cone
-	cone = ScrH() * 0.0003125 * cone
-	cone = cone * 90 / MySelf:GetFOV()
-
-	--CrossHairScale = cone --math.Approach(CrossHairScale, cone, FrameTime() * math.max(5, math.abs(CrossHairScale - cone) * 0.02))
-
-	local midarea = 40 * cone --CrossHairScale
-
-	local vel = MySelf:GetVelocity()
-	local len = vel:LengthSqr()
-	vel:Normalize()
-	if GAMEMODE.NoCrosshairRotate then
-		baserot = GAMEMODE.CrosshairOffset
-	else
-		baserot = math.NormalizeAngle(baserot + vel:Dot(EyeAngles():Right()) * math.min(10, len / 40000))
-	end
-
-	local ang = Angle(0, 0, baserot)
-	for i=0, 359, 360 / GAMEMODE.CrosshairLines do
-		ang.roll = baserot + i
-		local p = ang:Up() * midarea
-		DrawLine(math.Round(x + p.y), math.Round(y + p.z), ang.roll)
-	end
+	local col = RelapseUI.Col.Text
+	local sh = RelapseUI.Col.Shadow
+	RelapseUI.EachShadow(function(ox, oy)
+		FillCircle(x + ox, y + oy, 2, sh.r, sh.g, sh.b, sh.a or 255)
+	end, 2)
+	FillCircle(x, y, 2, col.r, col.g, col.b, 255)
 end
 
 function meta:DrawCrosshairDot()
 	local x = ScrW() * 0.5
 	local y = ScrH() * 0.5
-	local thickness = GAMEMODE.CrosshairThickness
-	local size = 4 * thickness
-	local hsize = size/2
-
-	surface.SetDrawColor(GAMEMODE.CrosshairColor2)
-	surface.DrawRect(x - hsize, y - hsize, size, size)
-	surface.SetDrawColor(0, 0, 0, GAMEMODE.CrosshairColor2.a)
-	surface.DrawOutlinedRect(x - hsize, y - hsize, size, size)
 
 	if GAMEMODE.LastOTSBlocked and MySelf:Team() == TEAM_HUMAN and GAMEMODE:UseOverTheShoulder() then
 		GAMEMODE:DrawCircle(x, y, 8, COLOR_RED)

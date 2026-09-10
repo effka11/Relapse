@@ -2,6 +2,8 @@ AddCSLuaFile()
 
 SWEP.PrintName = "'Peashooter' Handgun"
 SWEP.Description = "A low damage output pistol that only uses half the ammo."
+SWEP.RelapseStatDebugRows = 15
+SWEP.RelapseDescDebugLines = 12
 
 SWEP.Slot = 1
 SWEP.SlotPos = 0

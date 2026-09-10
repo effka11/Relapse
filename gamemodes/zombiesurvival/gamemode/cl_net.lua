@@ -16,6 +16,131 @@ local function AltSelItemUpd()
 	GAMEMODE.HumanMenuPanel.SelectedItemLabel:SetText(weapons.Get(actwclass).PrintName)
 end
 
+local function ApplyReconnectAmmo(weps, ammo)
+	local lp = LocalPlayer()
+	if not lp:IsValid() then return false end
+
+	local missing = false
+	for _, wepdata in ipairs(weps) do
+		local wep = wepdata.class ~= "" and lp:GetWeapon(wepdata.class)
+		if wep and wep:IsValid() then
+			local live = wep:Clip1()
+			-- Never refill a mag the player already spent from.
+			if live <= 0 or live > wepdata.clip1 then
+				wep:SetClip1(wepdata.clip1)
+			end
+			wep:SetClip2(wepdata.clip2)
+		elseif wepdata.class ~= "" then
+			missing = true
+		end
+	end
+
+	for ammotype, count in pairs(ammo) do
+		lp:SetAmmo(count, ammotype)
+	end
+
+	return not missing
+end
+
+local function ReconnectAmmoSnapshot(wep, ammotype)
+	if wep.m_ReconnectAmmoDone then return end
+
+	local rec = GAMEMODE.ReconnectAmmoHUD
+	if rec and rec.die <= CurTime() then
+		GAMEMODE.ReconnectAmmoHUD = nil
+		rec = nil
+	end
+
+	local ow = rec and rec.weapons[wep:GetClass()]
+	if ow then
+		local wantspare = ow.spare
+		if wantspare == nil and ammotype ~= nil and rec.ammo[ammotype] ~= nil then
+			wantspare = rec.ammo[ammotype]
+		end
+		return ow.clip1, wantspare
+	end
+
+	if not wep.GetNW2Int then return end
+
+	local wantclip = wep:GetNW2Int("zs_reconnect_clip1", -1)
+	if wantclip < 0 then return end
+
+	local wantspare = wep:GetNW2Int("zs_reconnect_spare", -1)
+	if wantspare < 0 then wantspare = nil end
+
+	return wantclip, wantspare
+end
+
+local function FinishReconnectAmmoDisplay(wep)
+	wep.m_ReconnectAmmoDone = true
+	local rec = GAMEMODE.ReconnectAmmoHUD
+	if rec then
+		rec.weapons[wep:GetClass()] = nil
+	end
+end
+
+function GM:GetReconnectAmmoDisplay(wep, clip, spare, ammotype)
+	local wantclip, wantspare = ReconnectAmmoSnapshot(wep, ammotype)
+	if wantclip == nil then return clip, spare end
+
+	-- Live mag dropped below the snapshot: the gun has fired or the client caught up.
+	if clip > 0 and clip < wantclip then
+		FinishReconnectAmmoDisplay(wep)
+		return clip, spare
+	end
+
+	if clip == wantclip and (wantspare == nil or spare == wantspare) then
+		FinishReconnectAmmoDisplay(wep)
+		return clip, spare
+	end
+
+	local hud = self.AmmoHUD
+	if IsValid(hud) then
+		hud.SnapAmmo = true
+	end
+
+	return wantclip, wantspare ~= nil and wantspare or spare
+end
+
+net.Receive("zs_reconnectammo", function()
+	local weps = {}
+	for i = 1, net.ReadUInt(8) do
+		weps[i] = {
+			class = net.ReadString(),
+			clip1 = net.ReadInt(16),
+			clip2 = net.ReadInt(16),
+			spare = net.ReadUInt(16)
+		}
+	end
+
+	local ammo = {}
+	for i = 1, net.ReadUInt(8) do
+		ammo[net.ReadString()] = net.ReadUInt(16)
+	end
+
+	local byclass = {}
+	for _, wepdata in ipairs(weps) do
+		if wepdata.class ~= "" then
+			byclass[wepdata.class] = wepdata
+		end
+	end
+
+	GAMEMODE.ReconnectAmmoHUD = {
+		weapons = byclass,
+		ammo = ammo,
+		die = CurTime() + 20
+	}
+
+	local hud = GAMEMODE.AmmoHUD
+	if IsValid(hud) then
+		hud.LerpClip = nil
+		hud.LerpSpare = nil
+		hud.SnapAmmo = true
+	end
+
+	ApplyReconnectAmmo(weps, ammo)
+end)
+
 net.Receive("zs_legdamage", function(length)
 	MySelf.LegDamage = net.ReadFloat()
 end)

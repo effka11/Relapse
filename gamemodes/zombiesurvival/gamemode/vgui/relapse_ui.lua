@@ -54,7 +54,7 @@ function RelapseUI.M()
 		tabs = RelapseUI.Grid15(3),
 		tabGap = RelapseUI.Grid15(2),
 		footer = RelapseUI.Grid15(5) + RelapseUI.sPx(15),
-		sidebar = RelapseUI.Grid15(20),
+		sidebar = RelapseUI.ViewerW(),
 		gutter = RelapseUI.Grid15(),
 		cardGap = RelapseUI.Grid15(2),
 		scroll = RelapseUI.ScrollGap() + RelapseUI.ScrollBarW(),
@@ -75,12 +75,720 @@ function RelapseUI.ScrollGap()
 end
 
 function RelapseUI.ViewerGap()
-	return RelapseUI.sPx(30)
+	return RelapseUI.sPx(45)
+end
+
+function RelapseUI.ViewerW()
+	return RelapseUI.sPx(300)
+end
+
+-- Universal shop preview: wide enough for rifles, short enough to sit beside ammo.
+function RelapseUI.ViewerModelW()
+	return RelapseUI.Grid15(11)
+end
+
+function RelapseUI.ViewerModelH()
+	return RelapseUI.Grid15(7)
+end
+
+function RelapseUI.ViewerDescH()
+	return RelapseUI.Grid15(4)
+end
+
+function RelapseUI.ViewerStatMax()
+	return 6
+end
+
+function RelapseUI.CardIconPath(tab)
+	if not tab then return nil end
+
+	if GAMEMODE and GAMEMODE.BindRelapseWeapon then
+		GAMEMODE:BindRelapseWeapon(tab)
+	end
+
+	if isstring(tab.RelapsePreviewIcon) and tab.RelapsePreviewIcon ~= "" then
+		return tab.RelapsePreviewIcon
+	end
+
+	local class = tab.SWEP
+	local wep = class and weapons.GetStored(class)
+	if wep and isstring(wep.RelapsePreviewIcon) and wep.RelapsePreviewIcon ~= "" then
+		return wep.RelapsePreviewIcon
+	end
+
+	local def = GAMEMODE and GAMEMODE.RelapseWeapons and class and GAMEMODE.RelapseWeapons[class]
+	if def and isstring(def.PreviewIcon) and def.PreviewIcon ~= "" then
+		return def.PreviewIcon
+	end
+
+	if class then
+		local kitbl = killicon.Get(class)
+		if istable(kitbl) and #kitbl == 2 and isstring(kitbl[1]) then
+			return kitbl[1]
+		end
+	end
+
+	return nil
+end
+
+function RelapseUI.FitIcon(img, maximgx, maximgy)
+	if not IsValid(img) then return end
+	if img.SizeToContents then
+		img:SizeToContents()
+	end
+	local iwidth, height = img:GetSize()
+	if height > maximgy and height > 0 then
+		img:SetSize(maximgy / height * img:GetWide(), maximgy)
+		iwidth, height = img:GetSize()
+	end
+	if iwidth > maximgx and iwidth > 0 then
+		local s = maximgx / iwidth
+		img:SetSize(maximgx, height * s)
+	end
+	img:Center()
+end
+
+function RelapseUI.MakeSilhouetteIcon(parent, path)
+	local img = vgui.Create("DImage", parent)
+	img:SetMouseInputEnabled(false)
+	img:SetKeepAspect(true)
+	img:SetImage(path)
+	img:SetImageColor(RelapseUI.Col.Text)
+	img:SizeToContents()
+	return img
+end
+
+function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
+	if not IsValid(mdlframe) or not tab or tab.Category ~= ITEMCAT_GUNS then
+		return false
+	end
+
+	local path = RelapseUI.CardIconPath(tab)
+	if not path then return false end
+
+	local img = RelapseUI.MakeSilhouetteIcon(mdlframe, path)
+	RelapseUI.FitIcon(img, mdlframe:GetWide(), mdlframe:GetTall() + RelapseUI.Grid5(4))
+	if missing_skill then
+		img:SetAlpha(50)
+	end
+	if itempan then
+		itempan.m_Icon = img
+	end
+	return true
+end
+
+function RelapseUI.T(id, fallback)
+	local ru = translate.GetTranslations("ru")
+	if ru and ru[id] then
+		return ru[id]
+	end
+	local s = translate.Get(id)
+	if type(s) == "string" and string.sub(s, 1, 1) == "@" then
+		return fallback or id
+	end
+	return s
+end
+
+function RelapseUI.TF(id, ...)
+	return string.format(RelapseUI.T(id), ...)
+end
+
+function RelapseUI.WepName(tbl)
+	if not tbl then return "" end
+	local key = tbl.TranslationName
+	if key then
+		return RelapseUI.T(key, tbl.PrintName or tbl.Name or key)
+	end
+	return tbl.PrintName or tbl.Name or ""
+end
+
+function RelapseUI.WepDesc(tbl)
+	if not tbl then return "" end
+	local key = tbl.TranslationDescription
+	if key then
+		return RelapseUI.T(key, tbl.Description or "")
+	end
+	return tbl.Description or ""
+end
+
+function RelapseUI.ShopCat(id)
+	local keys = {
+		[ITEMCAT_GUNS] = "shop_cat_guns",
+		[ITEMCAT_AMMO] = "shop_cat_ammo",
+		[ITEMCAT_MELEE] = "shop_cat_melee",
+		[ITEMCAT_TOOLS] = "shop_cat_tools",
+		[ITEMCAT_DEPLOYABLES] = "shop_cat_deployables",
+		[ITEMCAT_TRINKETS] = "shop_cat_trinkets",
+		[ITEMCAT_OTHER] = "shop_cat_other"
+	}
+	return RelapseUI.T(keys[id] or "shop_cat_other")
+end
+
+function RelapseUI.ShopSubCat(id)
+	local keys = {
+		[ITEMSUBCAT_TRINKETS_DEFENSIVE] = "shop_subcat_defensive",
+		[ITEMSUBCAT_TRINKETS_OFFENSIVE] = "shop_subcat_offensive",
+		[ITEMSUBCAT_TRINKETS_MELEE] = "shop_subcat_melee",
+		[ITEMSUBCAT_TRINKETS_PERFORMANCE] = "shop_subcat_performance",
+		[ITEMSUBCAT_TRINKETS_SUPPORT] = "shop_subcat_support",
+		[ITEMSUBCAT_TRINKETS_SPECIAL] = "shop_subcat_special"
+	}
+	local key = keys[id]
+	if not key then return "" end
+	return RelapseUI.T(key)
+end
+
+function RelapseUI.ShopAmmo(name)
+	name = string.lower(name or "")
+	local fallback = GAMEMODE and GAMEMODE.AmmoNames and GAMEMODE.AmmoNames[name]
+	return RelapseUI.T("shop_ammo_" .. name, fallback or name)
+end
+
+function RelapseUI.ShopStat(id, fallback)
+	return RelapseUI.T("shop_stat_" .. tostring(id or ""), fallback or id)
+end
+
+local colInvisible = Color(0, 0, 0, 0)
+
+function RelapseUI.HookStatCaption(lab, ink)
+	if not IsValid(lab) then return end
+	lab.RelapseInk = ink
+	lab:SetWrap(false)
+	lab:SetAutoStretchVertical(false)
+	lab:SetTextColor(colInvisible)
+	lab.ApplySchemeSettings = function() end
+	lab.Paint = function(me, w, h)
+		local text = me:GetText() or ""
+		if text == "" or w < 1 then return true end
+		local a = me:GetContentAlignment() or 5
+		local x, ax = 0, TEXT_ALIGN_LEFT
+		if a == 6 then
+			x, ax = w, TEXT_ALIGN_RIGHT
+		elseif a == 5 then
+			x, ax = w * 0.5, TEXT_ALIGN_CENTER
+		end
+		draw.SimpleText(text, me:GetFont() or "Relapse15", x, h * 0.5, me.RelapseInk, ax, TEXT_ALIGN_CENTER)
+		return true
+	end
+end
+
+function RelapseUI.PlaceStatText(lab, x0, x1, mid, clipAlign)
+	if not IsValid(lab) then return end
+	lab:SetTextColor(colInvisible)
+	local slot = math.max(0, x1 - x0)
+	local text = lab:GetText() or ""
+	if text == "" or slot < 1 then
+		lab:SetX(x0)
+		lab:SetWide(slot)
+		return
+	end
+	surface.SetFont(lab:GetFont() or "Relapse15")
+	local tw = select(1, surface.GetTextSize(text))
+	if tw <= slot then
+		local x = math.floor((mid or ((x0 + x1) * 0.5)) - tw * 0.5 + 0.5)
+		if x < x0 then x = x0 end
+		if x + tw > x1 then x = x1 - tw end
+		lab:SetX(x)
+		lab:SetWide(tw)
+		lab:SetContentAlignment(5)
+	else
+		lab:SetX(x0)
+		lab:SetWide(slot)
+		lab:SetContentAlignment(clipAlign or 4)
+	end
+end
+
+function RelapseUI.LayoutViewerStats(viewer)
+	if not IsValid(viewer) then return end
+	local bars = viewer.ItemStatBars
+	local bar = bars and bars[1]
+	if not IsValid(bar) then return end
+
+	local barH = RelapseUI.Grid5(2)
+	local barGap = RelapseUI.Grid15(2)
+	local gap = RelapseUI.sPx(15)
+	local descH = RelapseUI.ViewerDescH()
+	local visualTop = viewer.RelapseDescVisualTop
+	if not visualTop then
+		local box = viewer.m_VBG
+		if IsValid(box) then
+			visualTop = box:GetY() + box:GetTall() + RelapseUI.Grid15()
+		else
+			visualTop = RelapseUI.Grid15()
+		end
+	end
+	local firstY = visualTop + descH + RelapseUI.Grid15(2) + RelapseUI.Grid5()
+	surface.SetFont("Relapse15")
+	local _, labH = surface.GetTextSize("Ay")
+	labH = math.max(1, labH)
+
+	local function maxTextW(labs)
+		local wmax = 0
+		surface.SetFont("Relapse15")
+		for _, lab in ipairs(labs or {}) do
+			if IsValid(lab) then
+				local t = lab:GetText() or ""
+				if t ~= "" then
+					wmax = math.max(wmax, select(1, surface.GetTextSize(t)))
+				end
+			end
+		end
+		return wmax
+	end
+
+	local blockW = viewer:GetWide()
+	local minBar = RelapseUI.sPx(40)
+	local leftNeed = maxTextW(viewer.ItemStats)
+	local rightNeed = maxTextW(viewer.ItemStatValues)
+	local barX = leftNeed + gap
+	local barR = blockW - rightNeed - gap
+	if barR - barX < minBar then
+		local overflow = minBar - (barR - barX)
+		local cutL = math.ceil(overflow * 0.5)
+		local cutR = overflow - cutL
+		barX = math.max(gap, barX - cutL)
+		barR = math.min(blockW - gap, barR + cutR)
+	end
+	local barW = math.max(1, barR - barX)
+
+	for i, sb in ipairs(bars) do
+		if not IsValid(sb) then continue end
+		local y = firstY + (i - 1) * (barH + barGap)
+		sb:SetPos(barX, y)
+		sb:SetSize(barW, barH)
+		local ly = y + math.floor((barH - labH) * 0.5 + 0.5)
+		local name = viewer.ItemStats and viewer.ItemStats[i]
+		local val = viewer.ItemStatValues and viewer.ItemStatValues[i]
+		if IsValid(name) then
+			name:SetFont("Relapse15")
+			name:SetTall(labH)
+			name:SetY(ly)
+		end
+		if IsValid(val) then
+			val:SetFont("Relapse15")
+			val:SetTall(labH)
+			val:SetY(ly)
+		end
+	end
+
+	local left0, left1 = 0, barX - gap
+	local right0, right1 = barR + gap, blockW
+	for _, lab in ipairs(viewer.ItemStats or {}) do
+		local t = IsValid(lab) and lab:GetText() or ""
+		surface.SetFont("Relapse15")
+		local tw = t ~= "" and select(1, surface.GetTextSize(t)) or 0
+		RelapseUI.PlaceStatText(lab, left0, left1, left1 - tw * 0.5, 6)
+	end
+	for _, lab in ipairs(viewer.ItemStatValues or {}) do
+		local t = IsValid(lab) and lab:GetText() or ""
+		surface.SetFont("Relapse15")
+		local tw = t ~= "" and select(1, surface.GetTextSize(t)) or 0
+		RelapseUI.PlaceStatText(lab, right0, right1, right0 + tw * 0.5, 4)
+	end
+end
+
+function RelapseUI.LayoutViewerAmmo(viewer)
+	if not IsValid(viewer) then return end
+	local title = viewer.m_Title
+	local icon = viewer.m_AmmoIcon
+	local lab = viewer.m_AmmoType
+	if not IsValid(title) or not IsValid(icon) or not IsValid(lab) then return end
+
+	local left = viewer.RelapseDescLeft or RelapseUI.sPx(10)
+	local iconS = RelapseUI.Grid15(2)
+	local y = title:GetY() + title:GetTall() + RelapseUI.sPx(15)
+	icon:SetSize(iconS, iconS)
+	icon:SetPos(left, y)
+
+	lab:SetFont("Relapse15")
+	lab:SetContentAlignment(4)
+	lab:SizeToContents()
+	local ly = y + math.floor((iconS - lab:GetTall()) * 0.5 + 0.5)
+	lab:SetPos(left + iconS + RelapseUI.Grid15(), ly)
+	local hasText = (lab:GetText() or "") ~= ""
+	lab:SetVisible(hasText)
+	if hasText then
+		lab:MoveToFront()
+		if icon:IsVisible() then
+			icon:MoveToFront()
+		end
+	end
+	RelapseUI.LayoutViewerModel(viewer)
+end
+
+function RelapseUI.ShopPreviewParts(sweptable)
+	if not sweptable then return nil end
+
+	local raw = sweptable.RelapsePreviewParts
+	if not istable(raw) then
+		local gm = GAMEMODE or GM
+		local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+		local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+		raw = def and def.PreviewParts
+	end
+	if not istable(raw) or #raw == 0 then return nil end
+
+	local out = {}
+	for _, path in ipairs(raw) do
+		if isstring(path) and path ~= "" then
+			out[#out + 1] = path
+		end
+	end
+	if #out == 0 then return nil end
+	return out
+end
+
+function RelapseUI.ShopPreviewModel(sweptable)
+	if not sweptable then return nil end
+
+	local parts = RelapseUI.ShopPreviewParts(sweptable)
+	if parts then
+		return parts[1]
+	end
+
+	local explicit = sweptable.RelapsePreviewModel
+	if isstring(explicit) and explicit ~= "" then
+		return explicit
+	end
+
+	-- Never the first-person viewmodel: arms + empty MW stub, not a gun.
+	local w = sweptable.WorldModel
+	if isstring(w) and w ~= "" then
+		return w
+	end
+	return nil
+end
+
+function RelapseUI.ClearShopPreviewParts(pnl)
+	if not pnl then return end
+	local parts = pnl.RelapsePreviewEnts
+	if not parts then return end
+	for _, part in ipairs(parts) do
+		if IsValid(part) then
+			part:Remove()
+		end
+	end
+	pnl.RelapsePreviewEnts = nil
+end
+
+function RelapseUI.AttachShopPreviewParts(pnl, sweptable)
+	RelapseUI.ClearShopPreviewParts(pnl)
+	if not IsValid(pnl) then return end
+
+	local paths = RelapseUI.ShopPreviewParts(sweptable)
+	if not paths or #paths < 2 or not ClientsideModel then return end
+
+	local extras = {}
+	for i = 2, #paths do
+		local cs = ClientsideModel(paths[i], RENDER_GROUP_OPAQUE_ENTITY)
+		if IsValid(cs) then
+			cs:SetNoDraw(true)
+			if cs.SetIK then
+				cs:SetIK(false)
+			end
+			extras[#extras + 1] = cs
+		end
+	end
+	pnl.RelapsePreviewEnts = extras
+end
+
+function RelapseUI.DrawShopPreviewParts(pnl, ent)
+	if not IsValid(pnl) or not IsValid(ent) then return end
+	local parts = pnl.RelapsePreviewEnts
+	if not parts then return end
+
+	local pos = ent:GetPos()
+	local ang = ent:GetAngles()
+	for _, part in ipairs(parts) do
+		if IsValid(part) then
+			part:SetPos(pos)
+			part:SetAngles(ang)
+			part:DrawModel()
+		end
+	end
+end
+
+function RelapseUI.PrepShopPreview(ent)
+	if not IsValid(ent) then return end
+
+	if ent.SetIK then
+		ent:SetIK(false)
+	end
+	if ent.SetPlaybackRate then
+		ent:SetPlaybackRate(0)
+	end
+	if ent.SetCycle then
+		ent:SetCycle(0)
+	end
+
+	local n = ent:GetNumBodyGroups() or 0
+	for i = 0, n - 1 do
+		local name = string.lower(ent:GetBodygroupName(i) or "")
+		if string.find(name, "arm", 1, true) or string.find(name, "glove", 1, true)
+			or string.find(name, "hand", 1, true) or string.find(name, "sleeve", 1, true) then
+			local count = ent:GetBodygroupCount(i) or 0
+			if count > 1 then
+				ent:SetBodygroup(i, count - 1)
+			end
+		end
+	end
+end
+
+local function growBounds(mins, maxs, pmin, pmax)
+	return Vector(
+		math.min(mins.x, pmin.x),
+		math.min(mins.y, pmin.y),
+		math.min(mins.z, pmin.z)
+	), Vector(
+		math.max(maxs.x, pmax.x),
+		math.max(maxs.y, pmax.y),
+		math.max(maxs.z, pmax.z)
+	)
+end
+
+local function meshAABB(model)
+	if not isstring(model) or model == "" or not util.GetModelMeshes then
+		return nil
+	end
+
+	local meshes = util.GetModelMeshes(model, 0)
+	if not istable(meshes) then return nil end
+
+	local minx, miny, minz = math.huge, math.huge, math.huge
+	local maxx, maxy, maxz = -math.huge, -math.huge, -math.huge
+	local any = false
+
+	for _, mesh in ipairs(meshes) do
+		local verts = mesh.verticies or mesh.vertices
+		if verts then
+			for i = 1, #verts do
+				local p = verts[i].pos
+				if p then
+					any = true
+					local x, y, z = p.x, p.y, p.z
+					if x < minx then minx = x end
+					if y < miny then miny = y end
+					if z < minz then minz = z end
+					if x > maxx then maxx = x end
+					if y > maxy then maxy = y end
+					if z > maxz then maxz = z end
+				end
+			end
+		end
+	end
+
+	if not any then return nil end
+	return Vector(minx, miny, minz), Vector(maxx, maxy, maxz)
+end
+
+local function previewMeshBounds(ent, extras)
+	local mins, maxs
+
+	local function addModel(mdl)
+		local a, b = meshAABB(mdl)
+		if not a then return end
+		if not mins then
+			mins, maxs = a, b
+		else
+			mins, maxs = growBounds(mins, maxs, a, b)
+		end
+	end
+
+	addModel(ent:GetModel())
+	if extras then
+		for _, part in ipairs(extras) do
+			if IsValid(part) then
+				addModel(part:GetModel())
+			end
+		end
+	end
+
+	return mins, maxs
+end
+
+function RelapseUI.OrbitShopPreview(pnl, ent)
+	if not IsValid(pnl) or not IsValid(ent) then return end
+	if not pnl.RelapseShopPreview then return end
+
+	RelapseUI.PrepShopPreview(ent)
+
+	if not pnl.RelapsePreviewFramed then
+		local mins, maxs = previewMeshBounds(ent, pnl.RelapsePreviewEnts)
+		if not mins then
+			mins, maxs = ent:GetModelBounds()
+		end
+		if not mins then
+			mins, maxs = ent:GetRenderBounds()
+		end
+
+		local size = maxs - mins
+		local span = size:Length()
+		local center = mins + size * 0.5
+		if span < 1 then
+			span = 22
+		end
+
+		local dist = math.Clamp(span * 1.32, 20, 48)
+		pnl.RelapsePreviewCenter = Vector(center)
+		pnl:SetLookAt(vector_origin)
+		pnl:SetCamPos(Vector(dist * 0.82, dist * 0.52, dist * 0.34))
+		pnl.RelapsePreviewFramed = true
+	end
+
+	local base = pnl.RelapsePreviewBaseAng or angle_zero
+	local ang = Angle(base.p, base.y + RealTime() * 28, base.r)
+	local off = Vector(pnl.RelapsePreviewCenter)
+	off:Rotate(ang)
+	ent:SetAngles(ang)
+	ent:SetPos(-off)
+end
+
+function RelapseUI.FrameModelPanel(pnl)
+	if not IsValid(pnl) then return end
+
+	local ent = pnl.Entity
+	if not IsValid(ent) then return end
+
+	pnl:SetAmbientLight(Color(72, 72, 70))
+	pnl:SetDirectionalLight(BOX_TOP, Color(255, 255, 255))
+	pnl:SetDirectionalLight(BOX_FRONT, Color(230, 228, 220))
+	pnl:SetDirectionalLight(BOX_RIGHT, Color(190, 188, 180))
+	pnl:SetDirectionalLight(BOX_LEFT, Color(40, 42, 48))
+	pnl:SetDirectionalLight(BOX_BOTTOM, Color(24, 24, 24))
+	if pnl.SetColor then
+		pnl:SetColor(color_white)
+	end
+
+	if pnl.RelapseShopPreview then
+		pnl:SetFOV(43)
+		RelapseUI.OrbitShopPreview(pnl, ent)
+		return
+	end
+
+	local mins, maxs = ent:GetRenderBounds()
+	pnl:SetCamPos(mins:Distance(maxs) * Vector(0.75, 0.75, 0.5))
+	pnl:SetLookAt((mins + maxs) / 2)
+end
+
+function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
+	if IsValid(viewer) and IsValid(viewer.m_ModelIcon) then
+		viewer.m_ModelIcon:SetVisible(false)
+	end
+	if not IsValid(pnl) then return end
+
+	pnl:SetVisible(true)
+	pnl.RelapseShopPreview = true
+	pnl.RelapsePreviewFramed = false
+	pnl.RelapsePreviewCenter = nil
+	RelapseUI.ClearShopPreviewParts(pnl)
+
+	local mdl = RelapseUI.ShopPreviewModel(sweptable)
+	if not mdl then
+		pnl:SetModel("")
+		return
+	end
+
+	pnl.RelapsePreviewBaseAng = sweptable.RelapsePreviewAngle or Angle(8, 90, 0)
+	pnl:SetModel(mdl)
+	pnl:SetAnimated(false)
+	RelapseUI.AttachShopPreviewParts(pnl, sweptable)
+	RelapseUI.FrameModelPanel(pnl)
+end
+
+function RelapseUI.LayoutViewerModel(viewer)
+	if not IsValid(viewer) then return end
+	local box = viewer.m_VBG
+	if not IsValid(box) then return end
+	local icon = viewer.m_AmmoIcon
+	local title = viewer.m_Title
+	local boxW = RelapseUI.ViewerModelW()
+	local boxH = RelapseUI.ViewerModelH()
+	local y = RelapseUI.sPx(15)
+	if IsValid(icon) then
+		y = icon:GetY()
+	elseif IsValid(title) then
+		y = title:GetY() + title:GetTall() + RelapseUI.sPx(15)
+	end
+	box:SetSize(boxW, boxH)
+	box:SetPos(viewer:GetWide() - boxW - RelapseUI.Grid15(), y)
+	RelapseUI.LayoutViewerDesc(viewer)
+end
+
+function RelapseUI.WrapLines(text, font, maxW)
+	surface.SetFont(font or "Relapse15")
+	maxW = math.max(1, tonumber(maxW) or 1)
+	text = string.gsub(tostring(text or ""), "\r\n", "\n")
+	text = string.gsub(text, "\r", "\n")
+	local out = {}
+	for _, paragraph in ipairs(string.Explode("\n", text, false)) do
+		if paragraph == "" then
+			out[#out + 1] = ""
+		else
+			local cur = ""
+			for word, spaces in string.gmatch(paragraph, "(%S+)(%s*)") do
+				local trial = cur .. word
+				if cur ~= "" and select(1, surface.GetTextSize(trial)) > maxW then
+					out[#out + 1] = string.match(cur, "^(.-)%s*$") or cur
+					cur = word .. spaces
+				else
+					cur = trial .. spaces
+				end
+			end
+			if cur ~= "" then
+				out[#out + 1] = string.match(cur, "^(.-)%s*$") or cur
+			end
+		end
+	end
+	return out
+end
+
+function RelapseUI.HookViewerDesc(lab)
+	if not IsValid(lab) then return end
+	lab:SetWrap(false)
+	lab:SetAutoStretchVertical(false)
+	lab:SetMultiline(true)
+	lab:SetTextColor(colInvisible)
+	lab.ApplySchemeSettings = function() end
+	lab.Paint = function(me, w, h)
+		local text = me:GetText() or ""
+		if text == "" or w < 1 or h < 1 then return true end
+		local font = me:GetFont() or "Relapse15"
+		surface.SetFont(font)
+		local _, lineH = surface.GetTextSize("Ay")
+		lineH = math.max(1, lineH)
+		local y = 0
+		local col = RelapseUI.Col.Muted
+		for _, line in ipairs(RelapseUI.WrapLines(text, font, w)) do
+			if y + lineH > h then break end
+			if line ~= "" then
+				draw.SimpleText(line, font, 0, y, col, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+			end
+			y = y + lineH
+		end
+		return true
+	end
+end
+
+function RelapseUI.LayoutViewerDesc(viewer)
+	if not IsValid(viewer) then return end
+	local desc = viewer.m_Desc
+	local box = viewer.m_VBG
+	if not IsValid(desc) or not IsValid(box) then return end
+	local left = viewer.RelapseDescLeft or RelapseUI.sPx(10)
+	local right = RelapseUI.sPx(15)
+	-- Relapse15 cell sits ~5px above caps; visual gap is to the capital.
+	local capNudge = RelapseUI.sPx(5)
+	local descH = RelapseUI.ViewerDescH()
+	local visualTop = box:GetY() + box:GetTall() + RelapseUI.Grid15()
+	viewer.RelapseDescVisualTop = visualTop
+	desc:SetSize(math.max(1, viewer:GetWide() - left - right), descH + capNudge)
+	desc:SetPos(left, visualTop - capNudge)
+	RelapseUI.LayoutViewerStats(viewer)
 end
 
 function RelapseUI.CreateFonts()
 	local s = RelapseUI.S()
-	local rev = 8
+	local rev = 9
 	if RelapseUI._FontS == s and RelapseUI._FontRev == rev then return end
 	RelapseUI._FontS = s
 	RelapseUI._FontRev = rev
@@ -102,6 +810,7 @@ function RelapseUI.CreateFonts()
 	mk("Relapse20", 20, 400)
 	mk("Relapse17", 17, 400)
 	mk("Relapse22", 22, 400)
+	mk("Relapse25", 25, 400)
 	mk("Relapse28", 28, 400)
 	mk("Relapse30", 30, 400)
 	mk("Relapse32", 32, 400)
@@ -198,11 +907,6 @@ end
 
 function RelapseUI.PaintPrimaryButton(self, w, h)
 	local c = RelapseUI.Col
-	if self.RelapseArmed then
-		RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, self.Hovered and c.Ok or c.CardOn)
-		DrawCentered(self, w, h, c.Ink)
-		return true
-	end
 	RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, self.Hovered and c.CardHover or c.Card)
 	DrawCentered(self, w, h, c.Accent)
 	return true
@@ -352,15 +1056,17 @@ function RelapseUI.PaintTab(self, w, h)
 	return true
 end
 
+local colStatBar = Color(0, 0, 0, 255)
+
 function RelapseUI.PaintStatBar(self, w, h)
-	local c = RelapseUI.Col
 	self.LerpStat = Lerp(FrameTime() * 6, self.LerpStat or self.Stat, self.Stat)
-	local progress = math.Clamp((self.StatMax - self.LerpStat) / math.max(1, self.StatMax - self.StatMin), 0, 1)
-	if not self.BadHigh then
+	local span = math.max(1e-6, self.StatMax - self.StatMin)
+	local progress = math.Clamp((self.LerpStat - self.StatMin) / span, 0, 1)
+	if self.BadHigh then
 		progress = 1 - progress
 	end
 
-	RelapseUI.PaintHudBar(0, 0, w, h, progress, c.Accent)
+	RelapseUI.PaintHudBar(0, 0, w, h, progress, RelapseUI.HealthCol(progress, colStatBar))
 	return true
 end
 
@@ -373,11 +1079,14 @@ function RelapseUI.HudW()
 end
 
 RelapseUI.Shadow = 3
+RelapseUI.ShadowAngle = 120 -- 0° up, clockwise
 
 function RelapseUI.EachShadow(fn, n)
 	n = n or RelapseUI.Shadow
+	local rad = math.rad(RelapseUI.ShadowAngle)
+	local dx, dy = math.sin(rad), -math.cos(rad)
 	for i = 1, n do
-		fn(i, i)
+		fn(Round(i * dx), Round(i * dy))
 	end
 end
 
@@ -394,7 +1103,7 @@ function RelapseUI.FillQuad(x1, y1, x2, y2, x3, y3, x4, y4, col)
 	surface.DrawPoly(quadPts)
 end
 
--- Tiny 45° \ hairline. span on the 15-grid. sPx stroke; shadow is thickness down-right.
+-- Tiny 45° \ hairline. span on the 15-grid. sPx stroke; shadow is thickness along ShadowAngle.
 function RelapseUI.PaintHudDiagHair(x, y, span, col, thick, shadow)
 	x = math.floor(x + 0.5)
 	y = math.floor(y + 0.5)
@@ -593,8 +1302,40 @@ function RelapseUI.PinTabContent(sheet, tabhei, gap)
 				pan:SetSize(me:GetWide(), math.max(0, me:GetTall() - top))
 			end
 		end
+		RelapseUI.PinViewerToItems(me:GetParent(), me)
 	end
 	sheet:InvalidateLayout(true)
+end
+
+function RelapseUI.PinViewerToItems(frame, sheet)
+	if not IsValid(frame) or not IsValid(sheet) then return end
+	local viewer = frame.Viewer
+	if not IsValid(viewer) then return end
+	local pan
+	local tab = sheet.GetActiveTab and sheet:GetActiveTab()
+	if IsValid(tab) and tab.GetPanel then
+		pan = tab:GetPanel()
+	end
+	if not IsValid(pan) then
+		for _, item in ipairs(sheet.Items or {}) do
+			if IsValid(item.Panel) then
+				pan = item.Panel
+				break
+			end
+		end
+	end
+	if not IsValid(pan) then return end
+	local sx, sy = pan:LocalToScreen(0, 0)
+	local _, y = frame:ScreenToLocal(sx, sy)
+	viewer:SetPos(frame:GetWide() - RelapseUI.FooterSideInset() - viewer:GetWide(), y)
+	local h = pan:GetTall()
+	if h > 0 then
+		viewer:SetTall(h)
+	end
+	if IsValid(viewer.m_Title) then
+		viewer.m_Title:InvalidateLayout(true)
+	end
+	RelapseUI.LayoutViewerAmmo(viewer)
 end
 
 function RelapseUI.FooterInset()

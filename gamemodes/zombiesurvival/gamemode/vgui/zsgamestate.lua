@@ -75,13 +75,33 @@ function PANEL:Think()
 	end
 end
 
+local TITLE_FONT = "Relapse25"
+local CLOCK_FONT = "Relapse30"
+
+-- Relapse25 keeps ~6px under the baseline; Relapse30 sits ~6px above lining figures.
+local function ClockY(titleY, titleH)
+	return titleY + titleH - RelapseUI.sPx(6) + RelapseUI.sPx(30) - RelapseUI.sPx(6)
+end
+
 function PANEL:PerformLayout()
 	RelapseUI.CreateFonts()
 	local inset = RelapseUI.HudInset()
 	local _, clock = WaveClock()
 	self._HasClock = clock ~= nil
-	self:SetSize(RelapseUI.HudW(), RelapseUI.Grid15(self._HasClock and 10 or 6))
-	self:SetPos(inset, inset)
+	local row = RelapseUI.Grid15(2)
+	surface.SetFont("Relapse17")
+	local _, pairH = surface.GetTextSize("Ay")
+	local h = RelapseUI.Grid15(6)
+	if self._HasClock then
+		surface.SetFont(TITLE_FONT)
+		local _, titleH = surface.GetTextSize("Ay")
+		surface.SetFont(CLOCK_FONT)
+		local _, clockH = surface.GetTextSize("Ay")
+		h = ClockY(0, titleH) + clockH + row + pairH + row + pairH
+	end
+	self:SetSize(RelapseUI.HudW(), h)
+	-- Relapse25 cell sits ~5px above caps; 45px is to the capital, not the em-box.
+	self:SetPos(inset, RelapseUI.sPx(45) - RelapseUI.sPx(5))
 
 	if GAMEMODE.XPHUD and GAMEMODE.XPHUD:IsValid() then
 		GAMEMODE.XPHUD:InvalidateLayout()
@@ -104,13 +124,20 @@ function PANEL:Paint()
 	local row = RelapseUI.Grid15(2)
 	local col = RelapseUI.Grid15(12)
 
-	RelapseUI.HudText(WaveTitle(), "Relapse22", x, y, c.Text)
-	y = y + row
+	RelapseUI.HudText(WaveTitle(), TITLE_FONT, x, y, c.Text, nil, nil, RelapseUI.Shadow - 1)
 
 	local _, clock, remain = WaveClock()
 	if clock then
-		RelapseUI.HudText(clock, "Relapse64", x, y, RelapseUI.UrgentCol(remain, c.Text))
-		y = y + RelapseUI.Grid15(5)
+		surface.SetFont(TITLE_FONT)
+		local _, titleH = surface.GetTextSize("Ay")
+		-- 30px is first-line glyph bottom → clock glyph top, not em-box.
+		local clockY = ClockY(y, titleH)
+		RelapseUI.HudText(clock, CLOCK_FONT, x, clockY, RelapseUI.UrgentCol(remain, c.Text))
+		surface.SetFont(CLOCK_FONT)
+		local _, clockH = surface.GetTextSize("Ay")
+		y = clockY + clockH + row
+	else
+		y = y + row
 	end
 
 	DrawPair(x, y, translate.Get("hud_humans"), team.NumPlayers(TEAM_HUMAN), c.Text)

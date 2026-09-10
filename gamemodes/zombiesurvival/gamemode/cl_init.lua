@@ -480,38 +480,6 @@ function GM:LocalPlayerFound()
 	end
 end
 
-local LastSigilCorrupted = -math.huge
-local LastSigilUncorrupted = -math.huge
-local function DrawEyeFlash(x, y, size, islast)
-	local curtime = CurTime()
-	local bsize = size * (1 + curtime * 2 % 1)
-	surface_SetDrawColor(220, 0, 0, 240)
-	surface_DrawTexturedRectRotated(x, y, bsize, bsize, 0)
-
-	if islast then
-		local dt = (curtime - LastSigilCorrupted) / 3
-		if dt < 1 then
-			local idt = 1 - dt
-			surface_SetDrawColor(idt ^ 0.5 * 255, 0, 0, 255)
-			surface_DrawTexturedRectRotated(x, y, size * dt * 150, size, dt * 10)
-			surface_DrawTexturedRectRotated(x, y, size, size * dt * 150, dt * 10)
-		else
-			dt = (curtime - LastSigilUncorrupted) / 3
-			if dt < 1 then
-				local idt = 1 - dt
-				surface_SetDrawColor(0, dt ^ 0.5 * 255, 0, 255)
-				surface_DrawTexturedRectRotated(x, y, size * idt * 150, size, idt * 10)
-				surface_DrawTexturedRectRotated(x, y, size, size * idt * 150, idt * 10)
-			end
-		end
-	end
-end
-
-local currentpower = 0
-local spawngreen = 0
-local matFearMeter = Material("zombiesurvival/fearometer")
-local matNeedle = Material("zombiesurvival/fearometerneedle")
-local matEyeGlow = Material("Sprites/light_glow02_add_noz")
 local matSigil = Material("zombiesurvival/sigil.png")
 local matArsenal = Material("zombiesurvival/arsenalcrate.png")
 local matResupply = Material("zombiesurvival/resupply.png")
@@ -520,119 +488,57 @@ local matCrossout = Material("zombiesurvival/crossout.png")
 local matNest = Material("zombiesurvival/nest.png")
 --local matGradientRight = Material("vgui/gradient-r")
 --local matGradientLeft = CreateMaterial("gradient-l", "UnlitGeneric", {["$basetexture"] = "vgui/gradient-l", ["$vertexalpha"] = "1", ["$vertexcolor"] = "1", ["$ignorez"] = "1", ["$nomip"] = "1"})
-function GM:DrawFearMeter(power, screenscale)
-	if currentpower < power then
-		currentpower = math.min(power, currentpower + FrameTime() * (math.tan(currentpower) * 2 + 0.05))
-	elseif power < currentpower then
-		currentpower = math.max(power, currentpower - FrameTime() * (math.tan(currentpower) * 2 + 0.05))
-	end
+function GM:DrawFearMeter(screenscale)
+	if not (self:GetUseSigils() and self.MaxSigils > 0) then return end
 
-	local w, h = ScrW(), ScrH()
 	local size = 192 * screenscale
 	local half_size = size / 2
-	local mx, my = w / 2 - half_size, h - size
+	local mx, my = ScrW() / 2 - half_size, ScrH() - size
+	local sigwid, sighei = screenscale * 18, screenscale * 36
+	local extrude = size * 0.25 + sighei / 2
+	local angle_current = -180
+	local angle_step = 180 / (self.MaxSigils - 1)
+	local rad, sigil, health, maxhealth, corrupt, damageflash, sigx, sigy, healthfrac
 
-	surface_SetMaterial(matFearMeter)
-	surface_SetDrawColor(140, 140, 140, 240)
-	surface_DrawTexturedRect(mx, my, size, size)
-	if currentpower >= 0.75 then
-		local pulse = CurTime() % 3 - 1
-		if pulse > 0 then
-			pulse = pulse ^ 2
-			local pulsesize = pulse * screenscale * 28
-			surface_SetDrawColor(140, 140, 140, 120 - pulse * 120)
-			surface_DrawTexturedRect(mx - pulsesize, my - pulsesize, size + pulsesize * 2, size + pulsesize * 2)
-		end
-	end
-
-	surface_SetMaterial(matNeedle)
-	surface_SetDrawColor(160, 160, 160, 225)
-	local rot = math.Clamp((0.5 - currentpower) + math.sin(RealTime() * 10) * 0.01, -0.5, 0.5) * 300
-	surface_DrawTexturedRectRotated(w * 0.5 - math.max(0, rot * size * -0.0001), h - half_size - math.abs(rot) * size * 0.00015, size, size, rot)
-
-	if P_Team(MySelf) == TEAM_UNDEAD then
-		if self:GetDynamicSpawning() and self:ShouldUseAlternateDynamicSpawn() then
-			local obs = MySelf:GetObserverTarget()
-			spawngreen = math.Approach(spawngreen, self:DynamicSpawnIsValid(obs and obs:IsValid() and obs:IsPlayer() and obs:Team() == TEAM_UNDEAD and obs or MySelf) and 1 or 0, FrameTime() * 4)
-
-			local sy = my + size * 0.6953
-			local gsize = size * 0.085
-
-			surface_SetMaterial(matEyeGlow)
-			surface_SetDrawColor(220 * (1 - spawngreen), 220 * spawngreen, 0, 240)
-			surface_DrawTexturedRectRotated(mx + size * 0.459, sy, gsize, gsize, 0)
-			surface_DrawTexturedRectRotated(mx + size * 0.525, sy, gsize, gsize, 0)
+	local sigils = GAMEMODE.CachedSigils
+	for i=1, self.MaxSigils do
+		sigil = sigils[i]
+		health = 0
+		maxhealth = 0
+		corrupt = false
+		if sigil and sigil:IsValid() then
+			health = sigil:GetSigilHealth()
+			maxhealth = sigil:GetSigilMaxHealth()
+			corrupt = sigil:GetSigilCorrupted()
 		end
 
-		if currentpower > 0 and not self.ZombieEscape then
-			draw_SimpleTextBlurry(translate.Format("resist_x", math.ceil(self:GetDamageResistance(currentpower) * 100)), "ZSDamageResistance", w * 0.5, my + size * 0.75, Color(currentpower * 200, 200 - currentpower * 200, 0, 255), TEXT_ALIGN_CENTER)
-		end
-	end
+		if health >= 0 then
+			rad = math.rad(angle_current)
+			sigx = mx + half_size + math.cos(rad) * extrude
+			sigy = my + half_size + math.sin(rad) * extrude
 
-	if self:GetUseSigils() and self.MaxSigils > 0 then
-		local sigwid, sighei = screenscale * 18, screenscale * 36
-		local extrude = size * 0.25 + sighei / 2
-		local angle_current = -180
-		local angle_step = 180 / (self.MaxSigils - 1)
-		local rad, sigil, health, maxhealth, corrupt, damageflash, sigx, sigy, healthfrac
-
-		local sigils = GAMEMODE.CachedSigils
-		local corruptsigils = 0
-		for i=1, self.MaxSigils do
-			sigil = sigils[i]
-			health = 0
-			maxhealth = 0
-			corrupt = false
 			if sigil and sigil:IsValid() then
-				health = sigil:GetSigilHealth()
-				maxhealth = sigil:GetSigilMaxHealth()
-				corrupt = sigil:GetSigilCorrupted()
-				corruptsigils = corruptsigils + (corrupt and 1 or 0)
-			end
-
-			if health >= 0 then
-				rad = math.rad(angle_current)
-				sigx = mx + half_size + math.cos(rad) * extrude
-				sigy = my + half_size + math.sin(rad) * extrude
-
-				if sigil and sigil:IsValid() then
-					damageflash = math.min((CurTime() - sigil:GetSigilLastDamaged()) * 2, 1) * 255
-				else
-					damageflash = 255
-				end
-				healthfrac = health / maxhealth
-				if corrupt then
-					surface_SetDrawColor((255 - damageflash) * healthfrac, damageflash * healthfrac, 0, 220)
-				else
-					surface_SetDrawColor((255 - damageflash) * healthfrac, damageflash * healthfrac, 220, 220)
-				end
-
-				surface_SetMaterial(matSigil)
-				surface_DrawTexturedRectRotated(sigx, sigy, sigwid, sighei, angle_current + 90)
-
-				if corrupt then
-					surface_SetMaterial(matCrossout)
-					surface_SetDrawColor(220, 0, 0, 220)
-					surface_DrawTexturedRect(sigx - sigwid / 2, sigy - sighei / 2, sigwid, sighei)
-				end
-
-				angle_current = angle_current + angle_step
-			end
-		end
-
-		local des = corruptsigils / self.MaxSigils --self:GetSigilsDestroyed() / self.MaxSigils
-		if des >= 0.3333 then
-			surface_SetMaterial(matEyeGlow)
-
-			local eye_size = size * 0.125
-			local sy = my + size * 0.6953
-
-			if des >= 0.6666 then
-				DrawEyeFlash(mx + size * 0.459, sy, eye_size)
-				DrawEyeFlash(mx + size * 0.525, sy, eye_size, true)
+				damageflash = math.min((CurTime() - sigil:GetSigilLastDamaged()) * 2, 1) * 255
 			else
-				DrawEyeFlash(mx + size * 0.459, sy, eye_size, true)
+				damageflash = 255
 			end
+			healthfrac = health / maxhealth
+			if corrupt then
+				surface_SetDrawColor((255 - damageflash) * healthfrac, damageflash * healthfrac, 0, 220)
+			else
+				surface_SetDrawColor((255 - damageflash) * healthfrac, damageflash * healthfrac, 220, 220)
+			end
+
+			surface_SetMaterial(matSigil)
+			surface_DrawTexturedRectRotated(sigx, sigy, sigwid, sighei, angle_current + 90)
+
+			if corrupt then
+				surface_SetMaterial(matCrossout)
+				surface_SetDrawColor(220, 0, 0, 220)
+				surface_DrawTexturedRect(sigx - sigwid / 2, sigy - sighei / 2, sigwid, sighei)
+			end
+
+			angle_current = angle_current + angle_step
 		end
 	end
 end
@@ -918,7 +824,7 @@ function GM:_HUDPaint()
 	self:HUDDrawTargetID(myteam, screenscale)
 
 	if self:GetWave() > 0 then
-		self:DrawFearMeter(self:CachedFearPower(), screenscale)
+		self:DrawFearMeter(screenscale)
 	end
 
 	if myteam == TEAM_UNDEAD then
@@ -926,6 +832,8 @@ function GM:_HUDPaint()
 	elseif myteam == TEAM_HUMAN then
 		self:HumanHUD(screenscale)
 	end
+
+	self:DrawRelapseCrosshairDot()
 
 	if GetGlobalBool("classicmode") then
 		draw_SimpleTextBlurry(translate.Get("classic_mode"), "ZSHUDFontSmaller", 4, ScrH() - 4, COLOR_GRAY, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM_REAL)
@@ -1273,6 +1181,7 @@ function GM:_HUDShouldDraw(name)
 	return name ~= "CHudHealth" and name ~= "CHudBattery"
 	and name ~= "CHudAmmo" and name ~= "CHudSecondaryAmmo"
 	and name ~= "CHudDamageIndicator"
+	and name ~= "CHudCrosshair"
 end
 
 local Current = 0

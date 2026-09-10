@@ -103,6 +103,7 @@ include("sv_playerspawnentities.lua")
 include("sv_profiling.lua")
 include("sv_sigils.lua")
 include("sv_concommands.lua")
+include("sv_reconnect.lua")
 
 include("itemstocks/sv_stock.lua")
 
@@ -503,6 +504,7 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_invitem")
 	util.AddNetworkString("zs_invgiven")
 	util.AddNetworkString("zs_wipeinventory")
+	util.AddNetworkString("zs_reconnectammo")
 
 	util.AddNetworkString("zs_skills_active")
 	util.AddNetworkString("zs_skills_unlocked")
@@ -1776,6 +1778,7 @@ function GM:RestartLua()
 	self.CheckedOut = {}
 	self.PreviouslyDied = {}
 	self.StoredUndeadFrags = {}
+	self:ClearReconnectStates()
 
 	ROUNDWINNER = nil
 	LAST_BITE = nil
@@ -2111,7 +2114,14 @@ function GM:PlayerReadyRound(pl)
 		-- This is just so they get updated on what class they are and have their hulls set up right.
 		pl:DoHulls(classid, TEAM_UNDEAD)
 	elseif pl:Team() == TEAM_HUMAN then
-		if self:GetWave() <= 0 and self.StartingWorth > 0 and not self.StartingLoadout and not self.ZombieEscape then
+		if pl.m_ReconnectRestored then
+			self:SyncReconnectInventory(pl)
+			self:FinishReconnectAmmo(pl)
+		end
+
+		if self.CheckedOut[pl:UniqueID()] then
+			-- Reconnected humans already have their worth/arsenal gear.
+		elseif self:GetWave() <= 0 and self.StartingWorth > 0 and not self.StartingLoadout and not self.ZombieEscape then
 			pl:SendLua("InitialWorthMenu()")
 		else
 			gamemode.Call("GiveDefaultOrRandomEquipment", pl)
@@ -2292,6 +2302,10 @@ function GM:PlayerInitialSpawnRound(pl)
 
 	pl.ZSInventory = {}
 
+	pl.m_ReconnectRestore = nil
+	pl.m_ReconnectRestored = nil
+	pl.m_ReconnectAmmoState = nil
+
 	--local nosend = not pl.DidInitPostEntity
 	pl.DamageVulnerability = nil
 
@@ -2299,7 +2313,9 @@ function GM:PlayerInitialSpawnRound(pl)
 
 	local uniqueid = pl:UniqueID()
 
-	if self.PreviouslyDied[uniqueid] or ZSBOT then
+	if self:TryReconnectTeam(pl) then
+		-- Restored team, class, and round stats from a drop.
+	elseif self.PreviouslyDied[uniqueid] or ZSBOT then
 		-- They already died and reconnected.
 		pl:ChangeTeam(TEAM_UNDEAD)
 	elseif LASTHUMAN then ----
@@ -2332,11 +2348,13 @@ function GM:PlayerInitialSpawnRound(pl)
 		end
 	end
 
-	if pl:Team() == TEAM_UNDEAD and not self:GetWaveActive() then
-		pl:SetZombieClassName("Crow")
-		pl.DeathClass = self.DefaultZombieClass
-	else
-		pl:SetZombieClass(self.DefaultZombieClass)
+	if not pl.m_ReconnectRestore then
+		if pl:Team() == TEAM_UNDEAD and not self:GetWaveActive() then
+			pl:SetZombieClassName("Crow")
+			pl.DeathClass = self.DefaultZombieClass
+		else
+			pl:SetZombieClass(self.DefaultZombieClass)
+		end
 	end
 
 	if pl:Team() == TEAM_UNDEAD and self.StoredUndeadFrags[uniqueid] then
@@ -2360,20 +2378,27 @@ function GM:PlayerDisconnected(pl)
 
 	local uid = pl:UniqueID()
 
-	self.PreviouslyDied[uid] = CurTime()
+	if self:SaveReconnectState(pl) then
+		if pl:Team() == TEAM_UNDEAD then
+			self.PreviouslyDied[uid] = CurTime()
+			self.StoredUndeadFrags[uid] = pl:Frags()
+		end
+	else
+		self.PreviouslyDied[uid] = CurTime()
 
-	if pl:Team() == TEAM_HUMAN then
-		pl:DropAll()
-	elseif pl:Team() == TEAM_UNDEAD then
-		self.StoredUndeadFrags[uid] = pl:Frags()
-	end
+		if pl:Team() == TEAM_HUMAN then
+			pl:DropAll()
+		elseif pl:Team() == TEAM_UNDEAD then
+			self.StoredUndeadFrags[uid] = pl:Frags()
+		end
 
-	if pl:Health() > 0 and not pl:IsSpectator() then
-		local lastattacker = pl:GetLastAttacker()
-		if IsValid(lastattacker) then
-			pl:TakeDamage(1000, lastattacker, lastattacker)
+		if pl:Health() > 0 and not pl:IsSpectator() then
+			local lastattacker = pl:GetLastAttacker()
+			if IsValid(lastattacker) then
+				pl:TakeDamage(1000, lastattacker, lastattacker)
 
-			PrintTranslatedMessage(HUD_PRINTCONSOLE, "disconnect_killed", pl:Name(), lastattacker:Name())
+				PrintTranslatedMessage(HUD_PRINTCONSOLE, "disconnect_killed", pl:Name(), lastattacker:Name())
+			end
 		end
 	end
 
@@ -4141,8 +4166,13 @@ function GM:PlayerSpawn(pl)
 
 		if not self.NoSkills then
 			pl.ActivatedHumanSkills = true
-			pl.AdjustedStartPointsSkill = nil
-			pl.AdjustedStartScrapSkill = nil
+			if pl.m_ReconnectRestore then
+				pl.AdjustedStartPointsSkill = true
+				pl.AdjustedStartScrapSkill = true
+			else
+				pl.AdjustedStartPointsSkill = nil
+				pl.AdjustedStartScrapSkill = nil
+			end
 			pl:ApplySkills()
 		end
 
@@ -4160,7 +4190,9 @@ function GM:PlayerSpawn(pl)
 		pl:SetViewOffset(DEFAULT_VIEW_OFFSET)
 		pl:SetViewOffsetDucked(DEFAULT_VIEW_OFFSET_DUCKED)
 
-		if self.ZombieEscape then
+		if pl.m_ReconnectRestore then
+			-- Weapons, ammo, and inventory are restored in ApplyReconnectSpawn.
+		elseif self.ZombieEscape then
 			local randomprimary = table.Random(self.ZombieEscapeWeaponsPrimary)
 			local randomsecondary = table.Random(self.ZombieEscapeWeaponsSecondary)
 			
@@ -4208,6 +4240,10 @@ function GM:PlayerSpawn(pl)
 	wcol.y = math.Clamp(wcol.y, 0, 2.5)
 	wcol.z = math.Clamp(wcol.z, 0, 2.5)
 	pl:SetWeaponColor(wcol)
+
+	if pl.m_ReconnectRestore then
+		self:ApplyReconnectSpawn(pl)
+	end
 end
 
 function GM:SetWave(wave)

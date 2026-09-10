@@ -28,15 +28,12 @@ local function SetWeaponViewerSWEP(self, swep, category, comps)
 
 	GAMEMODE:CreateItemViewerGenericElems(viewer)
 
-	viewer.m_Title:SetText(sweptable.PrintName)
+		viewer.m_Title:SetText(RelapseUI.WepName(sweptable))
 	viewer.m_Title:PerformLayout()
 
 	local desctext = sweptable.Description or ""
 
-	viewer.ModelPanel:SetModel(sweptable.WorldModel)
-	local mins, maxs = viewer.ModelPanel.Entity:GetRenderBounds()
-	viewer.ModelPanel:SetCamPos(mins:Distance(maxs) * Vector(1.15, 0.75, 0.5))
-	viewer.ModelPanel:SetLookAt((mins + maxs) / 2)
+	RelapseUI.SetShopPreview(viewer.ModelPanel, sweptable, viewer)
 	viewer.m_VBG:SetVisible(true)
 
 	if sweptable.NoDismantle then
@@ -48,22 +45,26 @@ local function SetWeaponViewerSWEP(self, swep, category, comps)
 	viewer.m_Desc:SetText(desctext)
 
 	GAMEMODE:ViewerStatBarUpdate(viewer, category ~= ITEMCAT_GUNS and category ~= ITEMCAT_MELEE, sweptable)
-	if GAMEMODE:HasPurchaseableAmmo(sweptable) and GAMEMODE.AmmoNames[string.lower(sweptable.Primary.Ammo)] then
-		local lower = string.lower(sweptable.Primary.Ammo)
+	if GAMEMODE:HasPurchaseableAmmo(sweptable) then
+		local lower = GAMEMODE:GetWeaponAmmoType(sweptable)
 
-		viewer.m_AmmoType:SetText(GAMEMODE.AmmoNames[lower])
+		viewer.m_AmmoType:SetText(RelapseUI.ShopAmmo(lower))
 		viewer.m_AmmoType:PerformLayout()
 
-		local ki = killicon.Get(GAMEMODE.AmmoIcons[lower])
-
-		viewer.m_AmmoIcon:SetImage(ki[1])
-		if ki[2] then viewer.m_AmmoIcon:SetImageColor(ki[2]) end
-
-		viewer.m_AmmoIcon:SetVisible(true)
+		local ki = lower and GAMEMODE.AmmoIcons[lower] and killicon.Get(GAMEMODE.AmmoIcons[lower])
+		if istable(ki) and ki[1] then
+			viewer.m_AmmoIcon:SetImage(ki[1])
+			if ki[2] then viewer.m_AmmoIcon:SetImageColor(ki[2]) end
+			viewer.m_AmmoIcon:SetVisible(true)
+		else
+			viewer.m_AmmoIcon:SetVisible(false)
+		end
+		viewer.m_AmmoType:SetVisible(true)
 	else
 		viewer.m_AmmoType:SetText("")
 		viewer.m_AmmoIcon:SetVisible(false)
 	end
+	RelapseUI.LayoutViewerAmmo(viewer)
 
 	if not viewer.m_Recipe1 then
 		local recipe = EasyLabel(viewer, "", "ZSBodyTextFont", COLOR_TAN)

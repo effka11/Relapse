@@ -28,7 +28,8 @@ function PANEL:PerformLayout()
 	local inset = RelapseUI.HudInset()
 	self:SetSize(RelapseUI.Cells(32), RelapseUI.Cells(self._ShowArmor and 16 or 13))
 	self:AlignLeft(inset)
-	self:AlignBottom(inset)
+	-- 45 at 1080p: health bar's bottom edge (no shadow) sits this far from the screen.
+	self:AlignBottom(RelapseUI.sPx(45))
 
 	if GAMEMODE.StatusHUD and GAMEMODE.StatusHUD:IsValid() then
 		GAMEMODE.StatusHUD:InvalidateLayout()
@@ -45,7 +46,8 @@ function PANEL:Paint(w, h)
 	local barw = RelapseUI.Cells(26)
 	local barh = RelapseUI.sPx(10)
 	local x = pad
-	local y = h - pad - RelapseUI.sPx(4)
+	-- Panel bottom is sPx(45) from the screen; bar sits on that edge. Shadow is 120° (down-right).
+	local y = h
 	if self._ShowArmor then
 		y = y - RelapseUI.sPx(36)
 	end
@@ -60,8 +62,11 @@ function PANEL:Paint(w, h)
 	local phantomfrac = math.Clamp(phantom / maxhealth, 0, 1 - self.LerpFrac)
 	local hpcol = RelapseUI.HealthCol(self.LerpFrac, colHealth)
 
+	DisableClipping(true)
+	surface.DisableClipping(true)
+
 	RelapseUI.PaintHudHairBar(x, y - barh, barw, barh, self.LerpFrac, hpcol, phantomfrac, c.Phantom, 4)
-	y = y - barh - RelapseUI.sPx(10)
+	y = y - barh - RelapseUI.sPx(15)
 
 	RelapseUI.HudText(tostring(math.Round(self.LerpHP)), "Relapse64", x, y, hpcol, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
 
@@ -76,6 +81,8 @@ function PANEL:Paint(w, h)
 		RelapseUI.HudText(translate.Get("hud_armor") .. "  " .. math.ceil(armor), "Relapse15", ax, ay - RelapseUI.sPx(8), c.Armor, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
 	end
 
+	surface.DisableClipping(false)
+	DisableClipping(false)
 	return true
 end
 

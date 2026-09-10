@@ -7,13 +7,23 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add( "mg_makarov", "VGUI/entities/mg_makarov", Color(255, 0, 0, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("VGUI/spawnicons/icon_cac_weapon_pi_mike")
+    killicon.Add("mg_makarov", "zombiesurvival/killicons/weapon_zs_makarov.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_makarov.png")
 end
+
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov.png"
+-- MW stub WM/VM has no gun mesh. Default slide + mag + grip is the actual PM.
+SWEP.RelapsePreviewParts = {
+	"models/viper/mw/attachments/attachment_vm_pi_mike_barrel.mdl",
+	"models/viper/mw/attachments/attachment_vm_pi_mike_grip.mdl",
+}
+SWEP.RelapsePreviewAngle = Angle(8, 90, 0)
 
 SWEP.Base = "mg_base"
 
-SWEP.PrintName = "Sykov"
+SWEP.PrintName = "Пистолет Макарова"
+SWEP.TranslationName = "wep_makarov"
+SWEP.TranslationDescription = "wep_makarov_desc"
 SWEP.Category = "Modern Warfare"
 SWEP.SubCategory = "Pistols"
 SWEP.Spawnable = true
@@ -29,15 +39,18 @@ SWEP.HoldType = "Pistol"
 
 -- Relapse combat stats. Source of truth for MW gunplay, usefulness, and the shop UI.
 -- Kinetic = fraction of close-range damage lost by EffectiveRange (0 = none, 1 = all).
--- Accuracy = spread (higher = wider). Weight is kilograms, not SWEP.Weight.
+-- Accuracy = spread cone (higher = wider). Recoil = kick. Shop stability uses both.
+-- Weight is kilograms (ПМ empty 730 g). Clip is the real 8-round single-stack mag.
+-- 9x18: milder than 9x19 USP/Battleaxe (24 dmg), snappy on a 730 g frame.
 SWEP.Relapse = {
     Damage = 20,
     Delay = 0.20,
     Reload = 1.66,
     Kinetic = 0.40,
-    Recoil = 0.80,
-    Accuracy = 1.80,
+    Recoil = 0.55,
+    Accuracy = 1.50,
     Weight = 0.73,
+    Clip = 8,
 }
 
 local R = SWEP.Relapse
@@ -55,7 +68,7 @@ SWEP.Primary.Ammo = "pistol"
 SWEP.Primary.Damage = R.Damage
 SWEP.Primary.Delay = R.Delay
 SWEP.Primary.NumShots = 1
-SWEP.Primary.ClipSize = 12
+SWEP.Primary.ClipSize = R.Clip
 SWEP.Primary.Automatic = false
 SWEP.Primary.BurstRounds = 1
 SWEP.Primary.BurstDelay = 0
@@ -64,6 +77,8 @@ SWEP.CanChamberRound = true
 SWEP.ReloadTime = R.Reload
 SWEP.ConeMin = R.Accuracy * 0.5
 SWEP.ConeMax = R.Accuracy * 1.5
+SWEP.ConeRamp = 2
+SWEP.DrawCrosshair = false
 
 SWEP.Reverb = {
     RoomScale = 50000, --(cubic hu)
@@ -179,7 +194,7 @@ SWEP.Shell = "mwb_shelleject_9mm"
 SWEP.WalkSpeed = SPEED_NORMAL or 95
 SWEP.NoDeploySpeedChange = true
 SWEP.RequiredClip = 1
-SWEP.Description = "A compact 9x18mm pistol."
+SWEP.Description = "A compact service sidearm. Issued to everyone and valued by no one\194\160\194\160–\194\160\194\160until there was nothing else left."
 
 function SWEP:GetWalkSpeed()
     return self.WalkSpeed or SPEED_NORMAL or 95

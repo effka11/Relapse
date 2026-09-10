@@ -192,9 +192,9 @@ function GM:ComputeWeaponUsefulness(swep)
 	return self:ComputeUsefulness("ranged", self:ExtractRangedUsefulnessValues(swep))
 end
 
--- T1 arsenal price of the ranged stick (Battleaxe). Worth is a different currency.
+-- T1 price of the ranged stick. Same unit in worth and points: two wallets, one number.
 U.ShopT1Price = 15
-U.WorthT1Price = 45
+U.WorthT1Price = U.ShopT1Price
 
 -- Battleaxe stats as the model scores them (recoil 0 is a real bump over Scale).
 function GM:GetStickRangedUsefulness()
@@ -211,11 +211,172 @@ function GM:GetStickRangedUsefulness()
 	})
 end
 
--- Shop U per 1 arsenal point, from stick / T1 price. Not worth, not T5.
+-- Shop U per 1 point (and per 1 worth). Stick / T1 price. Not T5.
 function GM:GetPointUsefulness()
 	return self:GetStickRangedUsefulness() / U.ShopT1Price
 end
 
 function GM:GetWorthUsefulness()
 	return self:GetStickRangedUsefulness() / U.WorthT1Price
+end
+
+-- Shop scores (1–99). Hill n=1.4: extremes approach 1 and 100, never cross.
+-- ref is an independent mid-game gun (score 50), not T1.
+-- Stability = spread + recoil in one cone-ish error. Recoil always counts (kick),
+-- not only leftover between shots.
+GM.RelapseRecoilToCone = 1.2
+GM.RelapseShopHillN = 1.4
+GM.RelapseShopScoreSpec = {
+	Damage = {ref = 34, better = "more"}, -- ~T2/T3 body damage
+	FireRate = {ref = 520, better = "more"}, -- RPM, slow SMG
+	Stability = {ref = 2.80, better = "less"}, -- Accuracy + Recoil*k of a typical gun
+	Reload = {ref = 1.85, better = "less"}, -- seconds, mixed rifle/SMG reload
+	Clip = {ref = 24, better = "more"}, -- mid rifle mag
+	Weight = {ref = 2.8, better = "less"}, -- kg of a typical carbine
+}
+
+-- Relapse tables live here so the shop still scores a gun if workshop SWEP won.
+GM.RelapseWeapons = {
+	mg_makarov = {
+		TranslationName = "wep_makarov",
+		TranslationDescription = "wep_makarov_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov.png",
+		PreviewParts = {
+			"models/viper/mw/attachments/attachment_vm_pi_mike_barrel.mdl",
+			"models/viper/mw/attachments/attachment_vm_pi_mike_grip.mdl",
+		},
+		PreviewAngle = Angle(8, 90, 0),
+		Ammo = "pistol",
+		Relapse = {
+			Damage = 20,
+			Delay = 0.20,
+			Reload = 1.66,
+			Kinetic = 0.40,
+			Recoil = 0.55,
+			Accuracy = 1.50,
+			Weight = 0.73,
+			Clip = 8,
+		}
+	}
+}
+
+function GM:GetWeaponRelapse(src)
+	if not src then return nil end
+
+	if istable(src) and src.Relapse then
+		return src.Relapse
+	end
+
+	local class = isstring(src) and src or src.ClassName or src.Class or src.SWEP
+	if not class then return nil end
+
+	local stored = weapons.GetStored(class)
+	if stored and stored.Relapse then
+		return stored.Relapse
+	end
+
+	local def = self.RelapseWeapons and self.RelapseWeapons[class]
+	return def and def.Relapse or nil
+end
+
+function GM:BindRelapseWeapon(src)
+	if not istable(src) then return src end
+
+	local class = src.ClassName or src.Class or src.SWEP
+	local def = class and self.RelapseWeapons and self.RelapseWeapons[class]
+	if def then
+		src.Relapse = src.Relapse or def.Relapse
+		src.TranslationName = src.TranslationName or def.TranslationName
+		src.TranslationDescription = src.TranslationDescription or def.TranslationDescription
+		src.RelapsePreviewIcon = src.RelapsePreviewIcon or def.PreviewIcon
+		src.RelapsePreviewParts = def.PreviewParts or src.RelapsePreviewParts
+		src.RelapsePreviewAngle = def.PreviewAngle or src.RelapsePreviewAngle
+		src.Primary = src.Primary or {}
+		if def.Ammo then
+			src.Primary.Ammo = def.Ammo
+		elseif isstring(src.Primary.Ammo) then
+			src.Primary.Ammo = string.lower(src.Primary.Ammo)
+		end
+	end
+
+	return src
+end
+
+function GM:GetWeaponAmmoType(src)
+	if not istable(src) then return nil end
+
+	local ammo = src.Primary and src.Primary.Ammo
+	if isstring(ammo) and ammo ~= "" and string.lower(ammo) ~= "none" then
+		return string.lower(ammo)
+	end
+
+	local class = src.ClassName or src.Class or src.SWEP
+	local def = class and self.RelapseWeapons and self.RelapseWeapons[class]
+	if def and isstring(def.Ammo) and def.Ammo ~= "" then
+		return string.lower(def.Ammo)
+	end
+
+	return nil
+end
+
+function GM:RelapseStabilityError(r)
+	if not r then return 0 end
+	local spread = math.max(0, tonumber(r.Accuracy) or 0)
+	local recoil = math.max(0, tonumber(r.Recoil) or 0)
+	return spread + recoil * (self.RelapseRecoilToCone or 1.2)
+end
+
+function GM:RelapseShopCurve(x, spec)
+	spec = spec or {}
+	local n = spec.n or self.RelapseShopHillN or 1.4
+	local ref = math.max(1e-6, spec.ref or 1)
+	x = math.max(0, tonumber(x) or 0)
+	local xn = x > 0 and (x ^ n) or 0
+	local kn = ref ^ n
+	local u = spec.better == "less" and (kn / (xn + kn)) or (xn / (xn + kn))
+	return 1 + 98 * u
+end
+
+function GM:RelapseShopScore(id, raw)
+	local spec = self.RelapseShopScoreSpec and self.RelapseShopScoreSpec[id]
+	if not spec then return raw end
+	return math.floor(self:RelapseShopCurve(raw, spec) + 0.5)
+end
+
+function GM:RelapseStatValue(sweptable, id)
+	if not sweptable then return nil end
+	local r = self:GetWeaponRelapse(sweptable)
+	if not r then return nil end
+
+	if id == "FireRate" then
+		return tonumber(r.Delay)
+	end
+	if id == "Stability" then
+		return self:RelapseStabilityError(r)
+	end
+	if id == "Clip" then
+		return tonumber(r.Clip) or (sweptable.Primary and sweptable.Primary.ClipSize) or nil
+	end
+
+	local raw = tonumber(r[id])
+	if raw ~= nil then return raw end
+	return r[id]
+end
+
+-- Units the hill curve expects. FireRate is RPM even though the shop prints Delay.
+function GM:RelapseShopBarInput(sweptable, id)
+	if id == "FireRate" then
+		local r = self:GetWeaponRelapse(sweptable)
+		local delay = r and tonumber(r.Delay) or 0
+		if delay <= 0 then return nil end
+		return 60 / delay
+	end
+
+	return self:RelapseStatValue(sweptable, id)
+end
+
+function GM:RelapseShopBarFill(sweptable, id)
+	local raw = self:RelapseShopBarInput(sweptable, id)
+	if raw == nil then return nil end
+	return self:RelapseShopScore(id, raw)
 end

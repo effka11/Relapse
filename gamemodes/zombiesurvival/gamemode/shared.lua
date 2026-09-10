@@ -198,8 +198,16 @@ function GM:AssignItemProperties()
 		if tab.SWEP then
 			local sweptab = self.ZSInventoryItemData[tab.SWEP] or weapons.Get(tab.SWEP)
 			if sweptab then
+				self:BindRelapseWeapon(sweptab)
+				self:BindRelapseWeapon(tab)
 				if not tab.Description then
 					tab.Description = sweptab.Description
+				end
+				if sweptab.TranslationName then
+					tab.TranslationName = sweptab.TranslationName
+				end
+				if sweptab.TranslationDescription then
+					tab.TranslationDescription = sweptab.TranslationDescription
 				end
 				if not tab.Tier then
 					tab.Tier = sweptab.Tier
@@ -207,8 +215,8 @@ function GM:AssignItemProperties()
 				if not tab.MaxStock then
 					tab.MaxStock = sweptab.MaxStock
 				end
-				if tab.Name == "?" then
-					tab.Name = sweptab.PrintName or tab.Name
+				if tab.Name == "?" or tab.Name == "Sykov" then
+					tab.Name = (tab.TranslationName and translate.Get(tab.TranslationName)) or sweptab.PrintName or tab.Name
 				end
 			end
 		end

@@ -3,7 +3,7 @@ local function pointslabelThink(self)
 	if self.m_LastPoints ~= points then
 		self.m_LastPoints = points
 
-		self:SetText("Points to spend: "..points)
+		self:SetText(RelapseUI.TF("shop_points_to_spend", points))
 		self:SizeToContents()
 	end
 end
@@ -78,7 +78,7 @@ local function ItemPanelThink(self)
 			if stocks ~= self.m_LastStocks then
 				self.m_LastStocks = stocks
 
-				self.StockLabel:SetText(stocks.." remaining")
+				self.StockLabel:SetText(RelapseUI.TF("shop_remaining", stocks))
 				self.StockLabel:SizeToContents()
 				self.StockLabel:AlignRight(10)
 				self.StockLabel:SetTextColor(stocks > 0 and RelapseUI.Col.Muted or RelapseUI.Col.Danger)
@@ -103,11 +103,23 @@ local function ItemPanelPaint(self, w, h)
 end
 
 local function FormatRelapseStat(id, val)
-	if id == "Delay" or id == "Reload" then
-		return string.format("%.2fs", val)
-	end
 	if id == "Weight" then
-		return string.format("%.2f kg", val)
+		return string.format(RelapseUI.T("shop_stat_kg_fmt", "%.2f kg"), val)
+	end
+	if id == "Clip" then
+		return tostring(math.floor(val + 0.5))
+	end
+	if id == "Damage" then
+		if val == math.floor(val) then
+			return tostring(math.floor(val))
+		end
+		return string.format("%.1f", val)
+	end
+	if id == "FireRate" or id == "Delay" or id == "Reload" then
+		return RelapseUI.TF("shop_stat_sec_fmt", val)
+	end
+	if id == "Stability" then
+		return string.format("%.2f", val)
 	end
 	if id == "Kinetic" or id == "Recoil" or id == "Accuracy" then
 		return string.format("%.2f", val)
@@ -125,28 +137,52 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 			viewer.ItemStatValues[i]:SetText("")
 			viewer.ItemStatBars[i]:SetVisible(false)
 		end
+		RelapseUI.LayoutViewerStats(viewer)
 		return
 	end
 
-	if sweptable.Relapse then
+	local debugRows = math.min(tonumber(sweptable.RelapseStatDebugRows) or 0, RelapseUI.ViewerStatMax())
+	if debugRows > 0 then
+		for i = 1, barCount do
+			if i <= debugRows then
+				viewer.ItemStats[i]:SetText("Stat " .. i)
+				viewer.ItemStatValues[i]:SetText(tostring(i))
+				viewer.ItemStatBars[i].Stat = i
+				viewer.ItemStatBars[i].StatMin = 0
+				viewer.ItemStatBars[i].StatMax = debugRows
+				viewer.ItemStatBars[i].BadHigh = false
+				viewer.ItemStatBars[i]:SetVisible(true)
+			else
+				viewer.ItemStats[i]:SetText("")
+				viewer.ItemStatValues[i]:SetText("")
+				viewer.ItemStatBars[i]:SetVisible(false)
+			end
+		end
+		RelapseUI.LayoutViewerStats(viewer)
+		return
+	end
+
+	if GAMEMODE:GetWeaponRelapse(sweptable) then
 		local specs = GAMEMODE.RelapseWeaponStatBarVals
 		for i = 1, barCount do
 			local spec = specs and specs[i]
-			local val = spec and sweptable.Relapse[spec[1]]
-			if not spec or val == nil then
+			local val = spec and GAMEMODE:RelapseStatValue(sweptable, spec[1])
+			local fill = val ~= nil and GAMEMODE:RelapseShopBarFill(sweptable, spec[1])
+			if not spec or val == nil or fill == nil then
 				viewer.ItemStats[i]:SetText("")
 				viewer.ItemStatValues[i]:SetText("")
 				viewer.ItemStatBars[i]:SetVisible(false)
 			else
-				viewer.ItemStats[i]:SetText(spec[2])
+				viewer.ItemStats[i]:SetText(RelapseUI.ShopStat(spec[1], spec[2]))
 				viewer.ItemStatValues[i]:SetText(FormatRelapseStat(spec[1], val))
-				viewer.ItemStatBars[i].Stat = val
-				viewer.ItemStatBars[i].StatMin = spec[3]
-				viewer.ItemStatBars[i].StatMax = spec[4]
-				viewer.ItemStatBars[i].BadHigh = spec[5]
+				viewer.ItemStatBars[i].Stat = fill
+				viewer.ItemStatBars[i].StatMin = 0
+				viewer.ItemStatBars[i].StatMax = 100
+				viewer.ItemStatBars[i].BadHigh = false
 				viewer.ItemStatBars[i]:SetVisible(true)
 			end
 		end
+		RelapseUI.LayoutViewerStats(viewer)
 		return
 	end
 
@@ -186,7 +222,7 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 			stattext = statnum
 		end
 
-		viewer.ItemStats[i]:SetText(statshow[2])
+		viewer.ItemStats[i]:SetText(RelapseUI.ShopStat(statshow[1], statshow[2]))
 		viewer.ItemStatValues[i]:SetText(stattext)
 
 		if statshow[1] == "Damage" then
@@ -201,59 +237,83 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 		viewer.ItemStatBars[i].BadHigh = statshow[5]
 		viewer.ItemStatBars[i]:SetVisible(true)
 	end
+	RelapseUI.LayoutViewerStats(viewer)
 end
 
 function GM:HasPurchaseableAmmo(sweptable)
-	if sweptable.Primary and self.AmmoToPurchaseNames[sweptable.Primary.Ammo] then
-		return true
+	local lower = self:GetWeaponAmmoType(sweptable)
+	if not lower then return end
+	if self.AmmoToPurchaseNames[lower] then return true end
+	for k in pairs(self.AmmoToPurchaseNames) do
+		if string.lower(k) == lower then
+			return true
+		end
 	end
 end
 
 function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
-	viewer.m_Title:SetText(sweptable.PrintName)
+	if shoptbl and shoptbl.SWEP then
+		sweptable.ClassName = sweptable.ClassName or shoptbl.SWEP
+		sweptable.SWEP = sweptable.SWEP or shoptbl.SWEP
+	end
+	self:BindRelapseWeapon(sweptable)
+	self:BindRelapseWeapon(shoptbl)
+
+	viewer.m_Title:SetText(RelapseUI.WepName(sweptable))
 	viewer.m_Title:PerformLayout()
 
-	local desctext = sweptable.Description or ""
+	local desctext = RelapseUI.WepDesc(sweptable)
 	if not self.ZSInventoryItemData[shoptbl.SWEP] then
-		viewer.ModelPanel:SetModel(sweptable.WorldModel)
-		local mins, maxs = viewer.ModelPanel.Entity:GetRenderBounds()
-		viewer.ModelPanel:SetCamPos(mins:Distance(maxs) * Vector(1.15, 0.75, 0.5))
-		viewer.ModelPanel:SetLookAt((mins + maxs) / 2)
+		RelapseUI.SetShopPreview(viewer.ModelPanel, sweptable, viewer)
 		viewer.m_VBG:SetVisible(true)
 
 		if sweptable.NoDismantle then
-			desctext = desctext .. "\nCannot be dismantled for scrap."
+			desctext = desctext .. "\n" .. RelapseUI.T("shop_cannot_dismantle")
 		end
 
-		viewer.m_Desc:MoveBelow(viewer.m_VBG, RelapseUI.Grid15())
-		viewer.m_Desc:SetFont("Relapse13")
 	else
 		viewer.ModelPanel:SetModel("")
-		viewer.m_VBG:SetVisible(false)
-
-		viewer.m_Desc:MoveBelow(viewer.m_Title, RelapseUI.Grid15())
-		viewer.m_Desc:SetFont("Relapse15")
+		viewer.m_VBG:SetVisible(true)
+	end
+	local debugLines = tonumber(sweptable.RelapseDescDebugLines) or 0
+	if debugLines > 0 then
+		local lines = {}
+		for i = 1, debugLines do
+			lines[i] = "Desc " .. i
+		end
+		desctext = table.concat(lines, "\n")
 	end
 	viewer.m_Desc:SetText(desctext)
 
 	self:ViewerStatBarUpdate(viewer, shoptbl.Category ~= ITEMCAT_GUNS and shoptbl.Category ~= ITEMCAT_MELEE, sweptable)
 
-	if self:HasPurchaseableAmmo(sweptable) and self.AmmoNames[string.lower(sweptable.Primary.Ammo)] then
-		local lower = string.lower(sweptable.Primary.Ammo)
+	if self:HasPurchaseableAmmo(sweptable) then
+		local lower = self:GetWeaponAmmoType(sweptable)
 
-		viewer.m_AmmoType:SetText(self.AmmoNames[lower])
+		viewer.m_AmmoType:SetText(RelapseUI.ShopAmmo(lower))
+		viewer.m_AmmoType:SizeToContents()
 		viewer.m_AmmoType:PerformLayout()
 
-		local ki = killicon.Get(self.AmmoIcons[lower])
+		local ki = lower and self.AmmoIcons[lower] and killicon.Get(self.AmmoIcons[lower])
+		if istable(ki) and ki[1] then
+			viewer.m_AmmoIcon:SetImage(ki[1])
+			viewer.m_AmmoIcon:SetImageColor(RelapseUI.Col.Text)
+			viewer.m_AmmoIcon:SetVisible(true)
+		else
+			viewer.m_AmmoIcon:SetVisible(false)
+		end
 
-		viewer.m_AmmoIcon:SetImage(ki[1])
-		viewer.m_AmmoIcon:SetImageColor(RelapseUI.Col.Text)
-
-		viewer.m_AmmoIcon:SetVisible(true)
+		viewer.m_AmmoType:SetVisible(true)
+		viewer.m_AmmoType:MoveToFront()
+		if viewer.m_AmmoIcon:IsVisible() then
+			viewer.m_AmmoIcon:MoveToFront()
+		end
 	else
 		viewer.m_AmmoType:SetText("")
 		viewer.m_AmmoIcon:SetVisible(false)
+		viewer.m_AmmoType:SetVisible(false)
 	end
+	RelapseUI.LayoutViewerAmmo(viewer)
 end
 
 local function ItemPanelDoClick(self)
@@ -291,7 +351,7 @@ local function ItemPanelDoClick(self)
 
 	local ppurbl = viewer.m_PurchasePrice
 	local price = self.NoPoints and math.ceil(GAMEMODE:PointsToScrap(shoptbl.Worth)) or math.floor(shoptbl.Worth * (MySelf.ArsenalDiscount or 1))
-	ppurbl:SetText(price .. (self.NoPoints and " Scrap" or " Points"))
+	ppurbl:SetText(self.NoPoints and RelapseUI.TF("shop_price_scrap", price) or RelapseUI.TF("shop_price_points", price))
 	ppurbl:SizeToContents()
 	ppurbl:SetPos(purb:GetWide() / 2 - ppurbl:GetWide() / 2, purb:GetTall() * 0.75 - ppurbl:GetTall() * 0.5)
 	ppurbl:SetVisible(true)
@@ -310,7 +370,7 @@ local function ItemPanelDoClick(self)
 
 	ppurbl = viewer.m_AmmoPrice
 	price = math.floor(9 * (MySelf.ArsenalDiscount or 1))
-	ppurbl:SetText(price .. " Points")
+	ppurbl:SetText(RelapseUI.TF("shop_price_points", price))
 	ppurbl:SizeToContents()
 	ppurbl:SetPos(purb:GetWide() / 2 - ppurbl:GetWide() / 2, purb:GetTall() * 0.75 - ppurbl:GetTall() * 0.5)
 	ppurbl:SetVisible(canammo)
@@ -387,7 +447,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 	itempan.DoClick = ItemPanelDoClick
 	itempan.DoRightClick = function()
 		local menu = DermaMenu(itempan)
-		menu:AddOption("Buy", function() RunConsoleCommand("zs_pointsshopbuy", itempan.ID, itempan.NoPoints and "scrap") end)
+		menu:AddOption(RelapseUI.T("shop_buy"), function() RunConsoleCommand("zs_pointsshopbuy", itempan.ID, itempan.NoPoints and "scrap") end)
 		menu:Open()
 	end
 	list:AddItem(itempan)
@@ -400,10 +460,10 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 		mdlframe.Paint = function() end
 
 		local kitbl = killicon.Get(GAMEMODE.ZSInventoryItemData[tab.SWEP] and "weapon_zs_craftables" or tab.SWEP or tab.Model)
-		if kitbl then
-			self:AttachKillicon(kitbl, itempan, mdlframe, tab.Category == ITEMCAT_AMMO, missing_skill)
-		elseif tab.Model then
-			if tab.Model then
+		if not RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill) then
+			if kitbl then
+				self:AttachKillicon(kitbl, itempan, mdlframe, tab.Category == ITEMCAT_AMMO, missing_skill)
+			elseif tab.Model then
 				local mdlpanel = vgui.Create("DModelPanel", mdlframe)
 				mdlpanel:SetSize(mdlframe:GetSize())
 				mdlpanel:SetModel(tab.Model)
@@ -419,7 +479,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 		counter:SetItemID(i)
 	end
 
-	local name = tab.Name or ""
+	local name = RelapseUI.WepName(tab)
 	local namelab = EasyLabel(itempan, name, "Relapse20", RelapseUI.Col.Text)
 	namelab:SetPos(12 * screenscale, itempan:GetTall() * (nottrinkets and 0.8 or 0.7) - namelab:GetTall() * 0.5)
 	if missing_skill then
@@ -429,7 +489,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 
 	local alignri = (issub and (320 + 32) or (nopointshop and 32 or 20)) * screenscale
 
-	local pricelabel = EasyLabel(itempan, "", "Relapse13")
+	local pricelabel = EasyLabel(itempan, "", "Relapse20")
 	if missing_skill then
 		pricelabel:SetTextColor(RelapseUI.Col.Danger)
 		pricelabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
@@ -439,14 +499,14 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 		if nopointshop then
 			price = tostring(math.ceil(self:PointsToScrap(tab.Price)))
 		end
-		pricelabel:SetText(price..(nopointshop and " Scrap" or " Points"))
+		pricelabel:SetText(nopointshop and RelapseUI.TF("shop_price_scrap", price) or RelapseUI.TF("shop_price_points", price))
 		pricelabel:SetTextColor(RelapseUI.Col.Accent)
 	end
 	pricelabel:SizeToContents()
 	pricelabel:AlignRight(alignri)
 
 	if tab.MaxStock then
-		local stocklabel = EasyLabel(itempan, tab.MaxStock.." remaining", "Relapse13")
+		local stocklabel = EasyLabel(itempan, RelapseUI.TF("shop_remaining", tab.MaxStock), "Relapse13")
 		stocklabel:SetTextColor(RelapseUI.Col.Muted)
 		stocklabel:SizeToContents()
 		stocklabel:AlignRight(alignri)
@@ -463,7 +523,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 	end
 
 	if not nottrinkets and tab.SubCategory then
-		local catlabel = EasyLabel(itempan, GAMEMODE.ItemSubCategories[tab.SubCategory], "Relapse13", RelapseUI.Col.Muted)
+		local catlabel = EasyLabel(itempan, RelapseUI.ShopSubCat(tab.SubCategory), "Relapse13", RelapseUI.Col.Muted)
 		catlabel:SizeToContents()
 		catlabel:SetPos(10, itempan:GetTall() * 0.3 - catlabel:GetTall() * 0.5)
 	end
@@ -545,90 +605,106 @@ function GM:CreateItemViewerGenericElems(viewer)
 	local inset = m.cardPad
 	local innerW = viewer:GetWide() - 2 * inset
 
-	local vtitle = EasyLabel(viewer, "", "Relapse16", RelapseUI.Col.Text)
-	vtitle:SetContentAlignment(8)
-	vtitle:SetSize(innerW, RelapseUI.Grid15(2))
-	vtitle:SetPos(inset, inset)
-	viewer.m_Title = vtitle
+	local descLeft = math.max(0, inset - RelapseUI.sPx(5))
+	local descRight = RelapseUI.sPx(15)
 
-	local vammot = EasyLabel(viewer, "", "Relapse13", RelapseUI.Col.Muted)
-	vammot:SetContentAlignment(8)
-	vammot:SetSize(innerW * 0.5, RelapseUI.Grid15())
-	vammot:MoveBelow(vtitle, m.gutter)
-	vammot:CenterHorizontal(0.35)
+	-- Relapse20 cell sits ~5px above caps; y is to the capital, not the em-box.
+	local titleTop = RelapseUI.sPx(15) - RelapseUI.sPx(5)
+	local titleH = RelapseUI.sPx(20)
+	local vtitle = EasyLabel(viewer, "", "Relapse20", RelapseUI.Col.Text)
+	vtitle:SetContentAlignment(7)
+	vtitle:SetTextColor(Color(0, 0, 0, 0))
+	vtitle.ApplySchemeSettings = function() end
+	vtitle.PerformLayout = function(me)
+		local host = me:GetParent()
+		local bw = IsValid(host) and host:GetWide() or viewer:GetWide()
+		me:SetSize(math.max(1, bw - descLeft - descRight), titleH)
+		me:SetPos(descLeft, titleTop)
+	end
+	vtitle.Paint = function(me, w, h)
+		local t = me:GetText() or ""
+		if t ~= "" then
+			draw.SimpleText(t, "Relapse20", 0, 0, RelapseUI.Col.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+		end
+		return true
+	end
+	vtitle:InvalidateLayout(true)
+	viewer.m_Title = vtitle
+	viewer.RelapseDescLeft = descLeft
+
+	local vammot = EasyLabel(viewer, "", "Relapse15", RelapseUI.Col.Muted)
+	vammot:SetContentAlignment(4)
 	viewer.m_AmmoType = vammot
 
 	local vammoi = vgui.Create("DImage", viewer)
 	vammoi:SetSize(RelapseUI.Grid15(2), RelapseUI.Grid15(2))
-	vammoi:MoveBelow(vtitle, RelapseUI.Grid5(2))
-	vammoi:CenterHorizontal(0.7)
+	vammoi:SetVisible(false)
 	viewer.m_AmmoIcon = vammoi
+	vammot:SetVisible(false)
+	RelapseUI.LayoutViewerAmmo(viewer)
 
 	local vbg = vgui.Create("DPanel", viewer)
-	vbg:SetSize(RelapseUI.Grid15(13), RelapseUI.Grid15(7))
-	vbg:CenterHorizontal()
-	vbg:MoveBelow(vammot, m.gutter)
 	vbg:SetPaintBackground(false)
 	vbg.Paint = function() return true end
-	vbg:SetVisible(false)
 	viewer.m_VBG = vbg
+	RelapseUI.LayoutViewerModel(viewer)
 
 	local modelpanel = vgui.Create("DModelPanelEx", vbg)
+	modelpanel:SetPaintBackground(false)
 	modelpanel:SetModel("")
-	modelpanel:AutoCam()
 	modelpanel:Dock(FILL)
-	modelpanel:SetDirectionalLight(BOX_TOP, Color(100, 255, 100))
-	modelpanel:SetDirectionalLight(BOX_FRONT, Color(255, 100, 100))
 	viewer.ModelPanel = modelpanel
 
-	local itemdesc = vgui.Create("DLabel", viewer)
-	itemdesc:SetFont("Relapse13")
-	itemdesc:SetTextColor(RelapseUI.Col.Muted)
-	itemdesc:SetMultiline(true)
-	itemdesc:SetWrap(true)
-	itemdesc:SetAutoStretchVertical(true)
-	itemdesc:SetWide(innerW)
-	itemdesc:CenterHorizontal()
-	itemdesc:SetText("")
-	itemdesc:MoveBelow(vbg, m.cardPad)
-	viewer.m_Desc = itemdesc
+	local modelicon = vgui.Create("DImage", vbg)
+	modelicon:SetVisible(false)
+	modelicon:SetKeepAspect(true)
+	modelicon:Dock(FILL)
+	viewer.m_ModelIcon = modelicon
 
-	local statGap = RelapseUI.Grid15()
-	local statFirst = RelapseUI.Grid15(7)
+	local itemdesc = vgui.Create("DLabel", viewer)
+	itemdesc:SetFont("Relapse15")
+	itemdesc:SetTextColor(RelapseUI.Col.Muted)
+	itemdesc:SetWide(math.max(1, viewer:GetWide() - descLeft - descRight))
+	itemdesc:SetText("")
+	RelapseUI.HookViewerDesc(itemdesc)
+	viewer.m_Desc = itemdesc
+	RelapseUI.LayoutViewerDesc(viewer)
+
+	local blockW = viewer:GetWide()
+	local left = RelapseUI.sPx(90)
+	local right = RelapseUI.sPx(75)
+	local barW = math.max(1, blockW - left - right)
+	local barH = RelapseUI.Grid5(2)
 	local itemstats, itemsbs, itemsvs = {}, {}, {}
-	local statCount = GAMEMODE.WeaponStatBarCount or 6
+	local statCount = RelapseUI.ViewerStatMax()
 	for i = 1, statCount do
 		local itemstat = vgui.Create("DLabel", viewer)
-		itemstat:SetFont("Relapse13")
-		itemstat:SetTextColor(RelapseUI.Col.Muted)
-		itemstat:SetWide(innerW * 0.38)
+		itemstat:SetFont("Relapse15")
+		RelapseUI.HookStatCaption(itemstat, RelapseUI.Col.Muted)
+		itemstat:SetWide(left)
 		itemstat:SetText("")
-		itemstat:CenterHorizontal(0.2)
-		itemstat:SetContentAlignment(8)
-		itemstat:MoveBelow(i == 1 and vbg or itemstats[i-1], i == 1 and statFirst or statGap)
+		itemstat:SetX(0)
 		table.insert(itemstats, itemstat)
 
 		local itemsb = vgui.Create("ZSItemStatBar", viewer)
-		itemsb:SetWide(innerW * 0.38)
-		itemsb:SetTall(RelapseUI.Grid5(2))
-		itemsb:CenterHorizontal(0.55)
+		itemsb:SetWide(barW)
+		itemsb:SetTall(barH)
 		itemsb:SetVisible(false)
-		itemsb:MoveBelow(i == 1 and vbg or itemstats[i-1], (i == 1 and statFirst or statGap) + RelapseUI.Grid5())
+		itemsb:SetX(left)
 		table.insert(itemsbs, itemsb)
 
 		local itemsv = vgui.Create("DLabel", viewer)
-		itemsv:SetFont("Relapse13")
-		itemsv:SetTextColor(RelapseUI.Col.Text)
-		itemsv:SetWide(innerW * 0.28)
+		itemsv:SetFont("Relapse15")
+		RelapseUI.HookStatCaption(itemsv, RelapseUI.Col.Text)
+		itemsv:SetWide(right)
 		itemsv:SetText("")
-		itemsv:CenterHorizontal(0.85)
-		itemsv:SetContentAlignment(8)
-		itemsv:MoveBelow(i == 1 and vbg or itemstats[i-1], i == 1 and statFirst or statGap)
+		itemsv:SetX(blockW - right)
 		table.insert(itemsvs, itemsv)
 	end
 	viewer.ItemStats = itemstats
 	viewer.ItemStatValues = itemsvs
 	viewer.ItemStatBars = itemsbs
+	RelapseUI.LayoutViewerStats(viewer)
 end
 
 MENU_POINTSHOP = 1
@@ -646,6 +722,7 @@ function GM:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, me
 
 	viewer:SetPaintBackground(false)
 	viewer.Paint = RelapseUI.PaintInsetPanel
+	viewer:NoClipping(false)
 
 	if remantler then
 		local __, topy = topspace:GetPos()
@@ -656,12 +733,14 @@ function GM:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, me
 	else
 		local sheetX, sheetY = propertysheet:GetPos()
 		local sheetW, sheetH = propertysheet:GetSize()
-		viewer:SetSize(m.sidebar, math.max(m.step, sheetH - m.tabs - m.tabGap))
-		viewer:SetPos(sheetX + sheetW + RelapseUI.ViewerGap(), sheetY + m.tabs + m.tabGap)
+		local vw = RelapseUI.ViewerW()
+		viewer:SetSize(vw, math.max(m.step, sheetH - m.tabs - m.tabGap))
+		viewer:SetPos(frame:GetWide() - RelapseUI.FooterSideInset() - vw, sheetY + m.tabs + m.tabGap)
 	end
 	frame.Viewer = viewer
 
 	self:CreateItemViewerGenericElems(viewer)
+	RelapseUI.PinViewerToItems(frame, propertysheet)
 
 	local purchaseb = vgui.Create("DButton", viewer)
 	purchaseb:SetText("")
@@ -670,7 +749,7 @@ function GM:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, me
 	purchaseb.Paint = RelapseUI.PaintPrimaryButton
 	viewer.m_PurchaseB = purchaseb
 
-	local namelab = EasyLabel(purchaseb, "Purchase", "Relapse15", RelapseUI.Col.Accent)
+	local namelab = EasyLabel(purchaseb, RelapseUI.T("shop_purchase"), "Relapse15", RelapseUI.Col.Accent)
 	namelab:SetVisible(false)
 	viewer.m_PurchaseLabel = namelab
 
@@ -685,7 +764,7 @@ function GM:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, me
 	ammopb.Paint = RelapseUI.PaintGhostButton
 	viewer.m_AmmoB = ammopb
 
-	namelab = EasyLabel(ammopb, "Ammo", "Relapse15", RelapseUI.Col.Text)
+	namelab = EasyLabel(ammopb, RelapseUI.T("shop_ammo"), "Relapse15", RelapseUI.Col.Text)
 	namelab:SetVisible(false)
 	viewer.m_AmmoL = namelab
 
@@ -728,14 +807,14 @@ function GM:OpenArsenalMenu()
 	topspace:SetSize(innerW, m.header)
 	topspace:SetPos(pad, 0)
 
-	local title = EasyLabel(topspace, "Points Shop", "Relapse22", RelapseUI.Col.Text)
-	local subtitle = EasyLabel(topspace, "For all of your zombie apocalypse needs!", "Relapse13", RelapseUI.Col.Muted)
+	local title = EasyLabel(topspace, RelapseUI.T("shop_points_title"), "Relapse22", RelapseUI.Col.Text)
+	local subtitle = EasyLabel(topspace, RelapseUI.T("shop_points_subtitle"), "Relapse13", RelapseUI.Col.Muted)
 	local blockY = math.max(0, (m.header - title:GetTall() - subtitle:GetTall()) * 0.5)
 	title:SetPos(0, blockY)
 	subtitle:SetPos(0, 0)
 	subtitle:MoveBelow(title, 0)
 
-	local wsb = EasyButton(topspace, "Worth Menu", RelapseUI.sPx(8), RelapseUI.sPx(4))
+	local wsb = EasyButton(topspace, RelapseUI.T("shop_worth_menu"), RelapseUI.sPx(8), RelapseUI.sPx(4))
 	wsb:SetFont("Relapse15")
 	wsb:SetSize(RelapseUI.Cells(8), m.btnH)
 	wsb:AlignRight(0)
@@ -748,7 +827,7 @@ function GM:OpenArsenalMenu()
 	bottomspace:SetSize(innerW, m.footer)
 	bottomspace:SetPos(pad, hei - m.footer)
 
-	local pointslabel = EasyLabel(bottomspace, "Points to spend: 0", "Relapse15", RelapseUI.Col.Accent)
+	local pointslabel = EasyLabel(bottomspace, RelapseUI.TF("shop_points_to_spend", 0), "Relapse15", RelapseUI.Col.Accent)
 	pointslabel:AlignLeft(0)
 	pointslabel:CenterVertical()
 	pointslabel.Think = pointslabelThink
@@ -807,7 +886,7 @@ function GM:OpenArsenalMenu()
 					local ispacer = trinkets and ((i-1) % 3)+1 or i
 					local start = i == (catid == ITEMCAT_GUNS and 2 or ind)
 
-					tbn = EasyButton(tabpane, trinkets and subcats[i] or ("Tier " .. i), 2, 8)
+					tbn = EasyButton(tabpane, trinkets and RelapseUI.ShopSubCat(i) or RelapseUI.TF("shop_tier", i), 2, 8)
 					tbn:SetFont("Relapse13")
 					tbn.Paint = RelapseUI.PaintGhostButton
 					tbn:SetAlpha(start and 255 or 70)
@@ -832,7 +911,7 @@ function GM:OpenArsenalMenu()
 				tabpane.Grid = mkgrid()
 			end
 
-			local sheet = propertysheet:AddSheet(catname, tabpane, GAMEMODE.ItemCategoryIcons[catid], false, false)
+			local sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), tabpane, GAMEMODE.ItemCategoryIcons[catid], false, false)
 			sheet.Panel:SetPos(0, tabhei + 2)
 
 			for i, tab in ipairs(GAMEMODE.Items) do

@@ -3,6 +3,7 @@
 --
 --   local st = GAMEMODE.Stride:Get(pl)
 --   st.cycle      0-1 gait (two steps)
+--   st.bobCycle   0-1 visual sway (full 2π; rate = gait * BobFreq)
 --   st.foot       0 left, 1 right
 --   st.interval   seconds per step
 --   st.intensity  0-1
@@ -75,6 +76,7 @@ local function GetState(pl)
 	if not st then
 		st = {
 			cycle = 0,
+			bobCycle = 0,
 			foot = 0,
 			interval = 0.45,
 			intensity = 0,
@@ -84,6 +86,8 @@ local function GetState(pl)
 			lastStepTime = -1
 		}
 		pt.StrideState = st
+	elseif st.bobCycle == nil then
+		st.bobCycle = 0
 	end
 
 	return st
@@ -167,10 +171,12 @@ function Stride:GetBob(pl)
 		return 0, 0, 0, 0
 	end
 
-	-- BobFreq 0.5 = one sway / plant per two steps, not a shake on every footfall.
-	local gait = st.cycle * math_pi * 2 * (self.BobFreq or 0.5)
-	local vertical = -math_abs(math_cos(gait)) * a
-	local lateral = math_sin(gait) * a
+	-- bobCycle is 0-1 for a full left/right (2π). Do not multiply gait cycle by
+	-- BobFreq here: cycle wraps at 1, so freq 0.5 stopped at π and restarted
+	-- the sway mid-motion (very obvious on fists).
+	local tau = (st.bobCycle or 0) * math_pi * 2
+	local vertical = -math_abs(math_cos(tau)) * a
+	local lateral = math_sin(tau) * a
 
 	return vertical, lateral, lateral, a
 end
@@ -235,8 +241,10 @@ function Stride:FinishMove(pl, mv)
 		end
 
 		st.interval = self:ComputeInterval(pl, speed, sprinting, P_Crouching(pl))
-		st.cycle = (st.cycle + dt / (st.interval * 2)) % 1
+		local gaitDt = dt / (st.interval * 2)
+		st.cycle = (st.cycle + gaitDt) % 1
 		st.foot = (st.cycle >= 0.5) and 1 or 0
+		st.bobCycle = ((st.bobCycle or 0) + gaitDt * (self.BobFreq or 0.5)) % 1
 	end
 end
 
