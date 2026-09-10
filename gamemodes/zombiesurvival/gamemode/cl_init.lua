@@ -823,10 +823,6 @@ function GM:_HUDPaint()
 
 	self:HUDDrawTargetID(myteam, screenscale)
 
-	if self:GetWave() > 0 then
-		self:DrawFearMeter(screenscale)
-	end
-
 	if myteam == TEAM_UNDEAD then
 		self:ZombieHUD()
 	elseif myteam == TEAM_HUMAN then

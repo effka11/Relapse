@@ -1,0 +1,58 @@
+---
+description: Relapse shop 3D gun preview — assemble like Makarov, never a second VM
+globs: gamemodes/zombiesurvival/gamemode/vgui/relapse_ui.lua,gamemodes/zombiesurvival/gamemode/vgui/dmodelpanelex.lua,gamemodes/zombiesurvival/gamemode/sh_usefulness_model.lua,addons/zzz_relapse_mw_sykov/**/*.lua
+alwaysApply: false
+---
+
+# Relapse 3D-превью в карточке шопа
+
+Эталон — Макаров. Один пистолет, профиль сбоку, орбита вокруг **видимого** центра, `DrawModel` (не Mesh вьюмодели). Код: `RelapseUI.SetShopPreview` → `DrawShopPreviewGun`. Иконки — отдельное правило.
+
+Сначала выясни, **какие mdl — сам ствол**, и в **каком пространстве** их origin. Не копируй углы и список частей с соседнего ствола.
+
+## Что рисовать
+
+MW `v_` / `w_` часто пустые: руки + stub. Пушка сидит в аттачах.
+
+| Сборка | Как |
+|---|---|
+| Все части в одном origin (Макаров: barrel + grip) | `RelapsePreviewParts` строками, без bone merge. Dummy = `[1]`. |
+| Рамка на WM, затвор/магазин — аттачи с другими костями (1911) | `[1]` = `w_*.mdl` (не `v_`), `RelapsePreviewBoneMerge = true`, остальные EF_BONEMERGE на dummy. Как MW: нет `VElement` → bone merge. |
+| Нет отдельного grip-аттача | Рамка — bodygroup receiver на `w_`, не выдумывай grip.mdl. |
+
+```lua
+-- ❌ вьюмодель в панели (idle/руки = второй ствол)
+RelapsePreviewParts = { "models/viper/mw/weapons/v_m1911.mdl", slide, mag }
+
+-- ❌ все mdl в одном origin, если кости разные (слипшиеся/два ствола)
+-- ✅ Макаров
+RelapsePreviewParts = { barrel, grip }
+RelapsePreviewAngle = Angle(8, 90, 0)
+
+-- ✅ 1911
+RelapsePreviewBoneMerge = true
+RelapsePreviewParts = { w_m1911, slide, mag }
+RelapsePreviewAngle = Angle(0, 0, 0)
+RelapsePreviewLocalAng = Angle(0, 0, 90)
+```
+
+Dummy = `parts[1]`. Для shop `DModelPanelEx` **не** вызывает engine `DrawModel` (idle). Не играть `idle`/`inspect` на MW VM.
+
+## Углы
+
+`RelapsePreviewAngle` — орбита бокса (как у Макарова: pitch 8, yaw 90, если ствол аттача вдоль −X).  
+`RelapsePreviewLocalAng` — только «положить» модель в это пространство.
+
+Ствол **не** вдоль −X (WM в руке, при identity ствол вверх / +Z): **не** копируй `Angle(8, 90, 0)`. Yaw 90 покажет торец, pitch 8 после roll накренит рукоять. Орбита `Angle(0,0,0)` + local roll 90.
+
+Не складывай в один Euler `Angle(8, 90, 90)`. В `OrbitShopPreview`: матрица `orbit * local`, пивот той же матрицей. Не `Vector:Rotate` при ненулевом roll.
+
+## Центр орбиты
+
+Не объединять локальные AABB аттачей до parenting. Для bone merge: identity + `SetupBones`, AABB по `GetModelMeshes`, сдвинутым матрицей кости dummy (`tag_pistol_offset` / `j_gun` для рамки, `GetBoneName(0)` аттача на родителе). Камера смотрит в origin; dummy `SetPos` так, чтобы этот центр там оставался.
+
+## Куда писать
+
+Одинаковые `PreviewParts` / `PreviewBoneMerge` / `PreviewAngle` / `PreviewLocalAng` в SWEP, `GM.RelapseWeapons`, `BindRelapseWeapon`, `ApplyOne` (`relapse_mw_sykov_zs.lua`).
+
+Проверка: `changelevel` (не `restart`). Рядом с Макаровым: один ствол, бок, крутится вокруг середины, тот же свет.

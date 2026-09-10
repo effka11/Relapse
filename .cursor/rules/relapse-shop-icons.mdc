@@ -1,0 +1,45 @@
+---
+description: Relapse shop gun icons — Makarov-style PNG silhouettes, never VTF/CAC
+globs: gamemodes/zombiesurvival/**/*.lua,addons/zzz_relapse_mw_sykov/**/*.lua,gamemodes/zombiesurvival/content/materials/zombiesurvival/killicons/**
+alwaysApply: false
+---
+
+# Relapse иконки шопа
+
+Эталон — `weapon_zs_makarov.png`. Карточка: `RelapseUI.MakeSilhouetteIcon` (белый `SetImageColor` на альфе).
+
+## Файл
+
+| | |
+|---|---|
+| Где | `gamemodes/zombiesurvival/content/materials/zombiesurvival/killicons/` |
+| Формат | PNG 256×256 RGBA, **без** `.vmt` / `.vtf` |
+| Цвет | RGB 255,255,255; форма **только в альфе** |
+| Край | альфа 0 или 255, без SSAA / Gaussian |
+| В Lua | путь **с** `.png` |
+
+Профиль сбоку. Дырка скобы курка — ок. Высота силуэта как у Макарова (~102 px, pad y ~77).
+
+```lua
+-- ❌ CAC / entity spawnicon (дыры или голубой квадрат)
+killicon.Add("mg_m1911", "VGUI/entities/mg_m1911", color_white)
+PreviewIcon = "vgui/spawnicons/icon_cac_weapon_pi_mike_1911"
+
+-- ❌ VTF рядом с PNG — карточка становится циан-прямоугольником
+-- weapon_zs_foo.png + weapon_zs_foo.vmt
+
+-- ✅ как Макаров
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov.png"
+```
+
+Тот же путь в `killicon.Add`, `WepSelectIcon`, `SWEP.RelapsePreviewIcon` и `GM.RelapseWeapons.<class>.PreviewIcon`.
+
+## Откуда карточка берёт путь
+
+`RelapseUI.CardIconPath`: PreviewIcon на предмете / SWEP / `RelapseWeapons`. Не падать на `vgui/entities` и `spawnicons`. Воркшопный SWEP перебивает killicon — `relapse_mw_sykov_zs.lua` (`ApplyOne`) заново ставит PNG на CLIENT.
+
+## Кэш Source
+
+`restart` карты **не** перечитывает PNG. Имя без расширения одно на PNG и VTF: после плохого `weapon_zs_m1911.vtf` файл `weapon_zs_m1911.png` всё равно тянет старый материал.
+
+Смена картинки = **новое basename** + правка Lua. Проверка: выйти в меню и зайти на карту, не `restart`.

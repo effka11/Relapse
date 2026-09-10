@@ -1221,15 +1221,22 @@ function PANEL:Init()
 	self:SetKeyboardInputEnabled(false)
 end
 
+local XP_FONT = "Relapse15"
+
 function PANEL:PerformLayout()
 	RelapseUI.CreateFonts()
 	local inset = RelapseUI.HudInset()
-	self:SetSize(RelapseUI.HudW(), RelapseUI.Grid15(4))
+	surface.SetFont(XP_FONT)
+	local _, textH = surface.GetTextSize("Ay")
+	local barh = RelapseUI.sPx(10)
+	-- Relapse15 sits ~5px above caps; the bar shares that cap band.
+	local h = math.max(textH, RelapseUI.sPx(5) + barh)
+	self:SetSize(RelapseUI.HudW(), math.max(1, h))
 	if GAMEMODE.GameStatePanel and GAMEMODE.GameStatePanel:IsValid() then
-		self:MoveBelow(GAMEMODE.GameStatePanel, RelapseUI.Grid15())
+		self:MoveBelow(GAMEMODE.GameStatePanel, RelapseUI.Grid15(2))
 		self:AlignLeft(inset)
 	else
-		self:SetPos(inset, RelapseUI.Cells(8))
+		self:SetPos(inset, RelapseUI.Grid15(8))
 	end
 end
 
@@ -1249,8 +1256,29 @@ function PANEL:Think()
 end
 
 function PANEL:Paint(w, h)
+	local lp = MySelf
+	if not lp:IsValid() then return true end
+
 	RelapseUI.CreateFonts()
-	GAMEMODE:DrawXPBar(0, 0, w, h, w, 1, 1, self.PlayerLevel)
+	local c = RelapseUI.Col
+	local level = self.PlayerLevel
+	local progress = GAMEMODE:ProgressForXP(lp:GetZSXP())
+	self.LerpXP = Lerp(FrameTime() * 10, self.LerpXP or progress, progress)
+
+	local lab = "L" .. level
+	surface.SetFont(XP_FONT)
+	local lw = surface.GetTextSize(lab) or 0
+	local gap = RelapseUI.Grid15()
+	local barh = RelapseUI.sPx(10)
+	local barw = math.max(1, w - lw - gap)
+	local barY = RelapseUI.sPx(5)
+
+	DisableClipping(true)
+	surface.DisableClipping(true)
+	RelapseUI.PaintHudHairBar(0, barY, barw, barh, self.LerpXP, c.Ok, nil, nil, RelapseUI.Shadow)
+	RelapseUI.HudText(lab, XP_FONT, w, 0, c.Muted, TEXT_ALIGN_RIGHT)
+	surface.DisableClipping(false)
+	DisableClipping(false)
 	return true
 end
 

@@ -99,6 +99,14 @@ function RelapseUI.ViewerStatMax()
 	return 6
 end
 
+function RelapseUI.ViewerStatLeft()
+	return RelapseUI.sPx(90)
+end
+
+function RelapseUI.ViewerStatRight()
+	return RelapseUI.sPx(75)
+end
+
 function RelapseUI.CardIconPath(tab)
 	if not tab then return nil end
 
@@ -121,10 +129,14 @@ function RelapseUI.CardIconPath(tab)
 		return def.PreviewIcon
 	end
 
+	-- MW workshop killicons are CAC spawn renders. They punch holes / cyan boxes in the card.
 	if class then
 		local kitbl = killicon.Get(class)
 		if istable(kitbl) and #kitbl == 2 and isstring(kitbl[1]) then
-			return kitbl[1]
+			local path = string.lower(kitbl[1])
+			if not string.find(path, "vgui/entities", 1, true) and not string.find(path, "spawnicons", 1, true) then
+				return kitbl[1]
+			end
 		end
 	end
 
@@ -322,33 +334,9 @@ function RelapseUI.LayoutViewerStats(viewer)
 	local _, labH = surface.GetTextSize("Ay")
 	labH = math.max(1, labH)
 
-	local function maxTextW(labs)
-		local wmax = 0
-		surface.SetFont("Relapse15")
-		for _, lab in ipairs(labs or {}) do
-			if IsValid(lab) then
-				local t = lab:GetText() or ""
-				if t ~= "" then
-					wmax = math.max(wmax, select(1, surface.GetTextSize(t)))
-				end
-			end
-		end
-		return wmax
-	end
-
 	local blockW = viewer:GetWide()
-	local minBar = RelapseUI.sPx(40)
-	local leftNeed = maxTextW(viewer.ItemStats)
-	local rightNeed = maxTextW(viewer.ItemStatValues)
-	local barX = leftNeed + gap
-	local barR = blockW - rightNeed - gap
-	if barR - barX < minBar then
-		local overflow = minBar - (barR - barX)
-		local cutL = math.ceil(overflow * 0.5)
-		local cutR = overflow - cutL
-		barX = math.max(gap, barX - cutL)
-		barR = math.min(blockW - gap, barR + cutR)
-	end
+	local barX = RelapseUI.ViewerStatLeft()
+	local barR = blockW - RelapseUI.ViewerStatRight()
 	local barW = math.max(1, barR - barX)
 
 	for i, sb in ipairs(bars) do
@@ -459,16 +447,55 @@ function RelapseUI.ShopPreviewModel(sweptable)
 	return nil
 end
 
+function RelapseUI.ShopPreviewLocalAng(sweptable)
+	if not sweptable then return angle_zero end
+	if sweptable.RelapsePreviewLocalAng then
+		return sweptable.RelapsePreviewLocalAng
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	return (def and def.PreviewLocalAng) or angle_zero
+end
+
+function RelapseUI.ShopPreviewBoneMerge(sweptable)
+	if not sweptable then return false end
+	if sweptable.RelapsePreviewBoneMerge then return true end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	return def and def.PreviewBoneMerge or false
+end
+
 function RelapseUI.ClearShopPreviewParts(pnl)
 	if not pnl then return end
 	local parts = pnl.RelapsePreviewEnts
-	if not parts then return end
-	for _, part in ipairs(parts) do
-		if IsValid(part) then
-			part:Remove()
+	if parts then
+		for _, part in ipairs(parts) do
+			if IsValid(part) then
+				part:SetParent(NULL)
+				part:Remove()
+			end
 		end
 	end
 	pnl.RelapsePreviewEnts = nil
+	pnl.RelapsePreviewPaths = nil
+end
+
+local function prepPreviewEnt(cs)
+	if not IsValid(cs) then return end
+	cs:SetNoDraw(true)
+	if cs.SetIK then
+		cs:SetIK(false)
+	end
+	if cs.SetPlaybackRate then
+		cs:SetPlaybackRate(0)
+	end
+	if cs.SetCycle then
+		cs:SetCycle(0)
+	end
 end
 
 function RelapseUI.AttachShopPreviewParts(pnl, sweptable)
@@ -476,15 +503,23 @@ function RelapseUI.AttachShopPreviewParts(pnl, sweptable)
 	if not IsValid(pnl) then return end
 
 	local paths = RelapseUI.ShopPreviewParts(sweptable)
-	if not paths or #paths < 2 or not ClientsideModel then return end
+	pnl.RelapsePreviewPaths = paths
+	pnl.RelapsePreviewBoneMerge = RelapseUI.ShopPreviewBoneMerge(sweptable)
+	if not paths or not ClientsideModel then return end
 
+	local boneMerge = pnl.RelapsePreviewBoneMerge and IsValid(pnl.Entity)
 	local extras = {}
-	for i = 2, #paths do
+	local start = boneMerge and 2 or 1
+	for i = start, #paths do
 		local cs = ClientsideModel(paths[i], RENDER_GROUP_OPAQUE_ENTITY)
 		if IsValid(cs) then
-			cs:SetNoDraw(true)
-			if cs.SetIK then
-				cs:SetIK(false)
+			prepPreviewEnt(cs)
+			if boneMerge then
+				cs:SetParent(pnl.Entity)
+				cs:AddEffects(EF_BONEMERGE)
+				cs:AddEffects(EF_BONEMERGE_FASTCULL)
+				cs:SetLocalPos(vector_origin)
+				cs:SetLocalAngles(angle_zero)
 			end
 			extras[#extras + 1] = cs
 		end
@@ -492,20 +527,49 @@ function RelapseUI.AttachShopPreviewParts(pnl, sweptable)
 	pnl.RelapsePreviewEnts = extras
 end
 
-function RelapseUI.DrawShopPreviewParts(pnl, ent)
+function RelapseUI.DrawShopPreviewGun(pnl, ent)
 	if not IsValid(pnl) or not IsValid(ent) then return end
-	local parts = pnl.RelapsePreviewEnts
-	if not parts then return end
+
+	local extras = pnl.RelapsePreviewEnts
+
+	if pnl.RelapsePreviewBoneMerge then
+		RelapseUI.PrepShopPreview(ent)
+		if ent.InvalidateBoneCache then
+			ent:InvalidateBoneCache()
+		end
+		if ent.SetupBones then
+			ent:SetupBones()
+		end
+		ent:DrawModel()
+		if istable(extras) then
+			for i = 1, #extras do
+				local part = extras[i]
+				if IsValid(part) then
+					if part.SetupBones then
+						part:SetupBones()
+					end
+					part:DrawModel()
+				end
+			end
+		end
+		return
+	end
 
 	local pos = ent:GetPos()
 	local ang = ent:GetAngles()
-	for _, part in ipairs(parts) do
-		if IsValid(part) then
-			part:SetPos(pos)
-			part:SetAngles(ang)
-			part:DrawModel()
+	if istable(extras) then
+		for i = 1, #extras do
+			local part = extras[i]
+			if IsValid(part) then
+				part:SetPos(pos)
+				part:SetAngles(ang)
+				part:DrawModel()
+			end
 		end
 	end
+end
+
+function RelapseUI.DrawShopPreviewParts(pnl, ent)
 end
 
 function RelapseUI.PrepShopPreview(ent)
@@ -519,18 +583,6 @@ function RelapseUI.PrepShopPreview(ent)
 	end
 	if ent.SetCycle then
 		ent:SetCycle(0)
-	end
-
-	local n = ent:GetNumBodyGroups() or 0
-	for i = 0, n - 1 do
-		local name = string.lower(ent:GetBodygroupName(i) or "")
-		if string.find(name, "arm", 1, true) or string.find(name, "glove", 1, true)
-			or string.find(name, "hand", 1, true) or string.find(name, "sleeve", 1, true) then
-			local count = ent:GetBodygroupCount(i) or 0
-			if count > 1 then
-				ent:SetBodygroup(i, count - 1)
-			end
-		end
 	end
 end
 
@@ -546,7 +598,7 @@ local function growBounds(mins, maxs, pmin, pmax)
 	)
 end
 
-local function meshAABB(model)
+local function meshAABB(model, pos, ang)
 	if not isstring(model) or model == "" or not util.GetModelMeshes then
 		return nil
 	end
@@ -557,6 +609,7 @@ local function meshAABB(model)
 	local minx, miny, minz = math.huge, math.huge, math.huge
 	local maxx, maxy, maxz = -math.huge, -math.huge, -math.huge
 	local any = false
+	local xform = pos ~= nil
 
 	for _, mesh in ipairs(meshes) do
 		local verts = mesh.verticies or mesh.vertices
@@ -564,6 +617,9 @@ local function meshAABB(model)
 			for i = 1, #verts do
 				local p = verts[i].pos
 				if p then
+					if xform then
+						p = LocalToWorld(p, angle_zero, pos, ang)
+					end
 					any = true
 					local x, y, z = p.x, p.y, p.z
 					if x < minx then minx = x end
@@ -581,7 +637,7 @@ local function meshAABB(model)
 	return Vector(minx, miny, minz), Vector(maxx, maxy, maxz)
 end
 
-local function previewMeshBounds(ent, extras)
+local function previewMeshBounds(paths)
 	local mins, maxs
 
 	local function addModel(mdl)
@@ -594,15 +650,78 @@ local function previewMeshBounds(ent, extras)
 		end
 	end
 
-	addModel(ent:GetModel())
-	if extras then
-		for _, part in ipairs(extras) do
+	if istable(paths) then
+		for i = 1, #paths do
+			addModel(paths[i])
+		end
+	end
+
+	return mins, maxs
+end
+
+local function bonePosAng(ent, name)
+	if not IsValid(ent) then
+		return vector_origin, angle_zero
+	end
+	if isstring(name) and name ~= "" then
+		local id = ent:LookupBone(name)
+		if id then
+			local mat = ent:GetBoneMatrix(id)
+			if mat then
+				return mat:GetTranslation(), mat:GetAngles()
+			end
+			local pos, ang = ent:GetBonePosition(id)
+			if pos then
+				return pos, ang
+			end
+		end
+	end
+	return ent:GetPos(), ent:GetAngles()
+end
+
+local function assembledPreviewBounds(pnl, ent)
+	if not IsValid(ent) then return nil end
+
+	local oldPos, oldAng = ent:GetPos(), ent:GetAngles()
+	ent:SetPos(vector_origin)
+	ent:SetAngles(angle_zero)
+	RelapseUI.PrepShopPreview(ent)
+	if ent.InvalidateBoneCache then
+		ent:InvalidateBoneCache()
+	end
+	if ent.SetupBones then
+		ent:SetupBones()
+	end
+
+	local rootBone = "tag_pistol_offset"
+	if not ent:LookupBone(rootBone) then
+		rootBone = "j_gun"
+	end
+	local mins, maxs = meshAABB(ent:GetModel(), bonePosAng(ent, rootBone))
+
+	local extras = pnl.RelapsePreviewEnts
+	if istable(extras) then
+		for i = 1, #extras do
+			local part = extras[i]
 			if IsValid(part) then
-				addModel(part:GetModel())
+				if part.SetupBones then
+					part:SetupBones()
+				end
+				local attachBone = part:GetBoneName(0)
+				local a, b = meshAABB(part:GetModel(), bonePosAng(ent, attachBone))
+				if a then
+					if not mins then
+						mins, maxs = a, b
+					else
+						mins, maxs = growBounds(mins, maxs, a, b)
+					end
+				end
 			end
 		end
 	end
 
+	ent:SetPos(oldPos)
+	ent:SetAngles(oldAng)
 	return mins, maxs
 end
 
@@ -613,9 +732,15 @@ function RelapseUI.OrbitShopPreview(pnl, ent)
 	RelapseUI.PrepShopPreview(ent)
 
 	if not pnl.RelapsePreviewFramed then
-		local mins, maxs = previewMeshBounds(ent, pnl.RelapsePreviewEnts)
+		local mins, maxs
+		if pnl.RelapsePreviewBoneMerge then
+			mins, maxs = assembledPreviewBounds(pnl, ent)
+		end
 		if not mins then
-			mins, maxs = ent:GetModelBounds()
+			mins, maxs = previewMeshBounds(pnl.RelapsePreviewPaths)
+		end
+		if not mins then
+			mins, maxs = meshAABB(ent:GetModel())
 		end
 		if not mins then
 			mins, maxs = ent:GetRenderBounds()
@@ -636,11 +761,19 @@ function RelapseUI.OrbitShopPreview(pnl, ent)
 	end
 
 	local base = pnl.RelapsePreviewBaseAng or angle_zero
-	local ang = Angle(base.p, base.y + RealTime() * 28, base.r)
-	local off = Vector(pnl.RelapsePreviewCenter)
-	off:Rotate(ang)
+	local orbit = Angle(base.p, base.y + RealTime() * 28, base.r)
+	local localAng = pnl.RelapsePreviewLocalAng or angle_zero
+	local m = Matrix()
+	m:SetAngles(orbit)
+	local laid = Matrix()
+	laid:SetAngles(localAng)
+	m = m * laid
+	local ang = m:GetAngles()
+	local pivot = Matrix()
+	pivot:SetTranslation(pnl.RelapsePreviewCenter)
+	local worldOff = (m * pivot):GetTranslation()
 	ent:SetAngles(ang)
-	ent:SetPos(-off)
+	ent:SetPos(-worldOff)
 end
 
 function RelapseUI.FrameModelPanel(pnl)
@@ -689,6 +822,7 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 	end
 
 	pnl.RelapsePreviewBaseAng = sweptable.RelapsePreviewAngle or Angle(8, 90, 0)
+	pnl.RelapsePreviewLocalAng = RelapseUI.ShopPreviewLocalAng(sweptable)
 	pnl:SetModel(mdl)
 	pnl:SetAnimated(false)
 	RelapseUI.AttachShopPreviewParts(pnl, sweptable)
@@ -788,7 +922,7 @@ end
 
 function RelapseUI.CreateFonts()
 	local s = RelapseUI.S()
-	local rev = 9
+	local rev = 10
 	if RelapseUI._FontS == s and RelapseUI._FontRev == rev then return end
 	RelapseUI._FontS = s
 	RelapseUI._FontRev = rev
@@ -814,9 +948,48 @@ function RelapseUI.CreateFonts()
 	mk("Relapse28", 28, 400)
 	mk("Relapse30", 30, 400)
 	mk("Relapse32", 32, 400)
+	mk("Relapse35", 35, 400)
 	mk("Relapse40", 40, 400)
 	mk("Relapse45", 45, 400)
 	mk("Relapse64", 64, 500)
+end
+
+-- CreateFont size maps to the Windows cell (winAscent 2132 + winDescent 600).
+-- Lining digits do not fill it; HUD gaps must use ink, not GetTextSize.
+RelapseUI.MANROPE_CELL = 2732
+RelapseUI.MANROPE_ASCENT = 2132
+local MANROPE_DESCENT = 600
+-- Per digit 0-9: left bearing, right bearing, ink yMin. Regular 400 / Medium 500.
+local MANROPE_REG = {
+	{140, 140, -30}, {120, 240, 0}, {100, 100, 1}, {80, 120, -29}, {100, 100, 0},
+	{100, 100, -30}, {140, 126, -30}, {80, 100, 0}, {120, 120, -30}, {127, 140, -30}
+}
+local MANROPE_MED = {
+	{140, 140, -30}, {120, 240, 0}, {100, 100, 1}, {80, 120, -28}, {100, 100, 0},
+	{100, 100, -30}, {140, 120, -30}, {80, 100, 0}, {120, 120, -30}, {120, 140, -30}
+}
+
+function RelapseUI.ManropeBaseline(boxY, fontH)
+	return (boxY or 0) + (fontH or 0) * (RelapseUI.MANROPE_ASCENT / RelapseUI.MANROPE_CELL)
+end
+
+function RelapseUI.ManropeDigitEdges(text, fontH, medium)
+	local t = medium and MANROPE_MED or MANROPE_REG
+	local first, last = t[9], t[9]
+	local yMin = 0
+	local n = 0
+	for i = 1, #text do
+		local d = string.byte(text, i)
+		if d and d >= 48 and d <= 57 then
+			local m = t[d - 47]
+			n = n + 1
+			if n == 1 then first = m end
+			last = m
+			if m[3] < yMin then yMin = m[3] end
+		end
+	end
+	local k = (fontH or 0) / RelapseUI.MANROPE_CELL
+	return first[1] * k, last[2] * k, (MANROPE_DESCENT + yMin) * k
 end
 
 function RelapseUI.RadPx(key)

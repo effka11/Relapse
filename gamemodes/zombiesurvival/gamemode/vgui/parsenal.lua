@@ -671,8 +671,8 @@ function GM:CreateItemViewerGenericElems(viewer)
 	RelapseUI.LayoutViewerDesc(viewer)
 
 	local blockW = viewer:GetWide()
-	local left = RelapseUI.sPx(90)
-	local right = RelapseUI.sPx(75)
+	local left = RelapseUI.ViewerStatLeft()
+	local right = RelapseUI.ViewerStatRight()
 	local barW = math.max(1, blockW - left - right)
 	local barH = RelapseUI.Grid5(2)
 	local itemstats, itemsbs, itemsvs = {}, {}, {}

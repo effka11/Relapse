@@ -76,11 +76,38 @@ function PANEL:Think()
 end
 
 local TITLE_FONT = "Relapse25"
-local CLOCK_FONT = "Relapse30"
+local CLOCK_FONT = "Relapse40"
+local PAIR_FONT = "Relapse25"
+local NUM_FONT = "Relapse30"
 
--- Relapse25 keeps ~6px under the baseline; Relapse30 sits ~6px above lining figures.
-local function ClockY(titleY, titleH)
-	return titleY + titleH - RelapseUI.sPx(6) + RelapseUI.sPx(30) - RelapseUI.sPx(6)
+-- Optical next-line y: prev glyph bottom + gap → next glyph top.
+-- Relapse25/30 keep ~6px under the baseline; Relapse40 sits ~7px above lining figures;
+-- Relapse25 sits ~5px above caps, Relapse30 ~6px.
+local function NextGlyphY(prevY, prevH, prevBot, gap, nextTop)
+	return prevY + prevH - RelapseUI.sPx(prevBot) + RelapseUI.sPx(gap) - RelapseUI.sPx(nextTop)
+end
+
+local function FontH(font)
+	surface.SetFont(font)
+	local _, h = surface.GetTextSize("Ay")
+	return h
+end
+
+local function HudStack()
+	local titleH = FontH(TITLE_FONT)
+	local numH = FontH(NUM_FONT)
+	local titleY = 0
+	local _, clock = WaveClock()
+	local clockY, capY
+	if clock then
+		local clockH = FontH(CLOCK_FONT)
+		clockY = NextGlyphY(titleY, titleH, 6, 30, 7)
+		-- 45px is clock glyph bottom → number glyph top.
+		capY = NextGlyphY(clockY, clockH, 7, 45, 6)
+	else
+		capY = NextGlyphY(titleY, titleH, 6, 30, 6)
+	end
+	return titleY, clockY, capY, capY + numH
 end
 
 function PANEL:PerformLayout()
@@ -88,17 +115,7 @@ function PANEL:PerformLayout()
 	local inset = RelapseUI.HudInset()
 	local _, clock = WaveClock()
 	self._HasClock = clock ~= nil
-	local row = RelapseUI.Grid15(2)
-	surface.SetFont("Relapse17")
-	local _, pairH = surface.GetTextSize("Ay")
-	local h = RelapseUI.Grid15(6)
-	if self._HasClock then
-		surface.SetFont(TITLE_FONT)
-		local _, titleH = surface.GetTextSize("Ay")
-		surface.SetFont(CLOCK_FONT)
-		local _, clockH = surface.GetTextSize("Ay")
-		h = ClockY(0, titleH) + clockH + row + pairH + row + pairH
-	end
+	local _, _, _, h = HudStack()
 	self:SetSize(RelapseUI.HudW(), h)
 	-- Relapse25 cell sits ~5px above caps; 45px is to the capital, not the em-box.
 	self:SetPos(inset, RelapseUI.sPx(45) - RelapseUI.sPx(5))
@@ -108,50 +125,38 @@ function PANEL:PerformLayout()
 	end
 end
 
-local function DrawPair(x, y, lab, val, valCol)
-	local font = "Relapse17"
-	RelapseUI.HudText(lab, font, x, y, RelapseUI.Col.Muted)
-	surface.SetFont(font)
+local function DrawPair(x, yNum, lab, val, valCol)
+	lab = lab .. ":"
+	val = tostring(val)
+	surface.SetFont(PAIR_FONT)
 	local lw = surface.GetTextSize(lab) or 0
-	RelapseUI.HudText(tostring(val), font, x + lw + RelapseUI.Grid5(), y, valCol)
+	-- CreateFont size is the Windows cell. Caps and lining figures share the baseline.
+	local labY = RelapseUI.ManropeBaseline(yNum, RelapseUI.sPx(30)) - RelapseUI.ManropeBaseline(0, RelapseUI.sPx(25))
+	RelapseUI.HudText(lab, PAIR_FONT, x, labY, RelapseUI.Col.Text)
+	RelapseUI.HudText(val, NUM_FONT, x + lw + RelapseUI.Grid5(2), yNum + RelapseUI.sPx(1), valCol)
 end
 
 function PANEL:Paint()
 	RelapseUI.CreateFonts()
 	local c = RelapseUI.Col
 	local x = 0
-	local y = 0
-	local row = RelapseUI.Grid15(2)
-	local col = RelapseUI.Grid15(12)
+	local titleY, clockY, capY = HudStack()
 
-	RelapseUI.HudText(WaveTitle(), TITLE_FONT, x, y, c.Text, nil, nil, RelapseUI.Shadow - 1)
+	RelapseUI.HudText(WaveTitle(), TITLE_FONT, x, titleY, c.Text)
 
 	local _, clock, remain = WaveClock()
 	if clock then
-		surface.SetFont(TITLE_FONT)
-		local _, titleH = surface.GetTextSize("Ay")
-		-- 30px is first-line glyph bottom → clock glyph top, not em-box.
-		local clockY = ClockY(y, titleH)
 		RelapseUI.HudText(clock, CLOCK_FONT, x, clockY, RelapseUI.UrgentCol(remain, c.Text))
-		surface.SetFont(CLOCK_FONT)
-		local _, clockH = surface.GetTextSize("Ay")
-		y = clockY + clockH + row
-	else
-		y = y + row
 	end
-
-	DrawPair(x, y, translate.Get("hud_humans"), team.NumPlayers(TEAM_HUMAN), c.Text)
-	DrawPair(x + col, y, translate.Get("hud_undead"), team.NumPlayers(TEAM_UNDEAD), c.Danger)
-	y = y + row
 
 	if MySelf:IsValid() then
 		if MySelf:Team() == TEAM_UNDEAD then
 			local toredeem = GAMEMODE:GetRedeemBrains()
 			local brains = toredeem > 0 and (MySelf:Frags() .. " / " .. toredeem) or MySelf:Frags()
-			RelapseUI.HudText(translate.Format("brains_eaten_x", brains), "Relapse17", x, y, c.Danger)
+			local labY = capY + FontH(NUM_FONT) - FontH(PAIR_FONT)
+			RelapseUI.HudText(translate.Format("brains_eaten_x", brains), PAIR_FONT, x, labY, c.Danger)
 		else
-			RelapseUI.HudText(translate.Format("points_x", MySelf:GetPoints()), "Relapse17", x, y, c.Accent)
-			DrawPair(x + col, y, translate.Get("hud_score"), MySelf:Frags(), c.Text)
+			DrawPair(x, capY, translate.Get("hud_points"), MySelf:GetPoints(), c.Ok)
 		end
 	end
 

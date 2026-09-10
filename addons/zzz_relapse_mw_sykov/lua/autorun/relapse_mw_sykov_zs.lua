@@ -1,26 +1,29 @@
--- Overlay Relapse identity onto mg_makarov after weapons register.
+-- Overlay Relapse identity onto MW pistols after weapons register.
 -- Workshop pistols can win the SWEP file; the shop still needs Relapse on GetStored.
 
-local function ApplyMakarovRelapse()
-	local wep = weapons.GetStored("mg_makarov")
+local function ApplyOne(class, def)
+	local wep = weapons.GetStored(class)
 	if not wep then return end
 
-	local gm = GAMEMODE or GM
-	local def = gm and gm.RelapseWeapons and gm.RelapseWeapons.mg_makarov
 	local R = (def and def.Relapse) or wep.Relapse
 	if not R then return end
 
 	wep.Relapse = R
-	wep.PrintName = "Пистолет Макарова"
-	wep.TranslationName = def and def.TranslationName or "wep_makarov"
-	wep.TranslationDescription = def and def.TranslationDescription or "wep_makarov_desc"
-	wep.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov.png"
-	wep.RelapsePreviewParts = (def and def.PreviewParts) or {
-		"models/viper/mw/attachments/attachment_vm_pi_mike_barrel.mdl",
-		"models/viper/mw/attachments/attachment_vm_pi_mike_grip.mdl",
-	}
-	wep.RelapsePreviewAngle = wep.RelapsePreviewAngle or (def and def.PreviewAngle) or Angle(8, 90, 0)
-	wep.Description = "A compact service sidearm. Issued to everyone and valued by no one\194\160\194\160–\194\160\194\160until there was nothing else left."
+	wep.PrintName = def.PrintName or wep.PrintName
+	wep.TranslationName = def.TranslationName or wep.TranslationName
+	wep.TranslationDescription = def.TranslationDescription or wep.TranslationDescription
+	wep.RelapsePreviewIcon = def.PreviewIcon or wep.RelapsePreviewIcon
+	wep.RelapsePreviewParts = def.PreviewParts or wep.RelapsePreviewParts
+	wep.RelapsePreviewBoneMerge = def.PreviewBoneMerge or wep.RelapsePreviewBoneMerge
+	wep.RelapsePreviewAngle = wep.RelapsePreviewAngle or def.PreviewAngle or Angle(8, 90, 0)
+	wep.RelapsePreviewLocalAng = def.PreviewLocalAng or wep.RelapsePreviewLocalAng
+	if CLIENT and isstring(wep.RelapsePreviewIcon) then
+		killicon.Add(class, wep.RelapsePreviewIcon, Color(255, 255, 255, 255))
+		wep.WepSelectIcon = surface.GetTextureID(wep.RelapsePreviewIcon)
+	end
+	if def.Description then
+		wep.Description = def.Description
+	end
 	wep.WalkSpeed = SPEED_NORMAL or 95
 	wep.NoDeploySpeedChange = true
 
@@ -28,17 +31,36 @@ local function ApplyMakarovRelapse()
 	wep.Primary.Damage = R.Damage
 	wep.Primary.Delay = R.Delay
 	wep.Primary.ClipSize = R.Clip
-	wep.Primary.Ammo = "pistol"
+	wep.Primary.Ammo = def.Ammo or "pistol"
 	wep.ReloadTime = R.Reload
 	wep.ConeMin = R.Accuracy * 0.5
 	wep.ConeMax = R.Accuracy * 1.5
 	wep.ConeRamp = wep.ConeRamp or 2
 	wep.DrawCrosshair = false
 
+	local gm = GAMEMODE or GM
 	if gm and gm.SetupDefaultClip and not wep.Primary.DefaultClip then
 		gm:SetupDefaultClip(wep.Primary)
 	end
 end
 
-hook.Add("Initialize", "RelapseMWSykovZS", ApplyMakarovRelapse)
-hook.Add("InitPostEntity", "RelapseMWSykovZS", ApplyMakarovRelapse)
+local function ApplyRelapseMWGuns()
+	local gm = GAMEMODE or GM
+	local defs = gm and gm.RelapseWeapons
+	if not defs then return end
+
+	for class, def in pairs(defs) do
+		if istable(def) and def.Relapse then
+			ApplyOne(class, def)
+		end
+	end
+end
+
+hook.Add("Initialize", "RelapseMWSykovZS", ApplyRelapseMWGuns)
+hook.Add("InitPostEntity", "RelapseMWSykovZS", ApplyRelapseMWGuns)
+-- Workshop SWEP files can killicon.Add after ours. Re-apply once entities exist.
+if CLIENT then
+	hook.Add("InitPostEntity", "RelapseMWSykovKillicons", function()
+		timer.Simple(0, ApplyRelapseMWGuns)
+	end)
+end

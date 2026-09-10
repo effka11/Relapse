@@ -236,8 +236,12 @@ GM.RelapseShopScoreSpec = {
 }
 
 -- Relapse tables live here so the shop still scores a gun if workshop SWEP won.
+-- Shop icons: 256x256 RGBA PNG, white RGB, alpha silhouette, path WITH .png, no VMT.
+-- A .vmt/.vtf next to the PNG makes the card a cyan rectangle. Do not use CAC spawnicons.
 GM.RelapseWeapons = {
 	mg_makarov = {
+		PrintName = "Пистолет Макарова",
+		Description = "A compact service sidearm. Issued to everyone and valued by no one\194\160\194\160–\194\160\194\160until there was nothing else left.",
 		TranslationName = "wep_makarov",
 		TranslationDescription = "wep_makarov_desc",
 		PreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov.png",
@@ -256,6 +260,32 @@ GM.RelapseWeapons = {
 			Accuracy = 1.50,
 			Weight = 0.73,
 			Clip = 8,
+		}
+	},
+	mg_m1911 = {
+		PrintName = "Пистолет 1911",
+		Description = "A service .45. Retired before its owners\194\160\194\160–\194\160\194\160the heavy bullet never left.",
+		TranslationName = "wep_1911",
+		TranslationDescription = "wep_1911_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_colt1911.png",
+		PreviewBoneMerge = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_m1911.mdl",
+			"models/viper/mw/attachments/attachment_vm_pi_mike1911_v1_slide.mdl",
+			"models/viper/mw/attachments/attachment_vm_pi_mike1911_v1_mag.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		Ammo = "pistol",
+		Relapse = {
+			Damage = 28,
+			Delay = 0.21,
+			Reload = 1.35,
+			Kinetic = 0.45,
+			Recoil = 0.80,
+			Accuracy = 1.25,
+			Weight = 1.10,
+			Clip = 7,
 		}
 	}
 }
@@ -290,7 +320,9 @@ function GM:BindRelapseWeapon(src)
 		src.TranslationDescription = src.TranslationDescription or def.TranslationDescription
 		src.RelapsePreviewIcon = src.RelapsePreviewIcon or def.PreviewIcon
 		src.RelapsePreviewParts = def.PreviewParts or src.RelapsePreviewParts
+		src.RelapsePreviewBoneMerge = def.PreviewBoneMerge or src.RelapsePreviewBoneMerge
 		src.RelapsePreviewAngle = def.PreviewAngle or src.RelapsePreviewAngle
+		src.RelapsePreviewLocalAng = def.PreviewLocalAng or src.RelapsePreviewLocalAng
 		src.Primary = src.Primary or {}
 		if def.Ammo then
 			src.Primary.Ammo = def.Ammo

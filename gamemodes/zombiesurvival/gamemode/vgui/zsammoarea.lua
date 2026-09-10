@@ -68,8 +68,6 @@ function PANEL:Paint(w, h)
 	if not clip or maxclip < 1 then return true end
 
 	RelapseUI.CreateFonts()
-	-- Relapse32 cell sits ~6px above lining figures; y is the glyph bottom, not the em-box.
-	local y = h + RelapseUI.sPx(6)
 	local rx = w
 
 	self.LerpClip = Lerp(FrameTime() * 12, self.LerpClip or clip, clip)
@@ -90,19 +88,24 @@ function PANEL:Paint(w, h)
 	DisableClipping(true)
 	surface.DisableClipping(true)
 
+	surface.SetFont("Relapse64")
+	local _, clipH = surface.GetTextSize(clipstr)
+	local _, clipRsb, clipBelow = RelapseUI.ManropeDigitEdges(clipstr, clipH, true)
+
 	if infinite then
-		RelapseUI.HudText(clipstr, "Relapse64", rx, y, clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+		RelapseUI.HudText(clipstr, "Relapse64", rx, h + clipBelow, clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
 		surface.DisableClipping(false)
 		DisableClipping(false)
 		return true
 	end
 
-	-- Spare: Relapse32. Clip bottom sits 15px above spare bottom; 45px from spare's left to clip's right.
+	-- Gaps are ink-to-ink: 45px spare-left to clip-right, 15px clip-bottom above spare-bottom.
 	surface.SetFont("Relapse32")
-	local spareW = surface.GetTextSize(sparestr)
-	local clipRight = rx - spareW - RelapseUI.sPx(45)
-	RelapseUI.HudText(clipstr, "Relapse64", clipRight, y - RelapseUI.sPx(15), clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
-	RelapseUI.HudText(sparestr, "Relapse32", rx, y, RelapseUI.Col.Muted, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+	local spareW, spareH = surface.GetTextSize(sparestr)
+	local spareLsb, _, spareBelow = RelapseUI.ManropeDigitEdges(sparestr, spareH, false)
+	local clipRight = rx - spareW - RelapseUI.sPx(45) + spareLsb + clipRsb
+	RelapseUI.HudText(clipstr, "Relapse64", clipRight, h - RelapseUI.sPx(15) + clipBelow, clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+	RelapseUI.HudText(sparestr, "Relapse32", rx, h + spareBelow, RelapseUI.Col.Muted, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
 
 	surface.DisableClipping(false)
 	DisableClipping(false)

@@ -65,7 +65,7 @@ GM.WeaponStatBarVals = {
 GM.RelapseWeaponStatBarVals = {
 	{"Damage", "Damage"},
 	{"FireRate", "Fire Rate"},
-	{"Stability", "Stability"},
+	{"Stability", "Grouping"},
 	{"Reload", "Reload"},
 	{"Clip", "Magazine"},
 	{"Weight", "Weight"},
