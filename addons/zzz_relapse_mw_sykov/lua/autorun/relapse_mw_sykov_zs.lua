@@ -1,5 +1,5 @@
--- Overlay Relapse identity onto MW pistols after weapons register.
--- Workshop pistols can win the SWEP file; the shop still needs Relapse on GetStored.
+-- Overlay Relapse identity onto MW guns after weapons register.
+-- Workshop SWEPs can win the file; the shop still needs Relapse on GetStored.
 
 local function ApplyOne(class, def)
 	local wep = weapons.GetStored(class)
@@ -17,6 +17,7 @@ local function ApplyOne(class, def)
 	wep.RelapsePreviewBoneMerge = def.PreviewBoneMerge or wep.RelapsePreviewBoneMerge
 	wep.RelapsePreviewAngle = wep.RelapsePreviewAngle or def.PreviewAngle or Angle(8, 90, 0)
 	wep.RelapsePreviewLocalAng = def.PreviewLocalAng or wep.RelapsePreviewLocalAng
+	wep.RelapsePreviewOffset = def.PreviewOffset or wep.RelapsePreviewOffset
 	if CLIENT and isstring(wep.RelapsePreviewIcon) then
 		killicon.Add(class, wep.RelapsePreviewIcon, Color(255, 255, 255, 255))
 		wep.WepSelectIcon = surface.GetTextureID(wep.RelapsePreviewIcon)
@@ -32,6 +33,16 @@ local function ApplyOne(class, def)
 	wep.Primary.Delay = R.Delay
 	wep.Primary.ClipSize = R.Clip
 	wep.Primary.Ammo = def.Ammo or "pistol"
+	if wep.Bullet then
+		local far = math.max(1, R.Damage * (1 - math.Clamp(R.Kinetic or 0, 0, 1)))
+		wep.Bullet.Damage = {R.Damage, far}
+		if R.Pellets then
+			wep.Bullet.NumBullets = R.Pellets
+		end
+	end
+	if R.Pellets then
+		wep.Primary.NumShots = R.Pellets
+	end
 	wep.ReloadTime = R.Reload
 	wep.ConeMin = R.Accuracy * 0.5
 	wep.ConeMax = R.Accuracy * 1.5

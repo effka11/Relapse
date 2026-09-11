@@ -174,7 +174,15 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 				viewer.ItemStatBars[i]:SetVisible(false)
 			else
 				viewer.ItemStats[i]:SetText(RelapseUI.ShopStat(spec[1], spec[2]))
-				viewer.ItemStatValues[i]:SetText(FormatRelapseStat(spec[1], val))
+				local text = FormatRelapseStat(spec[1], val)
+				if spec[1] == "Damage" then
+					local r = GAMEMODE:GetWeaponRelapse(sweptable)
+					local pellets = r and tonumber(r.Pellets)
+					if pellets and pellets > 1 then
+						text = text .. " × " .. math.floor(pellets + 0.5)
+					end
+				end
+				viewer.ItemStatValues[i]:SetText(text)
 				viewer.ItemStatBars[i].Stat = fill
 				viewer.ItemStatBars[i].StatMin = 0
 				viewer.ItemStatBars[i].StatMax = 100

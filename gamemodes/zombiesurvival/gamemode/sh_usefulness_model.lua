@@ -33,8 +33,8 @@ U.Models.ranged = {
 		default = 1.00,
 	},
 	Stats = {
-		{id = "Damage", w = 0.30, better = "more", ref = 24, pad = 0, min = 1},
-		{id = "FireRate", w = 0.20, better = "more", ref = 5, pad = 0, min = 0.5},
+		{id = "Damage", w = 0.35, better = "more", ref = 24, pad = 0, min = 1},
+		{id = "FireRate", w = 0.15, better = "more", ref = 5, pad = 0, min = 0.5},
 		{id = "Reload", w = 0.10, better = "more", ref = 1, pad = 0, min = 0.2},
 		{id = "Mag", w = 0.10, better = "more", ref = 12, pad = 0, min = 1},
 		{id = "Accuracy", w = 0.10, better = "less", ref = 1.625, pad = 0.25, min = 0.25},
@@ -57,12 +57,12 @@ U.Models.melee = {
 		default = 1.00,
 	},
 	Stats = {
-		{id = "Damage", w = 0.30, better = "more", ref = 35, pad = 0, min = 1},
+		{id = "Damage", w = 0.35, better = "more", ref = 35, pad = 0, min = 1},
 		{id = "StaminaHit", w = 0.10, better = "less", ref = 20, pad = 4, live = false},
 		{id = "StaminaMiss", w = 0.05, better = "less", ref = 12, pad = 3, live = false},
 		{id = "SwingDelay", w = 0.15, better = "less", ref = 0.4, pad = 0.2, min = 0.15, max = 2},
 		{id = "Stopping", w = 0.10, better = "more", ref = 110, pad = 40, min = 0},
-		{id = "AttackSpeed", w = 0.15, better = "more", ref = 1 / 0.7, pad = 0, min = 0.25},
+		{id = "AttackSpeed", w = 0.10, better = "more", ref = 1 / 0.7, pad = 0, min = 0.25},
 		{id = "BlockStability", w = 0.10, better = "more", ref = 50, pad = 10, live = false},
 		{id = "ParryWindow", w = 0.05, better = "more", ref = 0.15, pad = 0.05, live = false},
 	},
@@ -115,11 +115,11 @@ function GM:ExtractRangedUsefulnessValues(swep)
 	if not swep then return nil end
 
 	local prim = swep.Primary or {}
-	local shots = math.max(prim.NumShots or 1, 1)
+	local r = swep.Relapse
+	local shots = math.max((r and r.Pellets) or prim.NumShots or 1, 1)
 	local class = rangedWeaponClass(swep, prim, shots)
 
 	-- Relapse table is seconds / kg / falloff. Convert into the stick units the model already uses.
-	local r = swep.Relapse
 	if r then
 		return {
 			Type = class,
@@ -312,6 +312,32 @@ GM.RelapseWeapons = {
 			Weight = 1.30,
 			Clip = 6,
 		}
+	},
+	mg_romeo870 = {
+		PrintName = "Дробовик 680",
+		Description = "A pump 12-gauge. Nine pellets, then the forend\194\160\194\160–\194\160\194\160it only speaks up close.",
+		TranslationName = "wep_680",
+		TranslationDescription = "wep_680_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_model680.png",
+		PreviewParts = {
+			"models/viper/mw/attachments/romeo870/attachment_vm_sh_romeo870_receiver.mdl",
+			"models/viper/mw/attachments/romeo870/attachment_vm_sh_romeo870_barrel.mdl",
+			"models/viper/mw/attachments/romeo870/attachment_vm_sh_romeo870_pump.mdl",
+		},
+		PreviewAngle = Angle(8, 90, 0),
+		PreviewOffset = Vector(0, 0, -1.2),
+		Ammo = "buckshot",
+		Relapse = {
+			Damage = 16,
+			Pellets = 9,
+			Delay = 0.70,
+			Reload = 5.00,
+			Kinetic = 0.62,
+			Recoil = 1.55,
+			Accuracy = 4.80,
+			Weight = 3.40,
+			Clip = 6,
+		}
 	}
 }
 
@@ -348,6 +374,7 @@ function GM:BindRelapseWeapon(src)
 		src.RelapsePreviewBoneMerge = def.PreviewBoneMerge or src.RelapsePreviewBoneMerge
 		src.RelapsePreviewAngle = def.PreviewAngle or src.RelapsePreviewAngle
 		src.RelapsePreviewLocalAng = def.PreviewLocalAng or src.RelapsePreviewLocalAng
+		src.RelapsePreviewOffset = def.PreviewOffset or src.RelapsePreviewOffset
 		src.Primary = src.Primary or {}
 		if def.Ammo then
 			src.Primary.Ammo = def.Ammo
@@ -421,12 +448,20 @@ function GM:RelapseStatValue(sweptable, id)
 end
 
 -- Units the hill curve expects. FireRate is RPM even though the shop prints Delay.
+-- Damage fill uses pellet total so a 12-gauge is not scored as a single 16.
 function GM:RelapseShopBarInput(sweptable, id)
 	if id == "FireRate" then
 		local r = self:GetWeaponRelapse(sweptable)
 		local delay = r and tonumber(r.Delay) or 0
 		if delay <= 0 then return nil end
 		return 60 / delay
+	end
+	if id == "Damage" then
+		local r = self:GetWeaponRelapse(sweptable)
+		if not r then return nil end
+		local dmg = tonumber(r.Damage)
+		if dmg == nil then return nil end
+		return dmg * math.max(1, tonumber(r.Pellets) or 1)
 	end
 
 	return self:RelapseStatValue(sweptable, id)

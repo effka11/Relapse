@@ -8,34 +8,43 @@ alwaysApply: false
 
 Эталон — Макаров. Один пистолет, профиль сбоку, орбита вокруг **видимого** центра, `DrawModel` (не Mesh вьюмодели). Код: `RelapseUI.SetShopPreview` → `DrawShopPreviewGun`. Иконки — отдельное правило.
 
-Сначала выясни, **какие mdl — сам ствол**, и в **каком пространстве** их origin. Не копируй углы и список частей с соседнего ствола: у 1911 и .357 один пайплайн, разные кости и разный набор мешей на WM.
+Сначала выясни, **какие mdl — сам ствол**, и в **каком пространстве** их origin. Не копируй углы и список частей с соседнего ствола: у 1911, .357 и 680 один пайплайн, разные кости и разный набор мешей на WM.
+
+Пустой 3D-бокс — это не «камера далеко». `DrawShopPreviewGun` рисует только то, у чего `DrawModel` на **дефолтном** bodygroup что-то показывает. Нет меша → пустая карточка.
 
 ## Перед сборкой
 
 Открой `customization.lua` (слоты по умолчанию — первые в каждом ряду) и mdl:
 
-1. Что уже на `w_*.mdl` (bodygroups / материалы: frame, grip, loader, rail). Это не аттач.
-2. Какие дефолтные аттачи реально рисуют пушку (barrel, slide, mag, grip).
-3. У аттача `ShowOnWorldModel = false`? Кость `GetBoneName(0)` есть на WM? Нет → в превью не класть.
+1. Что **реально рисует** `w_*.mdl` при identity + bodygroup 0 (`DrawModel`, не сумма VVD). Это не аттач.
+2. Какие дефолтные аттачи реально рисуют пушку (barrel, slide, mag, grip, receiver, pump). Первый ключ в ряду — дефолт. `att_stock` / `att_magazine` без своей mdl — кусок уже на receiver/WM, не выдумывай.
+3. У аттача `ShowOnWorldModel = false`? Кость `GetBoneName(0)` есть **на WM**? Нет → в bone merge не класть (680: receiver `j_gun`, на `w_romeo870` её нет).
 4. Вершины: VVD AABB. Один origin (Макаров: всё вдоль −X) или разные кости (WM + аттачи).
+
+VVD vert count **не** значит «WM уже пушка». У 680 `w_romeo870` ~30k вершин (все bodygroup в файле) — риг без ствола. Считать пушку на WM можно только если дефолтный `DrawModel` её показывает (.357: цилиндр). Иначе пушка в аттачах, как Макаров.
 
 ## Что рисовать
 
-MW `v_` / `w_` часто пустые: руки + stub. Пушка сидит в аттачах **или** на WM-рамке.
+MW `v_` / `w_` часто пустые: руки + stub. Пушка сидит в аттачах **или** на WM-рамке. Не клади в `PreviewParts` один `w_*.mdl`, пока не проверил пункт 1.
 
 | Сборка | Когда | Как |
 |---|---|---|
-| Один origin | Аттачи делят пространство (Макаров: barrel + grip вдоль −X) | `RelapsePreviewParts` строками, **без** bone merge. Dummy = `[1]`. |
-| Bone merge | Рамка на WM, куски на других костях (1911: slide/mag; .357: barrel) | `[1]` = `w_*.mdl` (не `v_`), `RelapsePreviewBoneMerge = true`, остальные EF_BONEMERGE на dummy. Как MW: нет `VElement` → bone merge. |
+| Один origin | Аттачи делят пространство (Макаров: barrel + grip вдоль −X; 680: receiver + barrel + pump у `j_gun`, сдвиг ~1 hu) | `RelapsePreviewParts` строками, **без** bone merge. Dummy = `[1]`. |
+| Bone merge | Рамка на WM, куски на других костях (1911: slide/mag; .357: barrel) | `[1]` = `w_*.mdl` (не `v_`), `RelapsePreviewBoneMerge = true`, остальные EF_BONEMERGE на dummy. Как MW: нет `VElement` → bone merge. У **каждого** экстра `GetBoneName(0)` есть на WM. |
 | Кусок уже на WM | .357: цилиндр/grip на `w_357`; mag `ShowOnWorldModel=false` | Не дублировать. Лишний mdl без кости WM зависает в origin и уводит пивот. |
-| Нет отдельного grip-аттача | Рамка = bodygroup receiver на `w_` | Не выдумывай grip.mdl. |
+| WM — пустой риг | 680: `w_romeo870` не рисует ствол, `j_gun` нет | Не dummy-only WM. Не bone-merge receiver на эту WM. Дефолтные аттачи, один origin. |
+| Нет отдельного grip-аттача | Рамка = bodygroup receiver на `w_` **или** на att receiver (680: приклад на receiver) | Не выдумывай grip.mdl / stock.mdl. |
 
 ```lua
 -- ❌ вьюмодель в панели (idle/руки = второй ствол)
 RelapsePreviewParts = { "models/viper/mw/weapons/v_m1911.mdl", slide, mag }
 
+-- ❌ WM как единственная часть, потому что «в VVD много вершин» (680: пустой бокс)
+RelapsePreviewParts = { "models/viper/mw/weapons/w_romeo870.mdl" }
+
 -- ❌ все mdl в одном origin, если кости разные (слипшиеся/два ствола)
 -- ❌ bone-merge VM-магазина без костей на WM (летающий спидлоадер)
+-- ❌ bone-merge receiver `j_gun` на WM без `j_gun` (рамка в origin)
 -- ✅ Макаров — один origin
 RelapsePreviewParts = { barrel, grip }
 RelapsePreviewAngle = Angle(8, 90, 0)
@@ -51,9 +60,13 @@ RelapsePreviewBoneMerge = true
 RelapsePreviewParts = { w_357, barrel }
 RelapsePreviewAngle = Angle(0, 0, 0)
 RelapsePreviewLocalAng = Angle(0, 0, 90)
+
+-- ✅ 680 — WM пустая, кости аттачей у j_gun; receiver + barrel + pump
+RelapsePreviewParts = { receiver, barrel, pump }
+RelapsePreviewAngle = Angle(8, 90, 0)
 ```
 
-Dummy = `parts[1]`. Для shop `DModelPanelEx` **не** вызывает engine `DrawModel` (idle). Не играть `idle`/`inspect` на MW VM.
+Dummy = `parts[1]`. Без bone merge панель **не** рисует dummy, только extras (с индекса 1). Один `w_*` без меша на DrawModel → пустой бокс. Для shop `DModelPanelEx` **не** вызывает engine `DrawModel` (idle). Не играть `idle`/`inspect` на MW VM.
 
 ## Углы
 
@@ -81,8 +94,10 @@ Bone merge, `assembledPreviewBounds`: identity + `SetupBones`.
 
 Камера смотрит в origin; dummy `SetPos` так, чтобы посчитанный центр там оставался. Лишний mdl в origin раздувает span → камера уезжает, пушка мелкая и в углу.
 
+`RelapsePreviewOffset` — сдвиг **пивота** в пространстве модели, не `SetPos` в мире (мир сломает орбиту). Добавляется к AABB-центру до `orbit * local`. Чтобы ствол сел выше, пивот вниз: у 680 приклад тянет AABB вниз, `Vector(0, 0, -1.2)`.
+
 ## Куда писать
 
-Одинаковые `PreviewParts` / `PreviewBoneMerge` / `PreviewAngle` / `PreviewLocalAng` в SWEP, `GM.RelapseWeapons`, `BindRelapseWeapon`, `ApplyOne` (`relapse_mw_sykov_zs.lua`).
+Одинаковые `PreviewParts` / `PreviewBoneMerge` / `PreviewAngle` / `PreviewLocalAng` / `PreviewOffset` в SWEP, `GM.RelapseWeapons`, `BindRelapseWeapon`, `ApplyOne` (`relapse_mw_sykov_zs.lua`).
 
-Проверка: `changelevel` (не `restart`). Рядом с Макаровым и 1911: один ствол, бок, крутится вокруг середины (не вокруг рукояти и не вокруг пустой точки), тот же свет, визуальный размер тот же.
+Проверка: `changelevel` (не `restart`). Рядом с Макаровым, 1911 и 680: один ствол, бок, крутится вокруг середины (не вокруг рукояти и не вокруг пустой точки), тот же свет, визуальный размер тот же. Пустой бокс = части не рисуются, не крути FOV.

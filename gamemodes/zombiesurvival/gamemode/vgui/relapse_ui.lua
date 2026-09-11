@@ -459,6 +459,19 @@ function RelapseUI.ShopPreviewLocalAng(sweptable)
 	return (def and def.PreviewLocalAng) or angle_zero
 end
 
+function RelapseUI.ShopPreviewOffset(sweptable)
+	if not sweptable then return nil end
+	if isvector(sweptable.RelapsePreviewOffset) then
+		return sweptable.RelapsePreviewOffset
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	local off = def and def.PreviewOffset
+	return isvector(off) and off or nil
+end
+
 function RelapseUI.ShopPreviewBoneMerge(sweptable)
 	if not sweptable then return false end
 	if sweptable.RelapsePreviewBoneMerge then return true end
@@ -753,6 +766,10 @@ function RelapseUI.OrbitShopPreview(pnl, ent)
 		end
 
 		local dist = math.Clamp(span * 1.32, 20, 48)
+		local off = pnl.RelapsePreviewOffset
+		if isvector(off) then
+			center = center + off
+		end
 		pnl.RelapsePreviewCenter = Vector(center)
 		pnl:SetLookAt(vector_origin)
 		pnl:SetCamPos(Vector(dist * 0.82, dist * 0.52, dist * 0.34))
@@ -822,6 +839,7 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 
 	pnl.RelapsePreviewBaseAng = sweptable.RelapsePreviewAngle or Angle(8, 90, 0)
 	pnl.RelapsePreviewLocalAng = RelapseUI.ShopPreviewLocalAng(sweptable)
+	pnl.RelapsePreviewOffset = RelapseUI.ShopPreviewOffset(sweptable)
 	pnl:SetModel(mdl)
 	pnl:SetAnimated(false)
 	RelapseUI.AttachShopPreviewParts(pnl, sweptable)

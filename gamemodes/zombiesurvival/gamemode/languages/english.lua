@@ -632,4 +632,6 @@ LANGUAGE.wep_1911									= "1911 Pistol"
 LANGUAGE.wep_1911_desc								= "A service .45. Retired before its owners\194\160\194\160–\194\160\194\160the heavy bullet never left."
 LANGUAGE.wep_357									= ".357 Revolver"
 LANGUAGE.wep_357_desc								= "A magnum revolver. Six in the cylinder\194\160\194\160–\194\160\194\160it never learned to hurry."
+LANGUAGE.wep_680									= "680 Shotgun"
+LANGUAGE.wep_680_desc								= "A pump 12-gauge. Nine pellets, then the forend\194\160\194\160–\194\160\194\160it only speaks up close."
 
