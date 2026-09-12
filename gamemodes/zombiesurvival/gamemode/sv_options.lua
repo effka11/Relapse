@@ -95,15 +95,17 @@ cvars.AddChangeCallback("zs_nopropdamagefromhumanmelee", function(cvar, oldvalue
 	GAMEMODE.NoPropDamageFromHumanMelee = tonumber(newvalue) == 1
 end)
 
-GM.MedkitPointsPerHealth = 8--[[CreateConVar("zs_medkitpointsperhealth", "8", FCVAR_ARCHIVE + FCVAR_NOTIFY, "Specifies the amount of healing for players to be given a point. For use with the medkit and such."):GetInt()
+GM.MedkitPointsPerHealth = 1
+--[[CreateConVar("zs_medkitpointsperhealth", "1", FCVAR_ARCHIVE + FCVAR_NOTIFY, "Specifies the amount of healing for players to be given a point. For use with the medkit and such."):GetInt()
 cvars.AddChangeCallback("zs_medkitpointsperhealth", function(cvar, oldvalue, newvalue)
 	GAMEMODE.MedkitPointsPerHealth = tonumber(newvalue) or 1
 end)]]
 
-GM.RepairPointsPerHealth = CreateConVar("zs_repairpointsperhealth", "35", FCVAR_ARCHIVE + FCVAR_NOTIFY, "Specifies the amount of repairing for players to be given a point. For use with nails and such."):GetInt()
+GM.RepairPointsPerHealth = 10
+--[[CreateConVar("zs_repairpointsperhealth", "10", FCVAR_ARCHIVE + FCVAR_NOTIFY, "Specifies the amount of repairing for players to be given a point. For use with nails and such."):GetInt()
 cvars.AddChangeCallback("zs_repairpointsperhealth", function(cvar, oldvalue, newvalue)
 	GAMEMODE.RepairPointsPerHealth = tonumber(newvalue) or 1
-end)
+end)]]
 
 GM.OnlyUndeadCanGibDoors = CreateConVar("zs_onlyzombiescangibdoors", "1", FCVAR_ARCHIVE + FCVAR_NOTIFY, "Specifies only the undead can gib doors marked as breakable (L4D-style doors)."):GetBool()
 cvars.AddChangeCallback("zs_onlyzombiescangibdoors", function(cvar, oldvalue, newvalue)

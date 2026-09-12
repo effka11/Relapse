@@ -17,7 +17,9 @@ SWEP.RelapsePreviewParts = {
 	"models/viper/mw/attachments/attachment_vm_pi_mike_barrel.mdl",
 	"models/viper/mw/attachments/attachment_vm_pi_mike_grip.mdl",
 }
-SWEP.RelapsePreviewAngle = Angle(8, 90, 0)
+SWEP.RelapsePreviewAngle = Angle(0, 90, 0)
+SWEP.RelapsePreviewLift = 0.5
+SWEP.RelapsePreviewCamScale = 1.65
 
 SWEP.Base = "mg_base"
 
@@ -64,7 +66,7 @@ SWEP.ParticleEffects = {
 
 SWEP.Primary = SWEP.Primary or {}
 SWEP.Primary.Sound = Sound("weap_mike_fire_plr")
-SWEP.Primary.Ammo = "pistol"
+SWEP.Primary.Ammo = "9x18"
 SWEP.Primary.Damage = R.Damage
 SWEP.Primary.Delay = R.Delay
 SWEP.Primary.NumShots = 1

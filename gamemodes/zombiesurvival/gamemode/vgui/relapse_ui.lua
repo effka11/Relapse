@@ -1,5 +1,14 @@
 RelapseUI = RelapseUI or {}
 
+-- Shared shop 3D camera. Per-gun etalon (PM/1911/.357/680/SKS): .cursor/rules/relapse-shop-preview.mdc
+RelapseUI.PreviewEtalon = {
+	FOV = 43,
+	CamScale = 1.4,
+	Lift = 3.5,
+	SpanMul = 1.32,
+	CamDir = Vector(0.82, 0.52, 0.34),
+}
+
 -- Quantum 5/15 (Flora layout law). Colours stay in sh_relapse_theme.lua.
 -- Grid5 / Grid15 = Flora --flora-grid-step-fine / --flora-grid-step.
 -- sPx = extra-grid only (type, icons, radii, hairlines).
@@ -189,6 +198,20 @@ function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
 	return true
 end
 
+function RelapseUI.PlaceCardIcon(frame, cardw, cardh)
+	if not IsValid(frame) then return end
+	local m = RelapseUI.M()
+	local pad = m.cardPad
+	cardh = cardh or m.cardH
+	local top = pad + RelapseUI.Grid5(4)
+	local fw = math.min(cardw - 2 * pad, RelapseUI.Grid15(10))
+	local fh = math.max(m.step, cardh - top - pad)
+	frame:SetSize(fw, fh)
+	local x = math.floor(cardw * (2 / 3) - fw * 0.5 + 0.5)
+	x = math.Clamp(x, pad, math.max(pad, cardw - pad - fw))
+	frame:SetPos(x, top)
+end
+
 function RelapseUI.T(id, fallback)
 	local ru = translate.GetTranslations("ru")
 	if ru and ru[id] then
@@ -207,6 +230,13 @@ end
 
 function RelapseUI.WepName(tbl)
 	if not tbl then return "" end
+	if tbl.AmmoPack then
+		local ammoName = RelapseUI.ShopAmmo(tbl.AmmoPack)
+		if tbl.AmmoCount then
+			return RelapseUI.TF("shop_ammo_pack_fmt", tbl.AmmoCount, ammoName)
+		end
+		return ammoName
+	end
 	local key = tbl.TranslationName
 	if key then
 		return RelapseUI.T(key, tbl.PrintName or tbl.Name or key)
@@ -472,6 +502,39 @@ function RelapseUI.ShopPreviewOffset(sweptable)
 	return isvector(off) and off or nil
 end
 
+function RelapseUI.ShopPreviewLift(sweptable)
+	local etalon = RelapseUI.PreviewEtalon.Lift
+	if not sweptable then return etalon end
+	local lift = sweptable.RelapsePreviewLift
+	if isnumber(lift) then
+		return lift
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	lift = def and def.PreviewLift
+	return isnumber(lift) and lift or etalon
+end
+
+function RelapseUI.ShopPreviewCamScale(sweptable)
+	local etalon = RelapseUI.PreviewEtalon.CamScale
+	if not sweptable then return etalon end
+	local scale = sweptable.RelapsePreviewCamScale
+	if isnumber(scale) and scale > 0 then
+		return scale
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	scale = def and def.PreviewCamScale
+	if isnumber(scale) and scale > 0 then
+		return scale
+	end
+	return etalon
+end
+
 function RelapseUI.ShopPreviewBoneMerge(sweptable)
 	if not sweptable then return false end
 	if sweptable.RelapsePreviewBoneMerge then return true end
@@ -480,6 +543,46 @@ function RelapseUI.ShopPreviewBoneMerge(sweptable)
 	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
 	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
 	return def and def.PreviewBoneMerge or false
+end
+
+function RelapseUI.ShopPreviewHullBounds(sweptable)
+	if not sweptable then return false end
+	if sweptable.RelapsePreviewHullBounds then return true end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	return def and def.PreviewHullBounds or false
+end
+
+function RelapseUI.ShopPreviewBodygroups(sweptable)
+	if not sweptable then return nil end
+	if istable(sweptable.RelapsePreviewBodygroups) then
+		return sweptable.RelapsePreviewBodygroups
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	return def and def.PreviewBodygroups or nil
+end
+
+function RelapseUI.ApplyShopPreviewBodygroups(ent, groups)
+	if not IsValid(ent) or not istable(groups) then return end
+
+	for k, v in pairs(groups) do
+		if isnumber(v) then
+			local id
+			if isnumber(k) then
+				id = k
+			elseif isstring(k) and ent.FindBodygroupByName then
+				id = ent:FindBodygroupByName(k)
+			end
+			if isnumber(id) and id >= 0 then
+				ent:SetBodygroup(id, v)
+			end
+		end
+	end
 end
 
 function RelapseUI.ClearShopPreviewParts(pnl)
@@ -597,6 +700,9 @@ function RelapseUI.PrepShopPreview(ent)
 	if ent.SetCycle then
 		ent:SetCycle(0)
 	end
+	if istable(ent.RelapsePreviewBodygroups) then
+		RelapseUI.ApplyShopPreviewBodygroups(ent, ent.RelapsePreviewBodygroups)
+	end
 end
 
 local function growBounds(mins, maxs, pmin, pmax)
@@ -611,12 +717,21 @@ local function growBounds(mins, maxs, pmin, pmax)
 	)
 end
 
-local function meshAABB(model, pos, ang)
+local function meshAABB(model, pos, ang, bodyMask)
 	if not isstring(model) or model == "" or not util.GetModelMeshes then
 		return nil
 	end
 
-	local meshes = util.GetModelMeshes(model, 0)
+	local meshes
+	if isnumber(bodyMask) and bodyMask > 0 then
+		local ok, got = pcall(util.GetModelMeshes, model, 0, bodyMask)
+		if ok then
+			meshes = got
+		end
+	end
+	if not istable(meshes) then
+		meshes = util.GetModelMeshes(model, 0)
+	end
 	if not istable(meshes) then return nil end
 
 	local minx, miny, minz = math.huge, math.huge, math.huge
@@ -706,13 +821,26 @@ local function assembledPreviewBounds(pnl, ent)
 		ent:SetupBones()
 	end
 
-	-- Dummy WM mesh is already in bind-pose model space (same as DrawModel at
-	-- identity). tag_pistol_offset is the mesh origin on 1911 (pos 0) but a
-	-- child offset on 357 — applying it there sinks the orbit pivot.
-	local mins, maxs = meshAABB(ent:GetModel())
+	-- Dummy WM: bind-pose GetModelMeshes is the drawn mesh on 1911/.357. Biped WMs
+	-- (SKS) store verts along +X and DrawModel along +Z (studio hull). Mixing that
+	-- +X box with posed attachment bones makes an L-span and the camera looks down on the rail.
+	local mins, maxs
+	if pnl.RelapsePreviewHullBounds then
+		mins, maxs = ent:GetRenderBounds()
+	else
+		local mask = 0
+		if IsValid(ent) and ent.GetBodygroupMask then
+			mask = ent:GetBodygroupMask() or 0
+		elseif istable(ent.RelapsePreviewBodygroups) and isnumber(ent.RelapsePreviewBodygroups[0]) then
+			mask = ent.RelapsePreviewBodygroups[0]
+		end
+		mins, maxs = meshAABB(ent:GetModel(), nil, nil, mask)
+	end
 
 	local extras = pnl.RelapsePreviewEnts
-	if istable(extras) then
+	-- Hull already covers the in-hand rifle. Attachment GetRenderBounds (stock)
+	-- is the whole file hull and sends the camera to the clamp.
+	if istable(extras) and not pnl.RelapsePreviewHullBounds then
 		for i = 1, #extras do
 			local part = extras[i]
 			if IsValid(part) then
@@ -765,14 +893,27 @@ function RelapseUI.OrbitShopPreview(pnl, ent)
 			span = 22
 		end
 
-		local dist = math.Clamp(span * 1.32, 20, 48)
+		local scale = pnl.RelapsePreviewCamScale
+		local etalon = RelapseUI.PreviewEtalon
+		if not isnumber(scale) or scale <= 0 then
+			scale = etalon.CamScale
+		end
+		local dist = math.Clamp(span * etalon.SpanMul * scale, 20, 96)
 		local off = pnl.RelapsePreviewOffset
 		if isvector(off) then
 			center = center + off
 		end
 		pnl.RelapsePreviewCenter = Vector(center)
-		pnl:SetLookAt(vector_origin)
-		pnl:SetCamPos(Vector(dist * 0.82, dist * 0.52, dist * 0.34))
+		-- Offset is model-space and orbits with the gun. Lift is view-space:
+		-- look below the origin so the rifle sits higher in the panel.
+		local lift = pnl.RelapsePreviewLift
+		if not isnumber(lift) then
+			lift = etalon.Lift
+		end
+		local look = Vector(0, 0, -lift)
+		local dir = etalon.CamDir
+		pnl:SetLookAt(look)
+		pnl:SetCamPos(Vector(dist * dir.x, dist * dir.y, dist * dir.z) + look)
 		pnl.RelapsePreviewFramed = true
 	end
 
@@ -809,7 +950,7 @@ function RelapseUI.FrameModelPanel(pnl)
 	end
 
 	if pnl.RelapseShopPreview then
-		pnl:SetFOV(43)
+		pnl:SetFOV(RelapseUI.PreviewEtalon.FOV)
 		RelapseUI.OrbitShopPreview(pnl, ent)
 		return
 	end
@@ -840,8 +981,15 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 	pnl.RelapsePreviewBaseAng = sweptable.RelapsePreviewAngle or Angle(8, 90, 0)
 	pnl.RelapsePreviewLocalAng = RelapseUI.ShopPreviewLocalAng(sweptable)
 	pnl.RelapsePreviewOffset = RelapseUI.ShopPreviewOffset(sweptable)
+	pnl.RelapsePreviewLift = RelapseUI.ShopPreviewLift(sweptable)
+	pnl.RelapsePreviewCamScale = RelapseUI.ShopPreviewCamScale(sweptable)
+	pnl.RelapsePreviewHullBounds = RelapseUI.ShopPreviewHullBounds(sweptable)
 	pnl:SetModel(mdl)
 	pnl:SetAnimated(false)
+	if IsValid(pnl.Entity) then
+		pnl.Entity.RelapsePreviewBodygroups = RelapseUI.ShopPreviewBodygroups(sweptable)
+		RelapseUI.ApplyShopPreviewBodygroups(pnl.Entity, pnl.Entity.RelapsePreviewBodygroups)
+	end
 	RelapseUI.AttachShopPreviewParts(pnl, sweptable)
 	RelapseUI.FrameModelPanel(pnl)
 end
@@ -1501,24 +1649,15 @@ function RelapseUI.PinViewerToItems(frame, sheet)
 	if not IsValid(frame) or not IsValid(sheet) then return end
 	local viewer = frame.Viewer
 	if not IsValid(viewer) then return end
-	local pan
-	local tab = sheet.GetActiveTab and sheet:GetActiveTab()
-	if IsValid(tab) and tab.GetPanel then
-		pan = tab:GetPanel()
-	end
-	if not IsValid(pan) then
-		for _, item in ipairs(sheet.Items or {}) do
-			if IsValid(item.Panel) then
-				pan = item.Panel
-				break
-			end
-		end
-	end
-	if not IsValid(pan) then return end
-	local sx, sy = pan:LocalToScreen(0, 0)
-	local _, y = frame:ScreenToLocal(sx, sy)
-	viewer:SetPos(frame:GetWide() - RelapseUI.FooterSideInset() - viewer:GetWide(), y)
-	local h = pan:GetTall()
+	if viewer.GetDock and viewer:GetDock() ~= NODOCK then return end
+
+	-- Item panes sit at (0, tabhei+gap) in the sheet. Do not use
+	-- LocalToScreen on the active pane: nested DPanel hosts (arsenal
+	-- T1–T5) report the sheet origin, so the sidebar climbs into the tabs.
+	local _, sheetY = sheet:GetPos()
+	local top = (sheet._RelapseTabHei or RelapseUI.M().tabs) + (sheet._RelapseTabGap or RelapseUI.M().tabGap)
+	local h = math.max(0, sheet:GetTall() - top)
+	viewer:SetPos(frame:GetWide() - RelapseUI.FooterSideInset() - viewer:GetWide(), sheetY + top)
 	if h > 0 then
 		viewer:SetTall(h)
 	end
@@ -1557,6 +1696,15 @@ function RelapseUI.AlignFooterRight(pnl)
 	local frame = host:GetParent()
 	local fw = IsValid(frame) and frame:GetWide() or (host:GetX() + host:GetWide())
 	pnl:SetX(fw - RelapseUI.FooterSideInset() - pnl:GetWide() - host:GetX())
+end
+
+function RelapseUI.PlaceShopTiers(strip, L)
+	if not IsValid(strip) then return end
+	if strip.RelapseLayout then
+		strip.RelapseLayout(strip)
+	end
+	RelapseUI.AlignFooterBottom(strip)
+	strip:SetX((L and L.gridW or 0) - RelapseUI.sPx(15) - strip:GetWide())
 end
 
 function RelapseUI.LayoutWorthChip(lab)
@@ -1658,4 +1806,207 @@ function RelapseUI.FrameSize(maxCols, maxRows)
 	cols = math.max(40, cols)
 	rows = math.max(32, rows)
 	return cols * m.step, rows * m.step, m
+end
+
+function RelapseUI.ShopWindowSize()
+	local m = RelapseUI.M()
+	local gridW = RelapseUI.Cells(45)
+	local cardGap = m.cardGap
+	local cardW = math.floor((gridW - cardGap) / 2)
+	local sheetW = gridW + m.scroll
+	local needW = m.pad + sheetW + RelapseUI.ViewerGap() + RelapseUI.ViewerW() + RelapseUI.FooterSideInset()
+	local cols = math.ceil(needW / m.step)
+	local wid, hei, m = RelapseUI.FrameSize(cols, 51)
+	return {
+		wid = wid,
+		hei = hei,
+		m = m,
+		gridW = gridW,
+		cardW = cardW,
+		cardGap = cardGap,
+		sheetW = sheetW,
+		pad = m.pad,
+		headerh = m.header,
+		footerh = m.footer,
+		tabhei = m.tabs,
+		tabGap = m.tabGap,
+		innerW = wid - 2 * m.pad,
+		sheetH = hei - m.header - m.footer
+	}
+end
+
+function RelapseUI.PlaceShopTitle(title, L)
+	if not IsValid(title) then return end
+	surface.SetFont("Relapse20")
+	local _, tabCell = surface.GetTextSize("Ay")
+	if not tabCell or tabCell < 1 then
+		tabCell = RelapseUI.sPx(20)
+	end
+	local titleCell = title:GetTall()
+	local tabCapY = L.headerh + math.ceil((L.tabhei - tabCell) * 0.5) + RelapseUI.sPx(5)
+	title:SetPos(L.pad, math.max(0, tabCapY - RelapseUI.sPx(45) - (titleCell - RelapseUI.sPx(6))))
+end
+
+function RelapseUI.BuildShopFrame(titleKey, opts)
+	opts = opts or {}
+	RelapseUI.CreateFonts()
+	local L = RelapseUI.ShopWindowSize()
+	local m = L.m
+	local pad = L.pad
+
+	local frame = vgui.Create("DFrame")
+	frame:SetSize(L.wid, L.hei)
+	frame:SetDeleteOnClose(opts.deleteOnClose ~= false)
+	frame:SetKeyboardInputEnabled(false)
+	frame:SetTitle("")
+	frame:SetDraggable(opts.draggable ~= false)
+	frame:DockPadding(0, 0, 0, 0)
+	frame.RelapseFooter = L.footerh
+	frame.RelapseLayout = L
+	frame.Paint = RelapseUI.PaintWindow
+	RelapseUI.HideChrome(frame)
+
+	local title = EasyLabel(frame, RelapseUI.T(titleKey), "Relapse32", RelapseUI.Col.Text)
+	RelapseUI.PlaceShopTitle(title, L)
+	frame.RelapseTitle = title
+
+	local close = vgui.Create("DButton", frame)
+	close:SetText("×")
+	close:SetFont("Relapse32")
+	close:SetSize(m.close, m.close)
+	close:AlignRight(pad)
+	close:AlignTop((L.headerh - m.close) * 0.5)
+	close.Paint = RelapseUI.PaintGhostButton
+	close.DoClick = function() frame:Close() end
+	frame.RelapseClose = close
+
+	local topspace = vgui.Create("DPanel", frame)
+	topspace:SetPaintBackground(false)
+	topspace:SetSize(L.innerW, 0)
+	topspace:SetPos(pad, L.headerh)
+
+	local bottomspace = vgui.Create("DPanel", frame)
+	bottomspace:SetPaintBackground(false)
+	bottomspace:SetSize(L.innerW, L.footerh)
+	bottomspace:SetPos(pad, L.hei - L.footerh)
+
+	local propertysheet = vgui.Create("DPropertySheet", frame)
+	propertysheet:SetSize(L.sheetW, L.sheetH)
+	propertysheet:SetPos(pad, L.headerh)
+	propertysheet:SetPadding(0)
+	propertysheet.Paint = RelapseUI.PaintSheet
+
+	return frame, L, topspace, bottomspace, propertysheet
+end
+
+function RelapseUI.CreateShopChip(bottomspace, capText, valueText)
+	local box = vgui.Create("DPanel", bottomspace)
+	box:SetPaintBackground(false)
+
+	local cap = EasyLabel(box, capText, "Relapse30", RelapseUI.Col.Muted)
+	cap:SetVisible(false)
+
+	local lab = EasyLabel(box, tostring(valueText), "Relapse45", RelapseUI.Col.Ok)
+	lab:SetVisible(false)
+	lab.RelapseAfter = cap
+	box.Paint = function(me, w, h)
+		RelapseUI.PaintWorthChip(cap, lab, w, h)
+		return true
+	end
+	RelapseUI.LayoutWorthChip(lab)
+	return box, cap, lab
+end
+
+function RelapseUI.MakeShopGrid(parent, L, trinkets)
+	local list = vgui.Create("DGrid", parent)
+	list:SetSize(L.gridW, L.sheetH - L.tabhei - L.tabGap)
+	list:SetCols(2)
+	list:SetColWide(L.cardW + L.cardGap)
+	list:SetRowHeight((trinkets and L.m.trinketH or L.m.cardH) + L.cardGap)
+	return list
+end
+
+function RelapseUI.SizeTabButton(tab)
+	if not IsValid(tab) then return end
+	surface.SetFont(tab.m_FontName or "Relapse20")
+	local tw = surface.GetTextSize(tab:GetText() or "")
+	local w = tw + RelapseUI.Grid15(3)
+	local h = tab.GetTabHeight and tab:GetTabHeight() or RelapseUI.M().tabs
+	if tab:GetWide() ~= w or tab:GetTall() ~= h then
+		tab:SetSize(w, h)
+	end
+end
+
+function RelapseUI.CreateFilterStrip(parent, labels, defaultIndex, onSelect)
+	local strip = vgui.Create("DPanel", parent)
+	strip:SetPaintBackground(false)
+	strip.Paint = function() return true end
+	strip.Tabs = {}
+	strip._Active = nil
+	strip.GetActiveTab = function(me) return me._Active end
+	strip.tabScroller = strip
+
+	local function selectTab(btn, silent)
+		strip._Active = btn
+		if not silent and onSelect then
+			onSelect(btn.RelapseIndex, btn)
+		end
+	end
+
+	for i, label in ipairs(labels) do
+		local btn = vgui.Create("DButton", strip)
+		btn:SetText(label)
+		btn:SetFont("Relapse20")
+		btn:SetTextColor(RelapseUI.Col.Muted)
+		btn:SetPaintBackground(false)
+		btn.RelapseIndex = i
+		btn.GetTabHeight = function()
+			return RelapseUI.M().tabs
+		end
+		btn.GetPropertySheet = function()
+			return strip
+		end
+		btn.IsActive = function(me)
+			return strip._Active == me
+		end
+		btn.Paint = RelapseUI.PaintTab
+		btn.ApplySchemeSettings = function(me)
+			RelapseUI.SizeTabButton(me)
+		end
+		btn.DoClick = function(me)
+			selectTab(me)
+		end
+		RelapseUI.SizeTabButton(btn)
+		strip.Tabs[i] = btn
+	end
+
+	strip.RelapseLayout = function(me)
+		local x = 0
+		local h = RelapseUI.M().tabs
+		for _, btn in ipairs(me.Tabs) do
+			RelapseUI.SizeTabButton(btn)
+			btn:SetPos(x, 0)
+			btn:SetTall(h)
+			x = x + btn:GetWide()
+		end
+		me:SetSize(x, h)
+	end
+	strip.RelapseLayout(strip)
+	RelapseUI.BindTabIndicator(strip)
+
+	local start = strip.Tabs[defaultIndex or 1]
+	if IsValid(start) then
+		selectTab(start, true)
+	end
+
+	return strip
+end
+
+function RelapseUI.FinishShopFrame(frame, propertysheet)
+	RelapseUI.WarmPropertySheet(propertysheet)
+	frame:Center()
+	frame:SetAlpha(0)
+	frame:AlphaTo(255, 0.12, 0)
+	frame:MakePopup()
+	return frame
 end

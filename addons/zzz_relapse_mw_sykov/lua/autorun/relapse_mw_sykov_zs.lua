@@ -9,15 +9,26 @@ local function ApplyOne(class, def)
 	if not R then return end
 
 	wep.Relapse = R
+	if def.Tier then
+		wep.Tier = def.Tier
+	end
 	wep.PrintName = def.PrintName or wep.PrintName
 	wep.TranslationName = def.TranslationName or wep.TranslationName
 	wep.TranslationDescription = def.TranslationDescription or wep.TranslationDescription
 	wep.RelapsePreviewIcon = def.PreviewIcon or wep.RelapsePreviewIcon
 	wep.RelapsePreviewParts = def.PreviewParts or wep.RelapsePreviewParts
-	wep.RelapsePreviewBoneMerge = def.PreviewBoneMerge or wep.RelapsePreviewBoneMerge
-	wep.RelapsePreviewAngle = wep.RelapsePreviewAngle or def.PreviewAngle or Angle(8, 90, 0)
+	if def.PreviewBoneMerge ~= nil then
+		wep.RelapsePreviewBoneMerge = def.PreviewBoneMerge
+	end
+	if def.PreviewHullBounds ~= nil then
+		wep.RelapsePreviewHullBounds = def.PreviewHullBounds
+	end
+	wep.RelapsePreviewBodygroups = def.PreviewBodygroups or wep.RelapsePreviewBodygroups
+	wep.RelapsePreviewAngle = def.PreviewAngle or wep.RelapsePreviewAngle or Angle(8, 90, 0)
 	wep.RelapsePreviewLocalAng = def.PreviewLocalAng or wep.RelapsePreviewLocalAng
 	wep.RelapsePreviewOffset = def.PreviewOffset or wep.RelapsePreviewOffset
+	wep.RelapsePreviewLift = def.PreviewLift or wep.RelapsePreviewLift
+	wep.RelapsePreviewCamScale = def.PreviewCamScale or wep.RelapsePreviewCamScale
 	if CLIENT and isstring(wep.RelapsePreviewIcon) then
 		killicon.Add(class, wep.RelapsePreviewIcon, Color(255, 255, 255, 255))
 		wep.WepSelectIcon = surface.GetTextureID(wep.RelapsePreviewIcon)
@@ -32,7 +43,11 @@ local function ApplyOne(class, def)
 	wep.Primary.Damage = R.Damage
 	wep.Primary.Delay = R.Delay
 	wep.Primary.ClipSize = R.Clip
-	wep.Primary.Ammo = def.Ammo or "pistol"
+	wep.Primary.Ammo = def.Ammo or wep.Primary.Ammo
+	wep.Primary.RPM = math.floor(60 / math.max(R.Delay or 0.2, 0.05) + 0.5)
+	if R.Automatic ~= nil then
+		wep.Primary.Automatic = R.Automatic
+	end
 	if wep.Bullet then
 		local far = math.max(1, R.Damage * (1 - math.Clamp(R.Kinetic or 0, 0, 1)))
 		wep.Bullet.Damage = {R.Damage, far}
@@ -53,6 +68,56 @@ local function ApplyOne(class, def)
 	if gm and gm.SetupDefaultClip and not wep.Primary.DefaultClip then
 		gm:SetupDefaultClip(wep.Primary)
 	end
+
+	if isfunction(wep.Initialize) and not wep.RelapseReconnectInit then
+		wep.RelapseReconnectInit = true
+		local oldInit = wep.Initialize
+		wep.Initialize = function(self, ...)
+			oldInit(self, ...)
+			self.m_bInitialized = true
+			local gm = GAMEMODE or GM
+			local owner = self.GetOwner and self:GetOwner()
+			if gm and gm.ReconnectWeaponEmptyLocked and IsValid(owner) and gm:ReconnectWeaponEmptyLocked(self, owner) then
+				self:SetClip1(0)
+			elseif self.GetNW2Bool and self:GetNW2Bool("zs_reconnect_empty", false) then
+				self:SetClip1(0)
+			elseif self.GetNW2Int then
+				local want = self:GetNW2Int("zs_reconnect_clip1", -1)
+				if want >= 0 then
+					self:SetClip1(want)
+				end
+			end
+		end
+	end
+
+	local function WrapEmptyGate(name)
+		if wep["RelapseEmptyGate_" .. name] then return end
+		local old = wep[name]
+		wep["RelapseEmptyGate_" .. name] = true
+		wep[name] = function(self, ...)
+			local gm = GAMEMODE or GM
+			local owner = self.GetOwner and self:GetOwner()
+			if gm and gm.ReconnectWeaponEmptyLocked and IsValid(owner) and gm:ReconnectWeaponEmptyLocked(self, owner) then
+				return false
+			end
+			if isfunction(old) then
+				return old(self, ...)
+			end
+			local base = self.BaseClass
+			if istable(base) and isfunction(base[name]) then
+				return base[name](self, ...)
+			end
+			local stored = self.Base and weapons.GetStored(self.Base)
+			if istable(stored) and isfunction(stored[name]) then
+				return stored[name](self, ...)
+			end
+		end
+	end
+
+	WrapEmptyGate("CanAttack")
+	WrapEmptyGate("CanTrigger")
+	WrapEmptyGate("CanReload")
+	WrapEmptyGate("CanPrimaryAttack")
 end
 
 local function ApplyRelapseMWGuns()
@@ -69,6 +134,7 @@ end
 
 hook.Add("Initialize", "RelapseMWSykovZS", ApplyRelapseMWGuns)
 hook.Add("InitPostEntity", "RelapseMWSykovZS", ApplyRelapseMWGuns)
+hook.Add("OnReloaded", "RelapseMWSykovZS", ApplyRelapseMWGuns)
 -- Workshop SWEP files can killicon.Add after ours. Re-apply once entities exist.
 if CLIENT then
 	hook.Add("InitPostEntity", "RelapseMWSykovKillicons", function()

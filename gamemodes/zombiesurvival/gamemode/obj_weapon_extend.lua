@@ -132,11 +132,17 @@ TranslatedAmmo[20] = "ar2altfire"
 TranslatedAmmo[21] = "slam"
 
 function meta:GetPrimaryAmmoTypeString()
-	if self.Primary and self.Primary.Ammo then return string.lower(self.Primary.Ammo) end
+	local ammo = self.Primary and self.Primary.Ammo
+	if isstring(ammo) and ammo ~= "" then
+		return string.lower(ammo)
+	end
 	return TranslatedAmmo[self:GetPrimaryAmmoType()] or "none"
 end
 
 function meta:GetSecondaryAmmoTypeString()
-	if self.Secondary and self.Secondary.Ammo then return string.lower(self.Secondary.Ammo) end
+	local ammo = self.Secondary and self.Secondary.Ammo
+	if isstring(ammo) and ammo ~= "" then
+		return string.lower(ammo)
+	end
 	return TranslatedAmmo[self:GetSecondaryAmmoType()] or "none"
 end

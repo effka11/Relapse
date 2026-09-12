@@ -1,0 +1,63 @@
+---
+description: Lua comments — 75-dash section banners, file header, inline types. No --[[ docs, no short Worth boxes.
+globs: **/*.lua
+alwaysApply: false
+---
+
+# Relapse комментарии Lua
+
+Эталон: `gamemodes/zombiesurvival/gamemode/relapse_ai/server/00_core.lua`. Новый Lua и правки Relapse — в этом стиле. Старый ZS не перелицовывать ради баннеров.
+
+## Шапка файла
+
+2–4 строки `--` сразу сверху: что это, как сидит в системе, важное ограничение. Перенос ~80 колонок. Без автора, даты, лицензии, `--[[ ]]`.
+
+```lua
+-- Relapse AI core: registry, config and the Brain protocol.
+-- Bots are NextBot players (player.CreateNextBot) driven from StartCommand.
+```
+
+## Секции
+
+Линия из **75** `-`, заголовок `-- Title`, снова 75 `-`. Заголовок короткий (1–3 слова). Не `-- Title --` и не короткие `-----`.
+
+```lua
+-- ❌ ZS-коротыш
+-----------
+-- Worth --
+-----------
+
+-- ❌
+-- === Helpers ===
+
+-- ✅
+---------------------------------------------------------------------------
+-- Helpers
+---------------------------------------------------------------------------
+```
+
+Протокол/контракт — внутри тех же линий: пустая `--`, потом поля и сигнатуры, описания выровнены пробелами.
+
+```lua
+---------------------------------------------------------------------------
+-- Brain protocol
+--
+-- A brain is a table with:
+--   OnAttach(bot)          bot created (components exist, player may not be spawned)
+--   Think(bot, dt)         decision tick (relapse_ai_think_rate Hz)
+---------------------------------------------------------------------------
+```
+
+## Строки
+
+- Поле/таблица: тип или форма в той же строке (`-- [Player] = bot`).
+- Функция, если имя не говорит «зачем»: одна фраза сверху, с точкой.
+- Не комментировать очевидное (`-- increment slot`).
+- Язык — английский, как в эталоне.
+
+```lua
+AI.Bots = AI.Bots or {} -- [Player] = bot
+
+-- Drop registry entries for players that vanished (lua refresh, kicks we did not see).
+function AI.Prune()
+```

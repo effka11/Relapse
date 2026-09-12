@@ -136,6 +136,7 @@ local tColorModNightVision = {
 local redview = 0
 local fear = 0
 function GM:_RenderScreenspaceEffects()
+	if not IsValid(MySelf) then return end
 	if MySelf.Confusion and MySelf.Confusion:IsValid() then
 		MySelf.Confusion:RenderScreenSpaceEffects()
 	end
@@ -187,6 +188,10 @@ function GM:_RenderScreenspaceEffects()
 end
 
 function GM:_RenderScene()
+	if not IsValid(MySelf) then
+		FullBright = false
+		return
+	end
 	if (self.m_ZombieVision and MySelf:Team() == TEAM_UNDEAD) or (self.m_NightVision and MySelf:Team() == TEAM_HUMAN and not MySelf:GetStatus("dimvision")) then
 		render_SetLightingMode(1)
 		FullBright = true

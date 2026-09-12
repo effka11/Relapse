@@ -485,9 +485,11 @@ function PANEL:Init()
 
 	local spremaining = vgui.Create("DEXChangingLabel", bottom)
 	spremaining:SetChangeFunction(function()
+		if not IsValid(MySelf) then return "" end
 		return "Unused skill points: "..MySelf:GetZSSPRemaining()
 	end, true)
 	spremaining:SetChangedFunction(function()
+		if not IsValid(MySelf) then return end
 		if MySelf:GetZSSPRemaining() >= 1 then
 			spremaining:SetTextColor(COLOR_GRAY)
 		else
@@ -500,6 +502,7 @@ function PANEL:Init()
 
 	local expbar = vgui.Create("Panel", bottom)
 	expbar.Paint = function(me, w, h)
+		if not IsValid(MySelf) then return end
 		GAMEMODE:DrawXPBar(0, 2 - screenscale * 2, w, h, w, 1, 0.95, MySelf:GetZSLevel())
 	end
 	expbar:SetContentAlignment(5)
@@ -593,10 +596,12 @@ function PANEL:Init()
 
 	top:SetAlpha(0)
 
-	self.AmbientSound = CreateSound(MySelf, "zombiesurvival/skilltree_ambiance.ogg")
-	self.AmbientSound:PlayEx(0, 60)
-	self.AmbientSound:ChangeVolume(0, 0)
-	self.AmbientSound:ChangeVolume(0.66, 1.5)
+	if IsValid(MySelf) then
+		self.AmbientSound = CreateSound(MySelf, "zombiesurvival/skilltree_ambiance.ogg")
+		self.AmbientSound:PlayEx(0, 60)
+		self.AmbientSound:ChangeVolume(0, 0)
+		self.AmbientSound:ChangeVolume(0.66, 1.5)
+	end
 
 	self:DockMargin(0, 0, 0, 0)
 	self:DockPadding(0, 0, 0, 0)
@@ -617,6 +622,7 @@ function PANEL:Init()
 end
 
 function PANEL:UpdateQuickStats()
+	if not IsValid(MySelf) then return end
 	local skillmodifiers = {}
 	local gm_modifiers = GAMEMODE.SkillModifiers
 	for skillid in pairs(table.ToAssoc(MySelf:GetDesiredActiveSkills())) do
@@ -654,6 +660,8 @@ function PANEL:Think()
 
 	if time < self.NextWarningThink then return end
 	self.NextWarningThink = time + 0.1
+
+	if not IsValid(MySelf) then return end
 
 	local display_warning = false
 	local desired = table.ToAssoc(MySelf:GetDesiredActiveSkills())
@@ -817,6 +825,7 @@ local colBeam2 = Color(255, 255, 255)
 local colSmoke = Color(140, 160, 185, 160)
 local colGlow = Color(0, 0, 0)
 function PANEL:Paint(w, h)
+	if not IsValid(MySelf) then return true end
 	local realtime = RealTime()
 	local lifetime = realtime - self.CreationTime
 	local dt = realtime - self.LastPaint
@@ -1290,6 +1299,11 @@ function GM:ToggleSkillWeb()
 		self.SkillWeb = nil
 		return
 	end
+
+	if not IsValid(MySelf) then
+		MySelf = LocalPlayer()
+	end
+	if not IsValid(MySelf) then return end
 
 	self.SkillWeb = vgui.Create("ZSSkillWeb")
 end

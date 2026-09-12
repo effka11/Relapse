@@ -51,8 +51,16 @@ function ENT:OnTakeDamage(dmginfo)
 	local attacker = dmginfo:GetAttacker()
 	if not (attacker:IsValid() and attacker:IsPlayer() and attacker:Team() == TEAM_HUMAN) then
 		self:ResetLastBarricadeAttacker(attacker, dmginfo)
-		self:SetObjectHealth(self:GetObjectHealth() - dmginfo:GetDamage())
+		local dmg = dmginfo:GetDamage()
+		self:SetObjectHealth(self:GetObjectHealth() - dmg)
 		self:EmitSound("physics/wood/wood_plank_break"..math.random(1,4)..".wav", 65)
+
+		if attacker:IsValid() and attacker:IsZombie() then
+			GAMEMODE:GiveCadeOwnerPointsTo(self:GetObjectOwner(), dmg)
+			if self:HumanNearby() then
+				GAMEMODE:GiveZombieBarricadeXP(attacker, dmg)
+			end
+		end
 	end
 end
 

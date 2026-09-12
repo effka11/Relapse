@@ -21,6 +21,7 @@ local function factor(stat, spec)
 end
 
 -- Battleaxe is the ranged stick: Scale 400 U.
+-- Ammo dollars sit outside Π (AmmoMul), like TypeMul. Stick cartridge 9×18 → 1.
 U.Models.ranged = {
 	Scale = 400,
 	TypeMul = {
@@ -183,13 +184,61 @@ function GM:ExtractMeleeUsefulnessValues(swep)
 	}
 end
 
-function GM:ComputeWeaponUsefulness(swep)
+function GM:GetWeaponAmmoMul(swep)
+	local ammo = self:GetRelapseAmmo(self:GetWeaponAmmoType(swep))
+	if not ammo or not ammo.Dollars then
+		return 1
+	end
+
+	local price = self.RelapseAmmoPrice
+	if not price or ammo.Dollars <= 0 then
+		return 1
+	end
+
+	return (price.StickDollars / ammo.Dollars) ^ (price.AmmoMulW or 0)
+end
+
+function GM:ComputeWeaponCombatUsefulness(swep)
 	if not swep then return 0 end
 	if swep.IsMelee then
 		return self:ComputeUsefulness("melee", self:ExtractMeleeUsefulnessValues(swep))
 	end
 
 	return self:ComputeUsefulness("ranged", self:ExtractRangedUsefulnessValues(swep))
+end
+
+function GM:ComputeWeaponUsefulness(swep)
+	local combat = self:ComputeWeaponCombatUsefulness(swep)
+	if not swep or swep.IsMelee then
+		return combat
+	end
+
+	return combat * self:GetWeaponAmmoMul(swep)
+end
+
+-- Fraction of recoup cost that is the gun. Higher = ammo eats less.
+-- HP to earn U_combat back in damage points, then ammo U for those shots.
+function GM:ComputeWeaponPayback(swep)
+	if not swep or swep.IsMelee then
+		return nil
+	end
+
+	local values = self:ExtractRangedUsefulnessValues(swep)
+	if not values then
+		return nil
+	end
+
+	local combat = self:ComputeUsefulness("ranged", values)
+	local damage = values.Damage or 0
+	if combat <= 0 or damage <= 0 then
+		return nil
+	end
+
+	local uPoint = self:GetPointUsefulness()
+	local uRound = self:GetAmmoRoundUsefulness(self:GetWeaponAmmoType(swep))
+	local hp = (combat / uPoint) * 45
+	local uAmmo = (hp / damage) * uRound
+	return combat / (combat + uAmmo)
 end
 
 -- T1 price of the ranged stick. Same unit in worth and points: two wallets, one number.
@@ -249,8 +298,10 @@ GM.RelapseWeapons = {
 			"models/viper/mw/attachments/attachment_vm_pi_mike_barrel.mdl",
 			"models/viper/mw/attachments/attachment_vm_pi_mike_grip.mdl",
 		},
-		PreviewAngle = Angle(8, 90, 0),
-		Ammo = "pistol",
+		PreviewAngle = Angle(0, 90, 0),
+		PreviewLift = 0.5,
+		PreviewCamScale = 1.65,
+		Ammo = "9x18",
 		Relapse = {
 			Damage = 20,
 			Delay = 0.20,
@@ -264,7 +315,7 @@ GM.RelapseWeapons = {
 	},
 	mg_m1911 = {
 		PrintName = "Пистолет 1911",
-		Description = "A service .45. Retired before its owners\194\160\194\160–\194\160\194\160the heavy bullet never left.",
+		Description = "An officer's Colt. Seven fat .45s: heavy in a room\194\160\194\160–\194\160\194\160just loud past it.",
 		TranslationName = "wep_1911",
 		TranslationDescription = "wep_1911_desc",
 		PreviewIcon = "zombiesurvival/killicons/weapon_zs_colt1911.png",
@@ -276,7 +327,10 @@ GM.RelapseWeapons = {
 		},
 		PreviewAngle = Angle(0, 0, 0),
 		PreviewLocalAng = Angle(0, 0, 90),
-		Ammo = "pistol",
+		PreviewOffset = Vector(-0.8, 0, 0.5),
+		PreviewLift = 0.7,
+		PreviewCamScale = 1.4,
+		Ammo = "45acp",
 		Relapse = {
 			Damage = 28,
 			Delay = 0.21,
@@ -290,7 +344,7 @@ GM.RelapseWeapons = {
 	},
 	mg_357 = {
 		PrintName = "Револьвер .357",
-		Description = "A magnum revolver. Six in the cylinder\194\160\194\160–\194\160\194\160it never learned to hurry.",
+		Description = "They carried it if six shots were enough. The trigger does not hurry, the hit does. It's worth aiming.",
 		TranslationName = "wep_357",
 		TranslationDescription = "wep_357_desc",
 		PreviewIcon = "zombiesurvival/killicons/weapon_zs_python357.png",
@@ -301,7 +355,9 @@ GM.RelapseWeapons = {
 		},
 		PreviewAngle = Angle(0, 0, 0),
 		PreviewLocalAng = Angle(0, 0, 90),
-		Ammo = "pistol",
+		PreviewLift = 0.7,
+		PreviewCamScale = 1.65,
+		Ammo = "357mag",
 		Relapse = {
 			Damage = 42,
 			Delay = 0.43,
@@ -315,7 +371,7 @@ GM.RelapseWeapons = {
 	},
 	mg_romeo870 = {
 		PrintName = "Дробовик 680",
-		Description = "A pump 12-gauge. Nine pellets, then the forend\194\160\194\160–\194\160\194\160it only speaks up close.",
+		Description = "A patrol pump. For a hallway, not a field: it drops them at the door, then the shot wanders. Then the forend.",
 		TranslationName = "wep_680",
 		TranslationDescription = "wep_680_desc",
 		PreviewIcon = "zombiesurvival/killicons/weapon_zs_model680.png",
@@ -324,9 +380,11 @@ GM.RelapseWeapons = {
 			"models/viper/mw/attachments/romeo870/attachment_vm_sh_romeo870_barrel.mdl",
 			"models/viper/mw/attachments/romeo870/attachment_vm_sh_romeo870_pump.mdl",
 		},
-		PreviewAngle = Angle(8, 90, 0),
+		PreviewAngle = Angle(0, 90, 0),
 		PreviewOffset = Vector(0, 0, -1.2),
-		Ammo = "buckshot",
+		PreviewLift = 2.2,
+		PreviewCamScale = 1.4,
+		Ammo = "12ga",
 		Relapse = {
 			Damage = 16,
 			Pellets = 9,
@@ -337,6 +395,108 @@ GM.RelapseWeapons = {
 			Accuracy = 4.80,
 			Weight = 3.40,
 			Clip = 6,
+		}
+	},
+	mg_sksierra = {
+		PrintName = "Винтовка СКС",
+		Description = "A warehouse carbine. The army is gone, ten 7.62s remain: it reaches past the pistols, the mag does not hurry.",
+		TranslationName = "wep_sks",
+		TranslationDescription = "wep_sks_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_sks_side.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_sksierra.mdl",
+			"models/viper/mw/attachments/sksierra/attachment_vm_sn_sksierra_barrel.mdl",
+			"models/viper/mw/attachments/sksierra/attachment_vm_sn_sksierra_mag.mdl",
+			"models/viper/mw/attachments/sksierra/attachment_vm_sn_sksierra_stock.mdl",
+		},
+		-- DrawModel after SetupBones is along +Z (WM hull), like 1911. Bind-pose VVD is +X —
+		-- Makarov yaw 90 stands the rifle on end. Dummy AABB must be GetRenderBounds, not
+		-- GetModelMeshes, or extras in posed space mix with a +X box and the orbit looks down on the rail.
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(0, 0, -5),
+		PreviewLift = 3.5,
+		PreviewCamScale = 1.4,
+		Ammo = "762x39",
+		Relapse = {
+			Damage = 34,
+			Delay = 0.22,
+			Reload = 2.70,
+			Kinetic = 0.20,
+			Recoil = 1.10,
+			Accuracy = 0.95,
+			Weight = 3.85,
+			Clip = 10,
+		}
+	},
+	mg_mpapa5 = {
+		PrintName = "Пистолет-пулемёт MP5",
+		Description = "A duty SMG. Thirty 9×19s, closed bolt: it hits where you point, then the mag is empty.",
+		TranslationName = "wep_mp5",
+		TranslationDescription = "wep_mp5_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side4.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewBodygroups = { [0] = 1 },
+		PreviewParts = {
+			"models/viper/mw/weapons/w_mpapa5.mdl",
+			"models/viper/mw/attachments/mpapa5/attachment_vm_sm_mpapa5_barrel.mdl",
+			"models/viper/mw/attachments/mpapa5/attachment_vm_sm_mpapa5_mag.mdl",
+			"models/viper/mw/attachments/mpapa5/attachment_vm_sm_mpapa5_stock.mdl",
+		},
+		-- WM variant 1 is the receiver only. Mag/stock/barrel on tag_*_attach like SKS.
+		-- DrawModel along +Z: hull + LocalAng 90. Frame like Uzi (not SKS Lift 3.5).
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(0, 0, -2),
+		PreviewLift = 2.2,
+		PreviewCamScale = 1.4,
+		Ammo = "9x19",
+		Tier = 2,
+		Relapse = {
+			Damage = 24,
+			Delay = 0.075,
+			Reload = 2.20,
+			Kinetic = 0.32,
+			Recoil = 0.70,
+			Accuracy = 2.20,
+			Weight = 3.10,
+			Clip = 30,
+			Automatic = true,
+		}
+	},
+	mg_uzulu = {
+		PrintName = "Пистолет-пулемёт Uzi",
+		Description = "An open-bolt spray. Thirty-two 9×19s: it does not aim, it empties.",
+		TranslationName = "wep_uzi",
+		TranslationDescription = "wep_uzi_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_uzi_side6.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewBodygroups = { [0] = 1 },
+		PreviewParts = {
+			"models/viper/mw/weapons/w_uzulu.mdl",
+		},
+		-- DrawModel after SetupBones is +Z (yaw 90 stands the SMG up). Frame the hull
+		-- like SKS; mesh AABB is bind +X and would look down the barrel.
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(0, 0, 0),
+		PreviewLift = 2.2,
+		PreviewCamScale = 1.4,
+		Ammo = "9x19",
+		Relapse = {
+			Damage = 23,
+			Delay = 0.10,
+			Reload = 2.50,
+			Kinetic = 0.38,
+			Recoil = 0.95,
+			Accuracy = 3.10,
+			Weight = 3.50,
+			Clip = 32,
+			Automatic = true,
 		}
 	}
 }
@@ -367,14 +527,23 @@ function GM:BindRelapseWeapon(src)
 	local def = class and self.RelapseWeapons and self.RelapseWeapons[class]
 	if def then
 		src.Relapse = src.Relapse or def.Relapse
+		src.Tier = src.Tier or def.Tier
 		src.TranslationName = src.TranslationName or def.TranslationName
 		src.TranslationDescription = src.TranslationDescription or def.TranslationDescription
-		src.RelapsePreviewIcon = src.RelapsePreviewIcon or def.PreviewIcon
+		src.RelapsePreviewIcon = def.PreviewIcon or src.RelapsePreviewIcon
 		src.RelapsePreviewParts = def.PreviewParts or src.RelapsePreviewParts
-		src.RelapsePreviewBoneMerge = def.PreviewBoneMerge or src.RelapsePreviewBoneMerge
+		if def.PreviewBoneMerge ~= nil then
+			src.RelapsePreviewBoneMerge = def.PreviewBoneMerge
+		end
+		if def.PreviewHullBounds ~= nil then
+			src.RelapsePreviewHullBounds = def.PreviewHullBounds
+		end
+		src.RelapsePreviewBodygroups = def.PreviewBodygroups or src.RelapsePreviewBodygroups
 		src.RelapsePreviewAngle = def.PreviewAngle or src.RelapsePreviewAngle
 		src.RelapsePreviewLocalAng = def.PreviewLocalAng or src.RelapsePreviewLocalAng
 		src.RelapsePreviewOffset = def.PreviewOffset or src.RelapsePreviewOffset
+		src.RelapsePreviewLift = def.PreviewLift or src.RelapsePreviewLift
+		src.RelapsePreviewCamScale = def.PreviewCamScale or src.RelapsePreviewCamScale
 		src.Primary = src.Primary or {}
 		if def.Ammo then
 			src.Primary.Ammo = def.Ammo
@@ -432,6 +601,9 @@ function GM:RelapseStatValue(sweptable, id)
 	local r = self:GetWeaponRelapse(sweptable)
 	if not r then return nil end
 
+	if id == "Payback" then
+		return self:ComputeWeaponPayback(sweptable)
+	end
 	if id == "FireRate" then
 		return tonumber(r.Delay)
 	end

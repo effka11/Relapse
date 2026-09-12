@@ -184,6 +184,7 @@ local function QuickCheckDoClick(self)
 end
 
 local function WorthThink(self)
+	if not IsValid(MySelf) then return end
 	if MySelf:Team() ~= TEAM_HUMAN then
 		self:Close()
 	end
@@ -196,74 +197,16 @@ function MakepWorth()
 	end
 
 	remainingworth = GetStartingWorth()
-	RelapseUI.CreateFonts()
 
-	local m = RelapseUI.M()
-	local gridW = RelapseUI.Cells(45)
-	local cardGap = m.cardGap
-	local cardW = math.floor((gridW - cardGap) / 2)
-	local sheetW = gridW + m.scroll
-	local needW = m.pad + sheetW + RelapseUI.ViewerGap() + RelapseUI.ViewerW() + RelapseUI.FooterSideInset()
-	local cols = math.ceil(needW / m.step)
-	local wid, hei, m = RelapseUI.FrameSize(cols, 51)
-	local pad = m.pad
-	local headerh = m.header
-	local footerh = m.footer
-	local tabhei = m.tabs
-	local tabGap = m.tabGap
-	local innerW = wid - 2 * pad
-	local sheetH = hei - headerh - footerh
-
-	local frame = vgui.Create("DFrame")
+	local frame, L, topspace, bottomspace, propertysheet = RelapseUI.BuildShopFrame("shop_worth_title")
 	pWorth = frame
-	frame:SetSize(wid, hei)
-	frame:SetDeleteOnClose(true)
-	frame:SetKeyboardInputEnabled(false)
-	frame:SetTitle("")
-	frame:SetDraggable(true)
-	frame:DockPadding(0, 0, 0, 0)
 	frame.Think = WorthThink
-	frame.RelapseFooter = footerh
-	frame.Paint = RelapseUI.PaintWindow
-	RelapseUI.HideChrome(frame)
 
-	local title = EasyLabel(frame, RelapseUI.T("shop_worth_title"), "Relapse32", RelapseUI.Col.Text)
-	-- 45px optical: title glyph bottoms → tab capital tops.
-	-- Relapse32 cell keeps ~6px under the baseline; Relapse20 sits ~5px above
-	-- caps and is vertically centered in the strip.
-	surface.SetFont("Relapse20")
-	local _, tabCell = surface.GetTextSize("Ay")
-	if not tabCell or tabCell < 1 then
-		tabCell = RelapseUI.sPx(20)
-	end
-	local titleCell = title:GetTall()
-	local tabCapY = headerh + math.ceil((tabhei - tabCell) * 0.5) + RelapseUI.sPx(5)
-	title:SetPos(pad, math.max(0, tabCapY - RelapseUI.sPx(45) - (titleCell - RelapseUI.sPx(6))))
-
-	local close = vgui.Create("DButton", frame)
-	close:SetText("×")
-	close:SetFont("Relapse32")
-	close:SetSize(m.close, m.close)
-	close:AlignRight(pad)
-	close:AlignTop((headerh - m.close) * 0.5)
-	close.Paint = RelapseUI.PaintGhostButton
-	close.DoClick = function() frame:Close() end
-
-	local topspace = vgui.Create("DPanel", frame)
-	topspace:SetPaintBackground(false)
-	topspace:SetSize(innerW, 0)
-	topspace:SetPos(pad, headerh)
-
-	local bottomspace = vgui.Create("DPanel", frame)
-	bottomspace:SetPaintBackground(false)
-	bottomspace:SetSize(innerW, footerh)
-	bottomspace:SetPos(pad, hei - footerh)
-
-	local propertysheet = vgui.Create("DPropertySheet", frame)
-	propertysheet:SetSize(sheetW, sheetH)
-	propertysheet:SetPos(pad, headerh)
-	propertysheet:SetPadding(0)
-	propertysheet.Paint = RelapseUI.PaintSheet
+	local m = L.m
+	local cardW = L.cardW
+	local sheetW = L.sheetW
+	local tabhei = L.tabhei
+	local tabGap = L.tabGap
 
 	local list = vgui.Create("DPanelList", propertysheet)
 	local favName = RelapseUI.T("shop_favorites")
@@ -369,11 +312,7 @@ function MakepWorth()
 		RelapseUI.StyleScroll(itemframe)
 		local trinkets = catid == ITEMCAT_TRINKETS
 
-		list = vgui.Create("DGrid", itemframe)
-		list:SetSize(gridW, sheetH - tabhei - tabGap)
-		list:SetCols(2)
-		list:SetColWide(cardW + cardGap)
-		list:SetRowHeight((trinkets and m.trinketH or m.cardH) + cardGap)
+		list = RelapseUI.MakeShopGrid(itemframe, L, trinkets)
 
 		sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), itemframe, GAMEMODE.ItemCategoryIcons[catid], false, false)
 		sheet.Panel:SetPos(0, tabhei + tabGap)
@@ -408,25 +347,10 @@ function MakepWorth()
 	clearbutton.Paint = RelapseUI.PaintGhostButton
 	clearbutton.DoClick = ClearCartDoClick
 
-	local worthbox = vgui.Create("DPanel", bottomspace)
-	worthbox:SetPaintBackground(false)
-
-	local worthcap = EasyLabel(worthbox, RelapseUI.T("shop_worth_label"), "Relapse30", RelapseUI.Col.Muted)
-	worthcap:SetVisible(false)
-
-	local worthlab = EasyLabel(worthbox, tostring(remainingworth), "Relapse45", RelapseUI.Col.Ok)
-	worthlab:SetVisible(false)
-	worthlab.RelapseAfter = worthcap
+	local worthbox, worthcap, worthlab = RelapseUI.CreateShopChip(bottomspace, RelapseUI.T("shop_worth_label"), remainingworth)
 	worthlab.RelapseBottomOf = checkout
-	worthbox.Paint = function(me, w, h)
-		RelapseUI.PaintWorthChip(worthcap, worthlab, w, h)
-		return true
-	end
-	RelapseUI.LayoutWorthChip(worthlab)
 	frame.WorthLab = worthlab
 	frame.WorthChip = worthbox
-
-	frame:Center()
 
 	local tabs = {}
 	for i, item in ipairs(propertysheet.Items or {}) do
@@ -445,11 +369,7 @@ function MakepWorth()
 	end
 
 	GAMEMODE:PrecacheKillicons()
-	RelapseUI.WarmPropertySheet(propertysheet)
-
-	frame:SetAlpha(0)
-	frame:AlphaTo(255, 0.12, 0)
-	frame:MakePopup()
+	RelapseUI.FinishShopFrame(frame, propertysheet)
 
 	return frame
 end
@@ -489,16 +409,7 @@ vgui.Register("ItemAmountCounter", PANEL, "DLabel")
 PANEL = {}
 
 local function PlaceKilliconFrame(frame, cardw, cardh)
-	local m = RelapseUI.M()
-	local pad = m.cardPad
-	cardh = cardh or m.cardH
-	local top = pad + RelapseUI.Grid5(4)
-	local fw = math.min(cardw - 2 * pad, RelapseUI.Grid15(10))
-	local fh = math.max(m.step, cardh - top - pad)
-	frame:SetSize(fw, fh)
-	local x = math.floor(cardw * (2 / 3) - fw * 0.5 + 0.5)
-	x = math.Clamp(x, pad, math.max(pad, cardw - pad - fw))
-	frame:SetPos(x, top)
+	RelapseUI.PlaceCardIcon(frame, cardw, cardh)
 end
 
 function PANEL:Init()
@@ -586,7 +497,7 @@ function PANEL:SetWorthID(id)
 	self.Signature = tab.Signature
 	self.Price = tab.Price
 
-	local missing_skill = tab.SkillRequirement and not MySelf:IsSkillActive(tab.SkillRequirement)
+	local missing_skill = tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))
 
 	local nottrinkets = tab.Category ~= ITEMCAT_TRINKETS
 	self:SetCardSize(self.CardW or self:GetWide(), nottrinkets and m.cardH or m.trinketH)
@@ -624,8 +535,6 @@ function PANEL:SetWorthID(id)
 		self.PriceLabel:SetText("")
 	end
 	self.PriceLabel:SizeToContents()
-
-	self:SetTooltip(RelapseUI.WepDesc(tab))
 
 	self.Locked = missing_skill or tab.NoClassicMode and GAMEMODE:IsClassicMode() or tab.NoZombieEscape and GAMEMODE.ZombieEscape
 
@@ -673,7 +582,7 @@ function PANEL:DoClick(silent, force)
 			surface.PlaySound("buttons/button18.wav")
 		end
 		remainingworth = remainingworth + tab.Price
-	elseif tab.SkillRequirement and not MySelf:IsSkillActive(tab.SkillRequirement) then
+	elseif tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement)) then
 		surface.PlaySound("buttons/button8.wav")
 		return
 	else

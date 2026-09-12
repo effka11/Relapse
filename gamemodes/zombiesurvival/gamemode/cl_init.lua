@@ -68,6 +68,9 @@ include("cl_zombieescape.lua")
 w, h = ScrW(), ScrH()
 
 MySelf = MySelf or NULL
+
+-- Always tell the server we're ready. Waiting for LocalPlayer() stalled PlayerReady
+-- on dedicated: no spawn, empty TAB, frozen view.
 hook.Add("InitPostEntity", "GetLocal", function()
 	MySelf = LocalPlayer()
 
@@ -75,7 +78,21 @@ hook.Add("InitPostEntity", "GetLocal", function()
 	gamemode.Call("HookGetLocal", MySelf)
 	RunConsoleCommand("initpostentity")
 
-	MySelf:ApplySkills()
+	local function applySkills()
+		if IsValid(MySelf) and MySelf.ApplySkills then
+			pcall(MySelf.ApplySkills, MySelf)
+			return true
+		end
+	end
+
+	if applySkills() then return end
+
+	hook.Add("Think", "GetLocal", function()
+		MySelf = LocalPlayer()
+		if applySkills() then
+			hook.Remove("Think", "GetLocal")
+		end
+	end)
 end)
 
 -- Remove when model decal crash is fixed.
@@ -224,6 +241,7 @@ function GM:TopNotify(...)
 end
 
 function GM:_InputMouseApply(cmd, x, y, ang)
+	if not IsValid(MySelf) then return end
 	if MySelf:KeyDown(IN_WALK) and MySelf:IsHolding() then
 		self.InputMouseX = math.NormalizeAngle(self.InputMouseX - x * 0.02 * GAMEMODE.PropRotationSensitivity)
 		self.InputMouseY = math.NormalizeAngle(self.InputMouseY - y * 0.02 * GAMEMODE.PropRotationSensitivity)
@@ -321,6 +339,7 @@ function GM:SetupFog()
 end
 
 function GM:_SetupWorldFog()
+	if not IsValid(MySelf) then return end
 	if self.DeathFog == 0 and not MySelf.DimVision then return end
 
 	self:SetupFog()
@@ -336,6 +355,7 @@ function GM:_SetupWorldFog()
 end
 
 function GM:_SetupSkyboxFog(skyboxscale)
+	if not IsValid(MySelf) then return end
 	if self.DeathFog == 0 and not MySelf.DimVision then return end
 
 	self:SetupFog()
@@ -454,6 +474,11 @@ GM.InputMouseApply = GM.Think
 GM.GUIMousePressed = GM.Think
 GM.HUDWeaponPickedUp = GM.Think
 function GM:LocalPlayerFound()
+	local lp = LocalPlayer()
+	if lp ~= NULL then
+		MySelf = lp
+	end
+
 	self.Think = self._Think
 	self.HUDShouldDraw = self._HUDShouldDraw
 	self.CachedFearPower = self._CachedFearPower
@@ -472,8 +497,10 @@ function GM:LocalPlayerFound()
 	self.SetupSkyboxFog = self._SetupSkyboxFog
 	self.SetupWorldFog = self._SetupWorldFog
 
-	LocalPlayer().LegDamage = 0
-	LocalPlayer().ArmDamage = 0
+	if lp ~= NULL then
+		lp.LegDamage = 0
+		lp.ArmDamage = 0
+	end
 
 	if render.GetDXLevel() >= 80 then
 		self.RenderScreenspaceEffects = self._RenderScreenspaceEffects
@@ -569,6 +596,8 @@ end
 local lastwarntim = -1
 --local NextGas = 0
 function GM:_Think()
+	if not IsValid(MySelf) then return end
+
 	local time = CurTime()
 
 	if self:GetEscapeStage() == ESCAPESTAGE_DEATH then
@@ -772,7 +801,6 @@ function GM:HumanHUD(screenscale)
 			local desiredzombies = self:GetDesiredStartingZombies()
 
 			if desiredzombies > 0 then
-				draw_SimpleTextBlurry(translate.Get(self:HasSigils() and "humans_furthest_from_sigils_are_zombies" or "humans_closest_to_spawns_are_zombies"), "ZSHUDFontSmall", w * 0.5, h * 0.25 + txth, COLOR_GRAY, TEXT_ALIGN_CENTER)
 				draw_SimpleTextBlurry(translate.Format("number_of_initial_zombies_this_game", self.WaveOneZombies * 100, desiredzombies), "ZSHUDFontSmall", w * 0.5, h * 0.7, COLOR_GRAY, TEXT_ALIGN_CENTER)
 
 				for i, pl in ipairs(self.ZombieVolunteers) do
@@ -816,7 +844,7 @@ function GM:HumanHUD(screenscale)
 end
 
 function GM:_HUDPaint()
-	if self.FilmMode then return end
+	if self.FilmMode or not IsValid(MySelf) then return end
 
 	local screenscale = BetterScreenScale()
 	local myteam = P_Team(MySelf)
@@ -940,6 +968,7 @@ function GM:RequestedDefaultCart()
 end
 
 function GM:_PostDrawTranslucentRenderables()
+	if not IsValid(MySelf) then return end
 	if not self.DrawingInSky then
 		self:DrawPointWorldHints()
 		self:DrawWorldHints()
@@ -1781,6 +1810,7 @@ end
 
 local roll = 0
 function GM:_CalcView(pl, origin, angles, fov, znear, zfar)
+	if not IsValid(pl) then return end
 	if pl.Confusion and pl.Confusion:IsValid() then
 		pl.Confusion:CalcView(pl, origin, angles, fov, znear, zfar)
 	end
@@ -2239,9 +2269,17 @@ function GM:Rewarded(class, amount)
 end
 
 function PlayMenuOpenSound()
-	MySelf:EmitSound("buttons/lightswitch2.wav", 100, 30)
+	if IsValid(MySelf) then
+		MySelf:EmitSound("buttons/lightswitch2.wav", 100, 30)
+	else
+		surface.PlaySound("buttons/lightswitch2.wav")
+	end
 end
 
 function PlayMenuCloseSound()
-	MySelf:EmitSound("buttons/lightswitch2.wav", 100, 20)
+	if IsValid(MySelf) then
+		MySelf:EmitSound("buttons/lightswitch2.wav", 100, 20)
+	else
+		surface.PlaySound("buttons/lightswitch2.wav")
+	end
 end

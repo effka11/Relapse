@@ -228,6 +228,7 @@ function meta:ProcessDamage(dmginfo)
 
 				if myteam == TEAM_UNDEAD and otherteam == TEAM_HUMAN then
 					attacker:AddLifeHumanDamage(absorb)
+					GAMEMODE:GiveZombieHumanXP(attacker, absorb)
 				end
 			end
 

@@ -167,8 +167,15 @@ function meta:SetZSXP(xp)
 end
 
 function meta:AddZSXP(xp)
-	-- TODO: Level change checking. Cache the "XP for next level" in the vault load and compare it here instead of checking every add.
-	self:SetZSXP(self:GetZSXP() + xp)
+	xp = tonumber(xp) or 0
+	if xp <= 0 then return end
+
+	self.XPRemainder = (self.XPRemainder or 0) + xp
+	local whole = math.floor(self.XPRemainder)
+	self.XPRemainder = self.XPRemainder - whole
+	if whole > 0 then
+		self:SetZSXP(self:GetZSXP() + whole)
+	end
 end
 
 -- Done on team switch to anything except human.

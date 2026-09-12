@@ -1,0 +1,8 @@
+"UnlitGeneric"
+{
+	"$basetexture" "viper/mw/attachments/icons/mpapa7/icon_attachment_sm_mpapa7_mmags"
+	"$nolod" 1
+	"$vertexalpha" 1
+	"$vertexcolor" 1
+	"$translucent" "1"
+}

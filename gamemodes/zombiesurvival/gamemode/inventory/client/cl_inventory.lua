@@ -102,16 +102,10 @@ local function ItemPanelDoClick(self)
 		viewer.m_Desc:MoveBelow(viewer.m_VBG, 8)
 		viewer.m_Desc:SetFont("ZSBodyTextFont")
 
-		local canammo = false
-		if sweptable.Primary then
-			local ammotype = sweptable.Primary.Ammo
-			if GAMEMODE.AmmoToPurchaseNames[ammotype] then
-				canammo = true
-			end
-		end
-
-		if canammo and GAMEMODE.AmmoNames[string.lower(sweptable.Primary.Ammo)] then
-			viewer.m_AmmoType:SetText(GAMEMODE.AmmoNames[string.lower(sweptable.Primary.Ammo)])
+		local canammo = GAMEMODE:HasPurchaseableAmmo(sweptable)
+		if canammo then
+			local ammotype = GAMEMODE:GetWeaponAmmoType(sweptable) or sweptable.Primary.Ammo
+			viewer.m_AmmoType:SetText(RelapseUI.ShopAmmo(ammotype))
 			viewer.m_AmmoType:PerformLayout()
 		else
 			viewer.m_AmmoType:SetText("")

@@ -25,6 +25,8 @@ AddCSLuaFile("sh_animations.lua")
 AddCSLuaFile("sh_sigils.lua")
 AddCSLuaFile("sh_channel.lua")
 AddCSLuaFile("sh_weaponquality.lua")
+AddCSLuaFile("sh_relapse_ammo.lua")
+AddCSLuaFile("sh_reconnect.lua")
 AddCSLuaFile("sh_usefulness.lua")
 AddCSLuaFile("sh_usefulness_model.lua")
 
@@ -410,6 +412,9 @@ function GM:AddResources()
 
 	resource.AddWorkshop("2459720887") -- Modern Wokefare Base
 	resource.AddWorkshop("2459723892") -- Modern Warfare 2019 SWEPs - Pistols
+	resource.AddWorkshop("2685550699") -- Random's Spetsnaz Ground Forces (Airborne Spetsnaz 2)
+	resource.AddWorkshop("2816381632") -- Random's Spetsnaz Content Pack 2 (airborne textures)
+	resource.AddWorkshop("3739488356") -- [RE2: Remake] Zombies Ragdolls
 end
 
 function GM:Initialize()
@@ -430,6 +435,8 @@ function GM:Initialize()
 
 	self:RefreshMapIsObjective()
 
+	game.ConsoleCommand("sv_hibernate_drop_bots 0\n")
+	game.ConsoleCommand("sv_hibernate_think 1\n")
 	game.ConsoleCommand("fire_dmgscale 1\n")
 	game.ConsoleCommand("mp_flashlight 1\n")
 	game.ConsoleCommand("sv_gravity 600\n")
@@ -1446,7 +1453,7 @@ GM.LastCalculatedBossTime = 0
 function GM:CalculateNextBoss()
 	local zombies = {}
 	for _, ent in pairs(team.GetPlayers(TEAM_UNDEAD)) do
-		if ent:GetInfo("zs_nobosspick") == "0" and not ent:GetZombieClassTable().Boss then
+		if not ent.IsRelapseAIBot and ent:GetInfo("zs_nobosspick") == "0" and not ent:GetZombieClassTable().Boss then
 			table.insert(zombies, ent)
 		end
 	end
@@ -1484,7 +1491,7 @@ function GM:CalculateInfliction(victim, attacker)
 	local wonhumans = 0
 	local hum
 	for _, pl in pairs(player.GetAllActive()) do
-		if not pl.Disconnecting then
+		if not pl.Disconnecting and not pl.IsRelapseAIBot then
 			if pl:Team() == TEAM_UNDEAD then
 				zombies = zombies + 1
 			elseif pl:HasWon() then
@@ -1624,6 +1631,72 @@ function GM:PlayerRepairedObject(pl, other, health, wep)
 		net.WriteEntity(other)
 		net.WriteFloat(health)
 	net.Send(pl)
+end
+
+function GM:GiveCadeOwnerPointsTo(pl, damage)
+	if self:GetWave() <= 0 or self.RoundEnded then return end
+	if not (pl and pl:IsValid() and pl:IsPlayer() and pl:Team() == TEAM_HUMAN) then return end
+
+	local hpper = self.CadeOwnerPointsPerHealth or 20
+	if hpper <= 0 or damage <= 0 then return end
+
+	pl.DefenceDamage = (pl.DefenceDamage or 0) + damage
+	pl:AddPoints(damage / hpper)
+end
+
+function GM:GiveCadeOwnerPoints(ent, damage)
+	if not ent or damage <= 0 then return end
+	if self:GetWave() <= 0 or self.RoundEnded then return end
+
+	local nails = ent.GetLivingNails and ent:GetLivingNails() or {}
+	if #nails <= 0 then return end
+
+	local shares = {}
+	local total = 0
+	for _, nail in ipairs(nails) do
+		local pl = nail.GetDeployer and nail:GetDeployer() or NULL
+		if not (pl and pl:IsValid() and pl:IsPlayer()) then
+			local uid = nail.GetOwnerUID and nail:GetOwnerUID()
+			if uid then
+				for _, p in ipairs(player.GetAll()) do
+					if p:UniqueID() == uid then
+						pl = p
+						break
+					end
+				end
+			end
+		end
+		if pl and pl:IsValid() and pl:IsPlayer() and pl:Team() == TEAM_HUMAN then
+			shares[pl] = (shares[pl] or 0) + 1
+			total = total + 1
+		end
+	end
+
+	if total <= 0 then return end
+
+	for pl, n in pairs(shares) do
+		self:GiveCadeOwnerPointsTo(pl, damage * (n / total))
+	end
+end
+
+function GM:GiveZombieBarricadeXP(attacker, damage)
+	if self:GetWave() <= 0 or self.RoundEnded then return end
+	if not (attacker and attacker:IsValid() and attacker:IsZombie()) then return end
+
+	local hpper = self.ZombieBarricadeXPPerHealth or 20
+	if hpper <= 0 or damage <= 0 then return end
+
+	attacker:AddZSXP(damage / hpper)
+end
+
+function GM:GiveZombieHumanXP(attacker, damage)
+	if self:GetWave() <= 0 or self.RoundEnded then return end
+	if not (attacker and attacker:IsValid() and attacker:IsZombie()) then return end
+
+	local hpper = self.ZombieHumanXPPerHealth or 5
+	if hpper <= 0 or damage <= 0 then return end
+
+	attacker:AddZSXP(damage / hpper)
 end
 
 function GM:CacheHonorableMentions()
@@ -1841,9 +1914,13 @@ function GM:DoRestartGame()
 		gamemode.Call("PlayerInitialSpawnRound", pl)
 		gamemode.Call("PlayerReadyRound", pl)
 
-		if pl:Team() == TEAM_UNDEAD then -- bots?
+		if pl:Team() == TEAM_UNDEAD and not pl.IsRelapseAIBot then -- leftover undead, not AI crows
 			pl:KillSilent()
 		end
+	end
+
+	if RelapseAI and RelapseAI.Manager then
+		timer.Simple(0.5, function() RelapseAI.Manager.Maintain("round") end)
 	end
 end
 
@@ -1854,7 +1931,9 @@ function GM:RestartGame()
 		pl:SetFrags(0)
 		pl:SetDeaths(0)
 		pl:SetPoints(0)
-		if not pl.IsZSBot then
+		if pl.IsRelapseAIBot then
+			pl:ChangeTeam(TEAM_UNDEAD)
+		elseif not pl.IsZSBot then
 			pl:ChangeTeam(TEAM_HUMAN)
 		end
 		pl:DoHulls()
@@ -2305,6 +2384,7 @@ function GM:PlayerInitialSpawnRound(pl)
 	pl.m_ReconnectRestore = nil
 	pl.m_ReconnectRestored = nil
 	pl.m_ReconnectAmmoState = nil
+	pl.m_ReconnectEmptyLock = nil
 
 	--local nosend = not pl.DidInitPostEntity
 	pl.DamageVulnerability = nil
@@ -2313,7 +2393,11 @@ function GM:PlayerInitialSpawnRound(pl)
 
 	local uniqueid = pl:UniqueID()
 
-	if self:TryReconnectTeam(pl) then
+	if RelapseAIPending or pl.IsRelapseAIBot then
+		-- Relapse AI bot: the brain decides the team (also keeps it across round restarts).
+		local brain = pl.IsRelapseAIBot and RelapseAI and RelapseAI.GetBrain(pl.RelapseAIBrain)
+		pl:ChangeTeam(RelapseAIPending and RelapseAIPending.team or brain and brain.Team or TEAM_UNDEAD)
+	elseif self:TryReconnectTeam(pl) then
 		-- Restored team, class, and round stats from a drop.
 	elseif self.PreviouslyDied[uniqueid] or ZSBOT then
 		-- They already died and reconnected.
@@ -2349,7 +2433,7 @@ function GM:PlayerInitialSpawnRound(pl)
 	end
 
 	if not pl.m_ReconnectRestore then
-		if pl:Team() == TEAM_UNDEAD and not self:GetWaveActive() then
+		if pl:Team() == TEAM_UNDEAD and not self:GetWaveActive() and not RelapseAIPending and not pl.IsRelapseAIBot then
 			pl:SetZombieClassName("Crow")
 			pl.DeathClass = self.DefaultZombieClass
 		else
@@ -2633,11 +2717,13 @@ function GM:GiveRandomEquipment(pl)
 end
 
 function GM:PlayerCanCheckout(pl)
-	return pl:IsValid() and pl:Team() == TEAM_HUMAN and pl:Alive() and not self.CheckedOut[pl:UniqueID()] and not self.StartingLoadout and not self.ZombieEscape and self.StartingWorth > 0 and self:GetWave() < 2
+	return pl:IsValid() and not pl.IsRelapseAIBot and pl:Team() == TEAM_HUMAN and pl:Alive() and not self.CheckedOut[pl:UniqueID()] and not self.StartingLoadout and not self.ZombieEscape and self.StartingWorth > 0 and self:GetWave() < 2
 end
 
 function GM:PlayerDeathThink(pl)
 	if self.RoundEnded or pl.Revive or self:GetWave() == 0 then return end
+	-- AI bots stay zombies (never crows) so TAB count matches bodies in the world.
+	if pl.IsRelapseAIBot and not self:GetWaveActive() then return end
 
 	if pl:GetObserverMode() == OBS_MODE_CHASE then
 		local target = pl:GetObserverTarget()
@@ -2821,6 +2907,7 @@ function GM:EntityTakeDamage(ent, dmginfo)
 						if myteam == TEAM_UNDEAD then
 							if otherteam == TEAM_HUMAN then
 								attacker:AddLifeHumanDamage(damage)
+								self:GiveZombieHumanXP(attacker, damage)
 								GAMEMODE.StatTracking:IncreaseElementKV(STATTRACK_TYPE_ZOMBIECLASS, attacker:GetZombieClassTable().Name, "HumanDamage", damage)
 							end
 						elseif myteam == TEAM_HUMAN and otherteam == TEAM_UNDEAD then
@@ -3316,7 +3403,12 @@ end
 
 GM.InitialVolunteers = {}
 function GM:SetClosestsToZombie()
-	local allplayers = player.GetAllActive()
+	local allplayers = {}
+	for _, pl in pairs(player.GetAllActive()) do
+		if not pl.IsRelapseAIBot then
+			allplayers[#allplayers + 1] = pl
+		end
+	end
 	local numplayers = #allplayers
 	if numplayers <= 1 then return end
 
@@ -4099,7 +4191,7 @@ function GM:PlayerSpawn(pl)
 		pl:SprintDisable()
 		pl:SetCrouchedWalkSpeed(classtab.CrouchedWalkSpeed or 0.45)
 
-		if not pl.Revived or not self:GetWaveActive() or CurTime() > self:GetWaveEnd() then
+		if not pl.IsRelapseAIBot and (not pl.Revived or not self:GetWaveActive() or CurTime() > self:GetWaveEnd()) then
 			pl.StartCrowing = 0
 		end
 

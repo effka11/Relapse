@@ -1,7 +1,11 @@
 local meta = FindMetaTable("Weapon")
 
+local function AmmoName(ammo)
+	return isstring(ammo) and string.lower(ammo) or "none"
+end
+
 function meta:EmptyAll(nodefaultclip)
-	if self.Primary and string.lower(self.Primary.Ammo or "") ~= "none" then
+	if self.Primary and AmmoName(self.Primary.Ammo) ~= "none" then
 		local owner = self:GetOwner()
 		if owner:IsValid() then
 			if self:Clip1() >= 1 then
@@ -13,7 +17,7 @@ function meta:EmptyAll(nodefaultclip)
 		end
 		self:SetClip1(0)
 	end
-	if self.Secondary and string.lower(self.Secondary.Ammo or "") ~= "none" then
+	if self.Secondary and AmmoName(self.Secondary.Ammo) ~= "none" then
 		local owner = self:GetOwner()
 		if owner:IsValid() then
 			if self:Clip2() >= 1 then

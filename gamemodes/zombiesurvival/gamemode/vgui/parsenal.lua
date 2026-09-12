@@ -1,35 +1,3 @@
-local function pointslabelThink(self)
-	local points = MySelf:GetPoints()
-	if self.m_LastPoints ~= points then
-		self.m_LastPoints = points
-
-		self:SetText(RelapseUI.TF("shop_points_to_spend", points))
-		self:SizeToContents()
-	end
-end
-
-hook.Add("Think", "ArsenalMenuThink", function()
-	local pan = GAMEMODE.ArsenalInterface
-	if pan and pan:IsValid() and pan:IsVisible() then
-		local mx, my = gui.MousePos()
-		local x, y = pan:GetPos()
-		if mx < x - 16 or my < y - 16 or mx > x + pan:GetWide() + 16 or my > y + pan:GetTall() + 16 then
-			pan:SetVisible(false)
-		end
-	end
-end)
-
-local function ArsenalMenuCenterMouse(self)
-	local x, y = self:GetPos()
-	local w, h = self:GetSize()
-	gui.SetMousePos(x + w / 2, y + h / 2)
-end
-
-local function worthmenuDoClick()
-	MakepWorth()
-	GAMEMODE.ArsenalInterface:Close()
-end
-
 local function CanBuy(item, pan)
 	if item.NoClassicMode and GAMEMODE:IsClassicMode() then
 		return false
@@ -49,6 +17,10 @@ local function CanBuy(item, pan)
 		return false
 	end
 
+	if not IsValid(MySelf) then
+		return false
+	end
+
 	if not pan.NoPoints and MySelf:GetPoints() < math.floor(item.Price * (MySelf.ArsenalDiscount or 1)) then
 		return false
 	elseif pan.NoPoints and MySelf:GetAmmoCount("scrap") < math.ceil(GAMEMODE:PointsToScrap(item.Price)) then
@@ -56,6 +28,40 @@ local function CanBuy(item, pan)
 	end
 
 	return true
+end
+
+local function ItemIsLocked(item)
+	if not item then return true end
+	if item.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(item.SkillRequirement)) then
+		return true
+	end
+	if item.NoClassicMode and GAMEMODE:IsClassicMode() then
+		return true
+	end
+	if item.NoZombieEscape and GAMEMODE.ZombieEscape then
+		return true
+	end
+	if item.Tier and GAMEMODE.LockItemTiers and not GAMEMODE.ZombieEscape and not GAMEMODE.ObjectiveMap and not GAMEMODE:IsClassicMode() then
+		if not GAMEMODE:GetWaveActive() then
+			if GAMEMODE:GetWave() + 1 < item.Tier then
+				return true
+			end
+		elseif GAMEMODE:GetWave() < item.Tier then
+			return true
+		end
+	end
+	return false
+end
+
+local function SetViewerPurchaseVisible(viewer, vis)
+	if not IsValid(viewer) then return end
+	if IsValid(viewer.m_PurchaseB) then viewer.m_PurchaseB:SetVisible(vis) end
+	if IsValid(viewer.m_PurchaseLabel) then viewer.m_PurchaseLabel:SetVisible(vis) end
+	if IsValid(viewer.m_PurchasePrice) then viewer.m_PurchasePrice:SetVisible(vis) end
+	if vis then return end
+	if IsValid(viewer.m_AmmoB) then viewer.m_AmmoB:SetVisible(false) end
+	if IsValid(viewer.m_AmmoL) then viewer.m_AmmoL:SetVisible(false) end
+	if IsValid(viewer.m_AmmoPrice) then viewer.m_AmmoPrice:SetVisible(false) end
 end
 
 local function ItemPanelThink(self)
@@ -93,7 +99,7 @@ local function ItemPanelPaint(self, w, h)
 	local unaffordable = self.m_LastAbleToBuy == false
 	RelapseUI.PaintCard(self, w, h, selected, false, unaffordable)
 
-	if self.ShopTabl.SWEP and MySelf:HasInventoryItem(self.ShopTabl.SWEP) then
+	if self.ShopTabl.SWEP and IsValid(MySelf) and MySelf:HasInventoryItem(self.ShopTabl.SWEP) then
 		local wash = RelapseUI.Col.Wash
 		surface.SetDrawColor(wash.r, wash.g, wash.b, wash.a or 40)
 		surface.DrawRect(0, 0, w, h)
@@ -250,13 +256,10 @@ end
 
 function GM:HasPurchaseableAmmo(sweptable)
 	local lower = self:GetWeaponAmmoType(sweptable)
-	if not lower then return end
-	if self.AmmoToPurchaseNames[lower] then return true end
-	for k in pairs(self.AmmoToPurchaseNames) do
-		if string.lower(k) == lower then
-			return true
-		end
+	if not lower and sweptable and sweptable.Primary then
+		lower = sweptable.Primary.Ammo
 	end
+	return self:GetAmmoPurchaseSignature(lower) ~= nil
 end
 
 function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
@@ -324,24 +327,26 @@ function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
 	RelapseUI.LayoutViewerAmmo(viewer)
 end
 
-local function ItemPanelDoClick(self)
-	local shoptbl = self.ShopTabl
-	local viewer = self.NoPoints and GAMEMODE.RemantlerInterface.TrinketsFrame.Viewer or GAMEMODE.ArsenalInterface.Viewer
+local function SetupViewerPurchase(self, viewer, shoptbl, sweptable)
+	if not IsValid(viewer) then return end
 
-	if not shoptbl then return end
-	local sweptable = GAMEMODE.ZSInventoryItemData[shoptbl.SWEP] or weapons.Get(shoptbl.SWEP)
-
-	if not sweptable or GAMEMODE.AlwaysQuickBuy then
-		RunConsoleCommand("zs_pointsshopbuy", self.ID, self.NoPoints and "scrap")
+	local arsenal = GAMEMODE.ArsenalInterface
+	if IsValid(arsenal) and viewer == arsenal.Viewer and IsValid(arsenal.Purchase) then
+		arsenal.SelectedBuy = self
+		local ammo = arsenal.AmmoB
+		if IsValid(ammo) then
+			local canammo = GAMEMODE:HasPurchaseableAmmo(sweptable)
+			if canammo then
+				local ammoId = GAMEMODE:GetWeaponAmmoType(sweptable) or (sweptable.Primary and sweptable.Primary.Ammo)
+				ammo.AmmoType = GAMEMODE:GetAmmoPurchaseSignature(ammoId)
+			else
+				ammo.AmmoType = nil
+			end
+		end
 		return
 	end
 
-	for _, v in pairs(self:GetParent():GetChildren()) do
-		v.On = false
-	end
-	self.On = true
-
-	GAMEMODE:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
+	if not IsValid(viewer.m_PurchaseB) then return end
 
 	local m = RelapseUI.M()
 	local canammo = GAMEMODE:HasPurchaseableAmmo(sweptable)
@@ -366,7 +371,8 @@ local function ItemPanelDoClick(self)
 
 	purb = viewer.m_AmmoB
 	if canammo then
-		purb.AmmoType = GAMEMODE.AmmoToPurchaseNames[sweptable.Primary.Ammo]
+		local ammoId = GAMEMODE:GetWeaponAmmoType(sweptable) or (sweptable.Primary and sweptable.Primary.Ammo)
+		purb.AmmoType = GAMEMODE:GetAmmoPurchaseSignature(ammoId)
 		purb.DoClick = function() RunConsoleCommand("zs_pointsshopbuy", "ps_"..purb.AmmoType) end
 	end
 	purb:SetPos(viewer:GetWide() - purb:GetWide() - m.gutter, buyY)
@@ -377,14 +383,36 @@ local function ItemPanelDoClick(self)
 	purl:SetVisible(canammo)
 
 	ppurbl = viewer.m_AmmoPrice
-	price = math.floor(9 * (MySelf.ArsenalDiscount or 1))
+	local ammoId = GAMEMODE:GetWeaponAmmoType(sweptable) or (sweptable.Primary and sweptable.Primary.Ammo)
+	local ammoSig = GAMEMODE:GetAmmoPurchaseSignature(ammoId)
+	local ammoItem = ammoSig and GAMEMODE.Items and GAMEMODE.Items["ps_" .. ammoSig]
+	local ammoPts = (ammoItem and ammoItem.Worth) or GAMEMODE:GetAmmoShopPoints(ammoId)
+	price = math.floor((ammoPts or 9) * (MySelf.ArsenalDiscount or 1))
 	ppurbl:SetText(RelapseUI.TF("shop_price_points", price))
 	ppurbl:SizeToContents()
 	ppurbl:SetPos(purb:GetWide() / 2 - ppurbl:GetWide() / 2, purb:GetTall() * 0.75 - ppurbl:GetTall() * 0.5)
 	ppurbl:SetVisible(canammo)
 end
 
-local function ArsenalMenuThink(self)
+local function ItemPanelDoClick(self)
+	local shoptbl = self.ShopTabl
+	local viewer = self.NoPoints and GAMEMODE.RemantlerInterface.TrinketsFrame.Viewer or GAMEMODE.ArsenalInterface.Viewer
+
+	if not shoptbl then return end
+	local sweptable = GAMEMODE.ZSInventoryItemData[shoptbl.SWEP] or weapons.Get(shoptbl.SWEP)
+
+	if not sweptable or GAMEMODE.AlwaysQuickBuy then
+		RunConsoleCommand("zs_pointsshopbuy", self.ID, self.NoPoints and "scrap")
+		return
+	end
+
+	for _, v in pairs(self:GetParent():GetChildren()) do
+		v.On = false
+	end
+	self.On = true
+
+	GAMEMODE:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
+	SetupViewerPurchase(self, viewer, shoptbl, sweptable)
 end
 
 function GM:AttachKillicon(kitbl, itempan, mdlframe, ammo, missing_skill)
@@ -441,7 +469,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 	local screenscale = BetterScreenScale()
 
 	local nottrinkets = tab.Category ~= ITEMCAT_TRINKETS
-	local missing_skill = tab.SkillRequirement and not MySelf:IsSkillActive(tab.SkillRequirement)
+	local missing_skill = tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))
 	local wid = 280
 
 	local itempan = vgui.Create("DButton")
@@ -750,6 +778,8 @@ function GM:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, me
 	self:CreateItemViewerGenericElems(viewer)
 	RelapseUI.PinViewerToItems(frame, propertysheet)
 
+	if not remantler then return end
+
 	local purchaseb = vgui.Create("DButton", viewer)
 	purchaseb:SetText("")
 	purchaseb:SetSize(RelapseUI.Cells(10), m.btnH)
@@ -781,169 +811,397 @@ function GM:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, me
 	viewer.m_AmmoPrice = pricelab
 end
 
-function GM:OpenArsenalMenu()
-	if self.ArsenalInterface and self.ArsenalInterface:IsValid() then
-		self.ArsenalInterface:SetVisible(true)
-		self.ArsenalInterface:CenterMouse()
+local ARSENAL_CARD = {}
+
+function ARSENAL_CARD:Init()
+	self:SetText("")
+	self:SetPaintBackgroundEnabled(false)
+	self:SetPaintBorderEnabled(false)
+
+	local m = RelapseUI.M()
+	self:SetCardSize(RelapseUI.Cells(18), m.cardH)
+
+	self.ModelFrame = vgui.Create("DPanel", self)
+	RelapseUI.PlaceCardIcon(self.ModelFrame, self:GetWide(), self.CardH)
+	self.ModelFrame:SetVisible(false)
+	self.ModelFrame:SetMouseInputEnabled(false)
+	self.ModelFrame.Paint = function() end
+
+	self.NameLabel = EasyLabel(self, "", "Relapse20")
+	self.NameLabel:SetContentAlignment(4)
+	self.NameLabel:SetTextColor(RelapseUI.Col.Text)
+	self.NameLabel:DockPadding(0, 0, 0, 0)
+	self.NameLabel:DockMargin(0, 0, 0, 0)
+
+	self.PriceLabel = EasyLabel(self, "", "Relapse20")
+	self.PriceLabel:SetContentAlignment(6)
+	self.PriceLabel:SetTextColor(RelapseUI.Col.Accent)
+	self.PriceLabel:DockPadding(0, 0, 0, 0)
+	self.PriceLabel:DockMargin(0, 0, 0, 0)
+
+	self.ItemCounter = vgui.Create("ItemAmountCounter", self)
+	self:SetShopItem(nil, nil)
+end
+
+function ARSENAL_CARD:SetCardSize(w, h)
+	self.CardW = w
+	self.CardH = h
+	self:SetSize(w, h)
+end
+
+function ARSENAL_CARD:ApplySchemeSettings()
+end
+
+function ARSENAL_CARD:PerformLayout(w, h)
+	if self.CardW then
+		self:SetSize(self.CardW, self.CardH)
+		w, h = self.CardW, self.CardH
+	else
+		w = w or self:GetWide()
+		h = h or self:GetTall()
+	end
+
+	local m = RelapseUI.M()
+	local inset = m.cardPad
+
+	if IsValid(self.NameLabel) then
+		local priceW = IsValid(self.PriceLabel) and self.PriceLabel:GetWide() or 0
+		self.NameLabel:SetPos(inset, inset)
+		self.NameLabel:SetWide(math.max(0, w - 2 * inset - priceW - m.fine))
+	end
+	if IsValid(self.PriceLabel) then
+		self.PriceLabel:SetPos(w - self.PriceLabel:GetWide() - inset, inset)
+	end
+	if IsValid(self.ModelFrame) and self.ModelFrame:IsVisible() then
+		RelapseUI.PlaceCardIcon(self.ModelFrame, w, h)
+	end
+	if IsValid(self.ItemCounter) and self.ItemCounter:IsVisible() then
+		self.ItemCounter:SetPos(w - self.ItemCounter:GetWide() - inset, h - self.ItemCounter:GetTall() - inset)
+	end
+	if IsValid(self.StockLabel) then
+		self.StockLabel:SetPos(inset, h - self.StockLabel:GetTall() - inset)
+	end
+end
+
+function ARSENAL_CARD:SetShopItem(id, tab)
+	self.ID = tab and (tab.Signature or id) or id
+	self.ShopTabl = tab
+	self.NoPoints = false
+
+	local m = RelapseUI.M()
+	local inset = m.cardPad
+
+	if not tab then
+		self.ModelFrame:SetVisible(false)
+		self.ItemCounter:SetVisible(false)
+		self.NameLabel:SetText("")
 		return
 	end
 
-	local wid, hei, m = RelapseUI.FrameSize(64, 48)
-	RelapseUI.CreateFonts()
-	local pad = m.pad
-	local tabhei = m.tabs
-	local innerW = wid - 2 * pad
-	local sheetW = innerW - m.sidebar - m.gutter
-	local sheetH = hei - m.header - m.footer
+	local missing_skill = tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))
+	local nottrinkets = tab.Category ~= ITEMCAT_TRINKETS
+	self:SetCardSize(self.CardW or self:GetWide(), nottrinkets and m.cardH or m.trinketH)
 
-	local frame = vgui.Create("DFrame")
-	frame:SetSize(wid, hei)
-	frame:Center()
-	frame:SetDeleteOnClose(false)
-	frame:SetTitle("")
-	frame:SetDraggable(false)
-	frame:DockPadding(0, 0, 0, 0)
-	frame.RelapseFooter = m.footer
-	frame.Paint = RelapseUI.PaintWindow
-	RelapseUI.HideChrome(frame)
-	frame.CenterMouse = ArsenalMenuCenterMouse
-	frame.Think = ArsenalMenuThink
+	if nottrinkets then
+		RelapseUI.PlaceCardIcon(self.ModelFrame, self:GetWide(), self.CardH)
+		self.ModelFrame:SetVisible(true)
+		for _, ch in ipairs(self.ModelFrame:GetChildren()) do
+			if IsValid(ch) then ch:Remove() end
+		end
+		local kitbl = killicon.Get(GAMEMODE.ZSInventoryItemData[tab.SWEP] and "weapon_zs_craftables" or tab.SWEP or tab.Model)
+		if not RelapseUI.TryAttachCardIcon(self, self.ModelFrame, tab, missing_skill) then
+			if kitbl then
+				GAMEMODE:AttachKillicon(kitbl, self, self.ModelFrame, tab.Category == ITEMCAT_AMMO, missing_skill)
+			elseif tab.Model then
+				local mdlpanel = vgui.Create("DModelPanel", self.ModelFrame)
+				mdlpanel:SetSize(self.ModelFrame:GetSize())
+				mdlpanel:SetModel(tab.Model)
+				local mins, maxs = mdlpanel.Entity:GetRenderBounds()
+				mdlpanel:SetCamPos(mins:Distance(maxs) * Vector(0.75, 0.75, 0.5))
+				mdlpanel:SetLookAt((mins + maxs) / 2)
+			end
+		end
+	else
+		self.ModelFrame:SetVisible(false)
+	end
+
+	if tab.SWEP or tab.Countables then
+		self.ItemCounter:SetVisible(true)
+		self.ItemCounter:SetItemID(id)
+	else
+		self.ItemCounter:SetVisible(false)
+	end
+
+	if missing_skill then
+		self.PriceLabel:SetTextColor(RelapseUI.Col.Danger)
+		self.PriceLabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
+	elseif tab.Price then
+		local price = math.floor(tab.Price * (MySelf.ArsenalDiscount or 1))
+		self.PriceLabel:SetTextColor(RelapseUI.Col.Accent)
+		self.PriceLabel:SetText(tostring(price))
+	else
+		self.PriceLabel:SetText("")
+	end
+	self.PriceLabel:SizeToContents()
+
+	if tab.MaxStock then
+		if not IsValid(self.StockLabel) then
+			self.StockLabel = EasyLabel(self, "", "Relapse13", RelapseUI.Col.Muted)
+		end
+		self.StockLabel:SetText(RelapseUI.TF("shop_remaining", tab.MaxStock))
+		self.StockLabel:SizeToContents()
+	elseif IsValid(self.StockLabel) then
+		self.StockLabel:SetVisible(false)
+	end
+
+	self.Locked = missing_skill or ItemIsLocked(tab)
+
+	if not nottrinkets and tab.SubCategory then
+		local catlabel = EasyLabel(self, RelapseUI.ShopSubCat(tab.SubCategory), "Relapse13", RelapseUI.Col.Muted)
+		catlabel:SizeToContents()
+		catlabel:SetPos(inset, self:GetTall() * 0.55 - catlabel:GetTall() * 0.5)
+	end
+
+	self.NameLabel:SetText(RelapseUI.WepName(tab))
+	self.NameLabel:SetTextColor(RelapseUI.Col.Text)
+	self.NameLabel:SizeToContents()
+	self:InvalidateLayout()
+end
+
+function ARSENAL_CARD:Think()
+	local tab = self.ShopTabl
+	if not tab then return end
+
+	self.Locked = ItemIsLocked(tab)
+	self.m_LastAbleToBuy = CanBuy(tab, self)
+
+	if IsValid(self.StockLabel) and tab.MaxStock then
+		local stocks = GAMEMODE:GetItemStocks(self.ID)
+		if stocks ~= self.m_LastStocks then
+			self.m_LastStocks = stocks
+			self.StockLabel:SetText(RelapseUI.TF("shop_remaining", stocks))
+			self.StockLabel:SizeToContents()
+			self.StockLabel:SetTextColor(stocks > 0 and RelapseUI.Col.Muted or RelapseUI.Col.Danger)
+			self:InvalidateLayout()
+		end
+	end
+end
+
+function ARSENAL_CARD:Paint(w, h)
+	RelapseUI.PaintCard(self, w, h, self.On, self.Locked, self.m_LastAbleToBuy == false)
+	if self.ShopTabl and self.ShopTabl.SWEP and IsValid(MySelf) and MySelf:HasInventoryItem(self.ShopTabl.SWEP) then
+		local wash = RelapseUI.Col.Wash
+		surface.SetDrawColor(wash.r, wash.g, wash.b, wash.a or 40)
+		surface.DrawRect(0, 0, w, h)
+	end
+	return true
+end
+
+function ARSENAL_CARD:OnCursorEntered()
+	local shoptbl = self.ShopTabl
+	if not shoptbl then return end
+
+	local viewer = GAMEMODE.ArsenalInterface and GAMEMODE.ArsenalInterface.Viewer
+	local sweptable = GAMEMODE.ZSInventoryItemData[shoptbl.SWEP] or weapons.Get(shoptbl.SWEP)
+	if sweptable and IsValid(viewer) then
+		GAMEMODE:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
+		if self.On then
+			SetupViewerPurchase(self, viewer, shoptbl, sweptable)
+		end
+	end
+end
+
+function ARSENAL_CARD:DoClick()
+	ItemPanelDoClick(self)
+end
+
+function ARSENAL_CARD:DoRightClick()
+	local menu = DermaMenu(self)
+	menu:AddOption(RelapseUI.T("shop_buy"), function()
+		RunConsoleCommand("zs_pointsshopbuy", self.ID, self.NoPoints and "scrap")
+	end)
+	menu:Open()
+end
+
+vgui.Register("ZSArsenalButton", ARSENAL_CARD, "DButton")
+
+function GM:AddArsenalCard(list, i, tab, L)
+	local button = vgui.Create("ZSArsenalButton")
+	local trinkets = tab.Category == ITEMCAT_TRINKETS
+	button:SetCardSize(L.cardW, trinkets and L.m.trinketH or L.m.cardH)
+	button:SetShopItem(i, tab)
+	list:AddItem(button)
+	return button
+end
+
+local function ArsenalThink(self)
+	if not IsValid(MySelf) then return end
+	if MySelf:Team() ~= TEAM_HUMAN then
+		self:Close()
+	end
+end
+
+function GM:OpenArsenalMenu()
+	if self.ArsenalInterface and self.ArsenalInterface:IsValid() then
+		self.ArsenalInterface:SetVisible(true)
+		self.ArsenalInterface:MakePopup()
+		return
+	end
+
+	local frame, L, topspace, bottomspace, propertysheet = RelapseUI.BuildShopFrame("shop_points_title", {
+		deleteOnClose = false
+	})
+	frame.Think = ArsenalThink
 	self.ArsenalInterface = frame
 
-	local topspace = vgui.Create("DPanel", frame)
-	topspace:SetPaintBackground(false)
-	topspace:SetSize(innerW, m.header)
-	topspace:SetPos(pad, 0)
+	local m = L.m
+	local chip, _, pointslab = RelapseUI.CreateShopChip(bottomspace, RelapseUI.T("shop_points_label"), IsValid(MySelf) and MySelf:GetPoints() or 0)
+	frame.WorthLab = pointslab
+	frame.WorthChip = chip
+	pointslab.Think = function(me)
+		if not IsValid(MySelf) then return end
+		local points = MySelf:GetPoints()
+		if me.m_LastPoints ~= points then
+			me.m_LastPoints = points
+			RelapseUI.UpdateWorthLabel(me, points)
+		end
+	end
 
-	local title = EasyLabel(topspace, RelapseUI.T("shop_points_title"), "Relapse22", RelapseUI.Col.Text)
-	local subtitle = EasyLabel(topspace, RelapseUI.T("shop_points_subtitle"), "Relapse13", RelapseUI.Col.Muted)
-	local blockY = math.max(0, (m.header - title:GetTall() - subtitle:GetTall()) * 0.5)
-	title:SetPos(0, blockY)
-	subtitle:SetPos(0, 0)
-	subtitle:MoveBelow(title, 0)
+	local buy = vgui.Create("DButton", bottomspace)
+	buy:SetFont("Relapse20")
+	buy:SetText(RelapseUI.T("shop_purchase"))
+	buy:SetSize(RelapseUI.Cells(12), m.btnH)
+	RelapseUI.AlignFooterRight(buy)
+	RelapseUI.AlignFooterBottom(buy)
+	buy.Paint = RelapseUI.PaintPrimaryButton
+	buy.DoClick = function()
+		local card = frame.SelectedBuy
+		if not IsValid(card) then
+			surface.PlaySound("buttons/button8.wav")
+			return
+		end
+		RunConsoleCommand("zs_pointsshopbuy", card.ID, card.NoPoints and "scrap")
+	end
+	frame.Purchase = buy
 
-	local wsb = EasyButton(topspace, RelapseUI.T("shop_worth_menu"), RelapseUI.sPx(8), RelapseUI.sPx(4))
-	wsb:SetFont("Relapse15")
-	wsb:SetSize(RelapseUI.Cells(8), m.btnH)
-	wsb:AlignRight(0)
-	wsb:AlignTop((m.header - m.btnH) * 0.5)
-	wsb.Paint = RelapseUI.PaintGhostButton
-	wsb.DoClick = worthmenuDoClick
+	local ammo = vgui.Create("DButton", bottomspace)
+	ammo:SetFont("Relapse20")
+	ammo:SetText(RelapseUI.T("shop_ammo"))
+	ammo:SetSize(RelapseUI.Cells(6), m.btnH)
+	ammo:MoveLeftOf(buy, m.gutter)
+	RelapseUI.AlignFooterBottom(ammo)
+	ammo.Paint = RelapseUI.PaintGhostButton
+	ammo.DoClick = function(me)
+		if not me.AmmoType then
+			surface.PlaySound("buttons/button8.wav")
+			return
+		end
+		RunConsoleCommand("zs_pointsshopbuy", "ps_" .. me.AmmoType)
+	end
+	frame.AmmoB = ammo
+	pointslab.RelapseBottomOf = buy
 
-	local bottomspace = vgui.Create("DPanel", frame)
-	bottomspace:SetPaintBackground(false)
-	bottomspace:SetSize(innerW, m.footer)
-	bottomspace:SetPos(pad, hei - m.footer)
+	local tierPanes = {}
 
-	local pointslabel = EasyLabel(bottomspace, RelapseUI.TF("shop_points_to_spend", 0), "Relapse15", RelapseUI.Col.Accent)
-	pointslabel:AlignLeft(0)
-	pointslabel:CenterVertical()
-	pointslabel.Think = pointslabelThink
-
-	local lab = EasyLabel(bottomspace, " ", "Relapse13")
-	lab:AlignTop(m.fine)
-	lab:AlignRight(0)
-	frame.m_SpacerBottomLabel = lab
-
-	local propertysheet = vgui.Create("DPropertySheet", frame)
-	propertysheet:SetSize(sheetW, sheetH)
-	propertysheet:SetPos(pad, m.header)
-	propertysheet:SetPadding(0)
-	propertysheet.Paint = RelapseUI.PaintSheet
-
-	for catid, catname in ipairs(GAMEMODE.ItemCategories) do
+	for catid in ipairs(GAMEMODE.ItemCategories) do
 		local hasitems = false
-		for i, tab in ipairs(GAMEMODE.Items) do
+		for _, tab in ipairs(GAMEMODE.Items) do
 			if tab.Category == catid and tab.PointShop then
 				hasitems = true
 				break
 			end
 		end
+		if not hasitems then continue end
 
-		if hasitems then
-			local tabpane = vgui.Create("DPanel", propertysheet)
-			tabpane.Paint = function() end
-			tabpane.Grids = {}
-			tabpane.Buttons = {}
+		local trinkets = catid == ITEMCAT_TRINKETS
+		local usecats = catid == ITEMCAT_GUNS or catid == ITEMCAT_MELEE
+		local host, grids
 
-			local usecats = catid == ITEMCAT_GUNS or catid == ITEMCAT_MELEE or catid == ITEMCAT_TRINKETS
-			local trinkets = catid == ITEMCAT_TRINKETS
-			local offset = RelapseUI.Cells(4)
-			local screenscale = RelapseUI.S()
-
-			local itemframe = vgui.Create("DScrollPanel", tabpane)
-			RelapseUI.StyleScroll(itemframe)
-			itemframe:SetSize(propertysheet:GetWide(), propertysheet:GetTall() - (usecats and (32 + offset) or 32))
-			itemframe:SetPos(0, usecats and offset or 0)
-
-			local mkgrid = function()
-				local list = vgui.Create("DGrid", itemframe)
-				list:SetPos(0, 0)
-				list:SetSize(propertysheet:GetWide() - 312, propertysheet:GetTall())
-				list:SetCols(2)
-				list:SetColWide(280 * screenscale)
-				list:SetRowHeight((trinkets and 64 or 100) * screenscale)
-
-				return list
-			end
-
-			local subcats = GAMEMODE.ItemSubCategories
-			if usecats then
-				local ind, tbn = 1
-				for i = ind, (trinkets and #subcats or 5) do
-					local ispacer = trinkets and ((i-1) % 3)+1 or i
-					local start = i == (catid == ITEMCAT_GUNS and 2 or ind)
-
-					tbn = EasyButton(tabpane, trinkets and RelapseUI.ShopSubCat(i) or RelapseUI.TF("shop_tier", i), 2, 8)
-					tbn:SetFont("Relapse13")
-					tbn.Paint = RelapseUI.PaintGhostButton
-					tbn:SetAlpha(start and 255 or 70)
-					tbn:AlignRight((trinkets and -35 or -15) * screenscale -
-						(ispacer - ind) * (ind == 1 and (trinkets and 190 or 110) or 145) * screenscale
-					)
-					tbn:AlignTop(trinkets and i <= 3 and 0 or trinkets and 28 or 16)
-					tbn:SetContentAlignment(5)
-					tbn:SizeToContents()
-					tbn.DoClick = function(me)
-						for k, v in pairs(tabpane.Grids) do
-							v:SetVisible(k == i)
-							tabpane.Buttons[k]:SetAlpha(k == i and 255 or 70)
-						end
-					end
-
-					tabpane.Grids[i] = mkgrid()
-					tabpane.Grids[i]:SetVisible(start)
-					tabpane.Buttons[i] = tbn
-				end
-			else
-				tabpane.Grid = mkgrid()
-			end
-
-			local sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), tabpane, GAMEMODE.ItemCategoryIcons[catid], false, false)
-			sheet.Panel:SetPos(0, tabhei + 2)
-
-			for i, tab in ipairs(GAMEMODE.Items) do
-				if tab.PointShop and tab.Category == catid then
-					self:AddShopItem(
-						trinkets and tabpane.Grids[tab.SubCategory] or tabpane.Grid or tabpane.Grids[tab.Tier or 1],
-						i, tab
-					)
+		if usecats then
+			host = vgui.Create("DPanel", propertysheet)
+			host.Paint = function() return true end
+			host.Grids = {}
+			host.TierFrames = {}
+			host.PerformLayout = function(me, w, h)
+				for _, sp in pairs(me.TierFrames) do
+					sp:SetPos(0, 0)
+					sp:SetSize(w, h)
 				end
 			end
-
-			local tabs = {}
-			for i, item in ipairs(propertysheet.Items or {}) do
-				tabs[i] = item.Tab
+			for i = 1, 5 do
+				local itemframe = vgui.Create("DScrollPanel", host)
+				itemframe.Paint = function() return true end
+				RelapseUI.StyleScroll(itemframe)
+				host.Grids[i] = RelapseUI.MakeShopGrid(itemframe, L, false)
+				host.TierFrames[i] = itemframe
+				itemframe:SetVisible(i == 1)
 			end
+			grids = host.Grids
+			tierPanes[catid] = host
+		else
+			host = vgui.Create("DScrollPanel", propertysheet)
+			host.Paint = function() return true end
+			RelapseUI.StyleScroll(host)
+			host.Grid = RelapseUI.MakeShopGrid(host, L, trinkets)
+			grids = nil
+		end
 
-			self:ConfigureMenuTabs(tabs, tabhei)
+		local sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), host, GAMEMODE.ItemCategoryIcons[catid], false, false)
+		sheet.Panel:SetPos(0, L.tabhei + L.tabGap)
+
+		for i, tab in ipairs(GAMEMODE.Items) do
+			if tab.PointShop and tab.Category == catid then
+				local list = host.Grid or grids[tab.Tier or 1]
+				if IsValid(list) then
+					self:AddArsenalCard(list, i, tab, L)
+				end
+			end
 		end
 	end
 
-	self:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, MENU_POINTSHOP)
-	self:PrecacheKillicons()
-	RelapseUI.WarmPropertySheet(propertysheet)
+	local labels = {}
+	for i = 1, 5 do
+		labels[i] = RelapseUI.TF("shop_tier_short", i)
+	end
 
-	frame:MakePopup()
-	frame:CenterMouse()
+	local function applyTier(idx)
+		frame.RelapseTier = idx
+		for _, pane in pairs(tierPanes) do
+			for k, sp in pairs(pane.TierFrames) do
+				sp:SetVisible(k == idx)
+				if k == idx then
+					sp:InvalidateLayout(true)
+				end
+			end
+		end
+	end
+
+	local strip = RelapseUI.CreateFilterStrip(bottomspace, labels, 1, applyTier)
+	strip:SetVisible(false)
+	applyTier(1)
+	RelapseUI.PlaceShopTiers(strip, L)
+
+	local function syncSubTabs(tabpanel)
+		local pan = tabpanel and tabpanel.GetPanel and tabpanel:GetPanel()
+		local show = IsValid(pan) and pan.Grids ~= nil
+		strip:SetVisible(show)
+		if show then
+			RelapseUI.PlaceShopTiers(strip, L)
+		end
+		if IsValid(frame.Viewer) then
+			SetViewerPurchaseVisible(frame.Viewer, false)
+		end
+	end
+
+	local tabs = {}
+	for i, item in ipairs(propertysheet.Items or {}) do
+		tabs[i] = item.Tab
+	end
+
+	self:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, MENU_POINTSHOP)
+	self:ConfigureMenuTabs(tabs, L.tabhei, syncSubTabs)
+	syncSubTabs(propertysheet:GetActiveTab())
+
+	self:PrecacheKillicons()
+	RelapseUI.FinishShopFrame(frame, propertysheet)
 end

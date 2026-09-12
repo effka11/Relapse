@@ -127,6 +127,11 @@ GM.ZombieFinishPoints = 1
 GM.WinXP = 300
 -- XP for a zombie landing the killing blow on a human. Not a point.
 GM.ZombieKillXP = 100
+-- Zombies have no arsenal points. Damage XP only. HP per 1 XP:
+GM.ZombieHumanXPPerHealth = 5
+GM.ZombieBarricadeXPPerHealth = 20
+-- Human: HP of zombie damage to your nailed prop / aegis per 1 arsenal point.
+GM.CadeOwnerPointsPerHealth = 20
 GM.PoisonZombiePointRatio = 60 -- Has an enormous head hitbox
 GM.HeadcrabZombiePointRatio = 30
 GM.NoHeadboxZombiePointRatio = 38

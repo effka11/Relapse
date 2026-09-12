@@ -35,7 +35,8 @@ GM.SpeedToText = {
 	[-1] = "Ultra Slow",
 }
 
-GM.AmmoToPurchaseNames = {
+GM.AmmoToPurchaseNames = GM.AmmoToPurchaseNames or {}
+local ammoBuy = {
 	["pistol"] = "pistolammo",
 	["buckshot"] = "shotgunammo",
 	["smg1"] = "smgammo",
@@ -46,6 +47,9 @@ GM.AmmoToPurchaseNames = {
 	["impactmine"] = "impactmine",
 	["chemical"] = "chemical"
 }
+for k, v in pairs(ammoBuy) do
+	GM.AmmoToPurchaseNames[k] = v
+end
 
 GM.WeaponStatBarVals = {
 	{"MeleeDamage", "Damage", 2, 140, false},

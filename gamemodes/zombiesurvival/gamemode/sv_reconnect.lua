@@ -87,22 +87,30 @@ end
 function GM:CollectPlayerAmmo(pl)
 	local ammo = {}
 	local types = CollectAmmoTypes(self)
+	local held = {}
+
+	local function mark(ammotype)
+		if not ammotype or ammotype == "" or not isstring(ammotype) then return end
+		if SKIP_AMMO[string.lower(ammotype)] then return end
+		types[ammotype] = true
+		held[ammotype] = true
+	end
 
 	for _, wep in pairs(pl:GetWeapons()) do
 		if wep:IsValid() then
-			if wep.Primary and wep.Primary.Ammo then
-				types[wep.Primary.Ammo] = true
+			if wep.Primary then
+				mark(wep.Primary.Ammo)
 			end
-			if wep.Secondary and wep.Secondary.Ammo then
-				types[wep.Secondary.Ammo] = true
+			if wep.Secondary then
+				mark(wep.Secondary.Ammo)
 			end
 		end
 	end
 
 	for ammotype in pairs(types) do
 		if not SKIP_AMMO[string.lower(tostring(ammotype))] then
-			local count = pl:GetAmmoCount(ammotype)
-			if count and count > 0 then
+			local count = math.max(0, pl:GetAmmoCount(ammotype) or 0)
+			if self:ShouldSaveReconnectAmmo(count, held[ammotype]) then
 				ammo[ammotype] = count
 			end
 		end
@@ -311,6 +319,26 @@ local function GiveReconnectWeapon(pl, class)
 	return wep
 end
 
+-- Empty MW guns fail engine SelectWeapon (HasAnyAmmo is false at Clip1 0).
+local function RestoreReconnectActiveWeapon(pl, class)
+	if not IsValid(pl) or not class or not pl:HasWeapon(class) then return end
+
+	local wep = pl:GetWeapon(class)
+	if not (wep and wep:IsValid()) then return end
+
+	if pl:GetActiveWeapon() == wep then return end
+
+	local active = pl:GetActiveWeapon()
+	if active:IsValid() and not active.Unarmed and active:GetClass() ~= "weapon_zs_fists" then
+		return
+	end
+
+	pl:SelectWeapon(class)
+	if pl:GetActiveWeapon() == wep then return end
+
+	pl:SetActiveWeapon(wep)
+end
+
 local function WeaponPrimarySpare(pl, class, state)
 	local function count_for(ammotype)
 		if not ammotype or ammotype == "" then return end
@@ -331,26 +359,51 @@ local function WeaponPrimarySpare(pl, class, state)
 	local wep = class and pl:GetWeapon(class)
 	if wep and wep:IsValid() and wep.ValidPrimaryAmmo then
 		local spare = count_for(wep:ValidPrimaryAmmo())
-		if spare then return spare end
+		if spare ~= nil then return spare end
 	end
 
 	local stored = weapons.GetStored(class)
 	local spare = count_for(stored and stored.Primary and stored.Primary.Ammo)
-	if spare then return spare end
+	if spare ~= nil then return spare end
 
 	return 0
+end
+
+local function WeaponAmmoType(pl, class)
+	local wep = class and pl:GetWeapon(class)
+	if wep and wep:IsValid() and wep.ValidPrimaryAmmo then
+		local ammotype = wep:ValidPrimaryAmmo()
+		if ammotype then return ammotype end
+	end
+
+	local stored = weapons.GetStored(class)
+	return stored and stored.Primary and stored.Primary.Ammo
 end
 
 function GM:ApplyReconnectWeaponAmmo(pl, state)
 	if not IsValid(pl) or not state then return end
 
+	local locked = {}
 	for ammotype, count in pairs(state.ammo or {}) do
 		pl:SetAmmo(math.max(0, count), ammotype)
+		locked[ammotype] = true
+		locked[string.lower(tostring(ammotype))] = true
+	end
+
+	for _, wepdata in ipairs(state.weapons or {}) do
+		local ammotype = WeaponAmmoType(pl, wepdata.class)
+		if ammotype and not locked[ammotype] and not locked[string.lower(tostring(ammotype))] then
+			if not SKIP_AMMO[string.lower(tostring(ammotype))] then
+				pl:SetAmmo(0, ammotype)
+				locked[ammotype] = true
+			end
+		end
 	end
 
 	for _, wepdata in ipairs(state.weapons or {}) do
 		local wep = wepdata.class and pl:GetWeapon(wepdata.class)
 		if wep and wep:IsValid() then
+			wep.m_bInitialized = true
 			-- Clip1/2 of -1 is Source "infinite clip".
 			if wepdata.clip1 ~= nil and wepdata.clip1 >= 0 then
 				wep:SetClip1(wepdata.clip1)
@@ -359,7 +412,19 @@ function GM:ApplyReconnectWeaponAmmo(pl, state)
 			if wepdata.clip2 ~= nil and wepdata.clip2 >= 0 then
 				wep:SetClip2(wepdata.clip2)
 			end
-			wep:SetNW2Int("zs_reconnect_spare", WeaponPrimarySpare(pl, wepdata.class, state))
+			local spare = WeaponPrimarySpare(pl, wepdata.class, state)
+			wep:SetNW2Bool("zs_reconnect_ammo", true)
+			wep:SetNW2Int("zs_reconnect_spare", spare)
+			local ammo = WeaponAmmoType(pl, wepdata.class) or (wep.Primary and wep.Primary.Ammo)
+			local empty = not wep.IsMelee and self:ReconnectWeaponShouldEmptyLock(wepdata.clip1, spare, ammo)
+			wep:SetNW2Bool("zs_reconnect_empty", empty)
+			wep.m_ReconnectForceEmpty = empty or nil
+			wep.m_ReconnectEmptyCleared = nil
+			if empty then
+				pl.m_ReconnectEmptyLock = pl.m_ReconnectEmptyLock or {}
+				pl.m_ReconnectEmptyLock[wepdata.class] = ammo
+				wep:SetClip1(0)
+			end
 		end
 	end
 end
@@ -371,8 +436,7 @@ function GM:ReconnectAmmoSpent(pl, state)
 	for _, wepdata in ipairs(state.weapons or {}) do
 		local wep = wepdata.class and pl:GetWeapon(wepdata.class)
 		if wep and wep:IsValid() then
-			local live = wep:Clip1()
-			if live >= 0 and wepdata.clip1 and live < wepdata.clip1 then
+			if self:ReconnectClipWasSpent(wep:Clip1(), wepdata.clip1) then
 				return true
 			end
 		end
@@ -409,17 +473,25 @@ function GM:SendReconnectWeaponAmmo(pl, state)
 	net.Send(pl)
 end
 
+function GM:ClearReconnectAmmoOverlay(pl, state)
+	state = state or (IsValid(pl) and pl.m_ReconnectAmmoState)
+	if not IsValid(pl) or not state then return end
+
+	for _, wepdata in ipairs(state.weapons or {}) do
+		local wep = wepdata.class and pl:GetWeapon(wepdata.class)
+		if wep and wep:IsValid() then
+			wep:SetNW2Bool("zs_reconnect_ammo", false)
+			wep:SetNW2Int("zs_reconnect_clip1", -1)
+			wep:SetNW2Int("zs_reconnect_spare", -1)
+		end
+	end
+end
+
 function GM:StampReconnectAmmo(pl, state)
 	state = state or (IsValid(pl) and pl.m_ReconnectAmmoState)
 	if not IsValid(pl) or not state then return end
 	if self:ReconnectAmmoSpent(pl, state) then
-		for _, wepdata in ipairs(state.weapons or {}) do
-			local wep = wepdata.class and pl:GetWeapon(wepdata.class)
-			if wep and wep:IsValid() then
-				wep:SetNW2Int("zs_reconnect_clip1", -1)
-				wep:SetNW2Int("zs_reconnect_spare", -1)
-			end
-		end
+		self:ClearReconnectAmmoOverlay(pl, state)
 		if pl.m_ReconnectAmmoState == state then
 			pl.m_ReconnectAmmoState = nil
 		end
@@ -445,9 +517,12 @@ function GM:FinishReconnectAmmo(pl)
 	end
 
 	timer.Simple(3, function()
-		if IsValid(pl) and pl.m_ReconnectAmmoState == state then
-			pl.m_ReconnectAmmoState = nil
-		end
+		if not IsValid(pl) or pl.m_ReconnectAmmoState ~= state then return end
+
+		self:ApplyReconnectWeaponAmmo(pl, state)
+		self:SendReconnectWeaponAmmo(pl, state)
+		self:ClearReconnectAmmoOverlay(pl, state)
+		pl.m_ReconnectAmmoState = nil
 	end)
 end
 
@@ -482,15 +557,15 @@ function GM:ApplyReconnectSpawn(pl)
 
 		pl:StripAmmo()
 		self:ApplyReconnectWeaponAmmo(pl, state)
+		-- StripAmmo wipes dummy ammo; without it empty guns can deploy as infinite.
+		pl:GiveAmmo(1, "dummy", true)
 		pl.m_ReconnectAmmoState = {
 			weapons = table.Copy(state.weapons or {}),
 			ammo = table.Copy(state.ammo or {})
 		}
 		self:SendReconnectWeaponAmmo(pl, pl.m_ReconnectAmmoState)
 
-		if state.activeweapon and pl:HasWeapon(state.activeweapon) then
-			pl:SelectWeapon(state.activeweapon)
-		end
+		RestoreReconnectActiveWeapon(pl, state.activeweapon)
 
 		pl:SetPoints(state.points or 0)
 		pl.PointsRemainder = state.pointsremainder or 0
@@ -525,7 +600,15 @@ function GM:ApplyReconnectSpawn(pl)
 
 	if state.team == TEAM_HUMAN then
 		timer.Simple(0, function()
+			if not IsValid(pl) then return end
 			self:ApplyReconnectWeaponAmmo(pl, state)
+			RestoreReconnectActiveWeapon(pl, state.activeweapon)
+		end)
+		timer.Simple(0.15, function()
+			RestoreReconnectActiveWeapon(pl, state.activeweapon)
+		end)
+		timer.Simple(0.5, function()
+			RestoreReconnectActiveWeapon(pl, state.activeweapon)
 		end)
 	end
 
@@ -560,9 +643,7 @@ function GM:ApplyReconnectSpawn(pl)
 			end
 		end
 
-		if state.activeweapon and pl:HasWeapon(state.activeweapon) then
-			pl:SelectWeapon(state.activeweapon)
-		end
+		RestoreReconnectActiveWeapon(pl, state.activeweapon)
 
 		if human then
 			self:ApplyReconnectWeaponAmmo(pl, state)
@@ -585,4 +666,30 @@ hook.Add("WeaponEquip", "ZS.ReconnectAmmo", function(wep, ply)
 			GAMEMODE:StampReconnectAmmo(pl)
 		end
 	end)
+end)
+
+hook.Add("PlayerPostThink", "ZS.ReconnectEmptyLock", function(pl)
+	local locks = pl.m_ReconnectEmptyLock
+	if not locks then return end
+
+	local gm = GAMEMODE
+	local any = false
+	for class in pairs(locks) do
+		local wep = pl:GetWeapon(class)
+		if wep and wep:IsValid() then
+			if gm:ReconnectWeaponEmptyLocked(wep, pl) then
+				any = true
+				wep.m_bInitialized = true
+				if wep:Clip1() ~= 0 then
+					wep:SetClip1(0)
+				end
+			end
+		else
+			any = true
+		end
+	end
+
+	if not any then
+		pl.m_ReconnectEmptyLock = nil
+	end
 end)

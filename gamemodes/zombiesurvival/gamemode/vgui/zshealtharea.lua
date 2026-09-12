@@ -13,7 +13,7 @@ end
 
 function PANEL:Think()
 	local lp = MySelf
-	local showarmor = lp:IsValid() and lp:Team() == TEAM_HUMAN and lp:GetBloodArmor() > 0
+	local showarmor = IsValid(lp) and lp:Team() == TEAM_HUMAN and lp:GetBloodArmor() > 0
 	if showarmor ~= self._ShowArmor then
 		self._ShowArmor = showarmor
 		self:InvalidateLayout()
@@ -38,7 +38,7 @@ end
 
 function PANEL:Paint(w, h)
 	local lp = MySelf
-	if not lp:IsValid() then return true end
+	if not IsValid(lp) then return true end
 
 	RelapseUI.CreateFonts()
 	local c = RelapseUI.Col

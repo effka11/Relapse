@@ -456,6 +456,13 @@ function meta:DamageNails(attacker, inflictor, damage, dmginfo)
 		GAMEMODE:DamageFloater(attacker, self, dmginfo:GetDamagePosition(), dmginfo:GetDamage())
 	end
 
+	if attacker:IsZombie() then
+		GAMEMODE:GiveCadeOwnerPoints(self, damage)
+		if self:HumanNearby() then
+			GAMEMODE:GiveZombieBarricadeXP(attacker, damage)
+		end
+	end
+
 	self:SetBarricadeHealth(self:GetBarricadeHealth() - damage)
 	for i, nail in ipairs(nails) do
 		nail:OnDamaged(damage, attacker, inflictor, dmginfo)
@@ -471,17 +478,16 @@ function meta:DamageNails(attacker, inflictor, damage, dmginfo)
 	if dmginfo then dmginfo:SetDamage(0) end
 
 	if self:GetBarricadeHealth() <= 0 then
+		-- Destroy the cade instead of dropping it as a loose physics prop.
 		if self:GetModel() ~= "" and self:GetModel() ~= "models/error.mdl" then
-			if self:GetName() == "" and self:GetVolume() < 100 then
-				self:Fire("break", "", 0.01)
-				self:Fire("kill", "", 0.05)
-			else
-				local ent = ents.Create("env_propbroken")
-				if ent:IsValid() then
-					ent:Spawn()
-					ent:AttachTo(self)
-				end
+			if self:GetName() ~= "" or self:GetVolume() >= 100 then
+				local effectdata = EffectData()
+				effectdata:SetOrigin(self:WorldSpaceCenter())
+				util.Effect("Explosion", effectdata, true, true)
 			end
+
+			self:Fire("break", "", 0.01)
+			self:Fire("kill", "", 0.05)
 		end
 
 		for _, nail in pairs(nails) do

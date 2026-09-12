@@ -24,12 +24,19 @@ local function ApplyReconnectAmmo(weps, ammo)
 	for _, wepdata in ipairs(weps) do
 		local wep = wepdata.class ~= "" and lp:GetWeapon(wepdata.class)
 		if wep and wep:IsValid() then
+			wep.m_ReconnectAmmoDone = nil
 			local live = wep:Clip1()
-			-- Never refill a mag the player already spent from.
-			if live <= 0 or live > wepdata.clip1 then
+			-- Empty mags must stay empty. MW Initialize refills ClipSize otherwise.
+			if wepdata.clip1 ~= nil and wepdata.clip1 <= 0 then
+				wep:SetClip1(0)
+			elseif live <= 0 or live > wepdata.clip1 then
 				wep:SetClip1(wepdata.clip1)
 			end
 			wep:SetClip2(wepdata.clip2)
+			local ammotype = wep.Primary and wep.Primary.Ammo
+			local empty = not wep.IsMelee and GAMEMODE:ReconnectWeaponShouldEmptyLock(wepdata.clip1, wepdata.spare, ammotype)
+			wep.m_ReconnectForceEmpty = empty or nil
+			wep.m_ReconnectEmptyCleared = nil
 		elseif wepdata.class ~= "" then
 			missing = true
 		end
@@ -43,7 +50,14 @@ local function ApplyReconnectAmmo(weps, ammo)
 end
 
 local function ReconnectAmmoSnapshot(wep, ammotype)
-	if wep.m_ReconnectAmmoDone then return end
+	if wep.m_ReconnectAmmoDone then return nil, nil, false end
+
+	local flagged = wep.GetNW2Bool and wep:GetNW2Bool("zs_reconnect_ammo", false)
+	if flagged then
+		wep.m_ReconnectAmmoSawFlag = true
+	elseif wep.m_ReconnectAmmoSawFlag then
+		return nil, nil, false
+	end
 
 	local rec = GAMEMODE.ReconnectAmmoHUD
 	if rec and rec.die <= CurTime() then
@@ -57,18 +71,18 @@ local function ReconnectAmmoSnapshot(wep, ammotype)
 		if wantspare == nil and ammotype ~= nil and rec.ammo[ammotype] ~= nil then
 			wantspare = rec.ammo[ammotype]
 		end
-		return ow.clip1, wantspare
+		return ow.clip1, wantspare, true
 	end
 
-	if not wep.GetNW2Int then return end
+	if not flagged or not wep.GetNW2Int then return nil, nil, false end
 
 	local wantclip = wep:GetNW2Int("zs_reconnect_clip1", -1)
-	if wantclip < 0 then return end
+	if wantclip < 0 then return nil, nil, false end
 
 	local wantspare = wep:GetNW2Int("zs_reconnect_spare", -1)
 	if wantspare < 0 then wantspare = nil end
 
-	return wantclip, wantspare
+	return wantclip, wantspare, true
 end
 
 local function FinishReconnectAmmoDisplay(wep)
@@ -80,17 +94,19 @@ local function FinishReconnectAmmoDisplay(wep)
 end
 
 function GM:GetReconnectAmmoDisplay(wep, clip, spare, ammotype)
-	local wantclip, wantspare = ReconnectAmmoSnapshot(wep, ammotype)
-	if wantclip == nil then return clip, spare end
-
-	-- Live mag dropped below the snapshot: the gun has fired or the client caught up.
-	if clip > 0 and clip < wantclip then
-		FinishReconnectAmmoDisplay(wep)
-		return clip, spare
+	if self:ReconnectWeaponEmptyLocked(wep, LocalPlayer()) then
+		local hud = self.AmmoHUD
+		if IsValid(hud) then
+			hud.SnapAmmo = true
+		end
+		return 0, 0
 	end
 
-	if clip == wantclip and (wantspare == nil or spare == wantspare) then
-		FinishReconnectAmmoDisplay(wep)
+	local wantclip, wantspare, overlay_active = ReconnectAmmoSnapshot(wep, ammotype)
+	if not self:ShouldKeepReconnectAmmoOverlay(wantclip, clip, wantspare, spare, overlay_active) then
+		if overlay_active or wep.m_ReconnectAmmoSawFlag then
+			FinishReconnectAmmoDisplay(wep)
+		end
 		return clip, spare
 	end
 
@@ -139,6 +155,22 @@ net.Receive("zs_reconnectammo", function()
 	end
 
 	ApplyReconnectAmmo(weps, ammo)
+end)
+
+hook.Add("Tick", "ZS.ReconnectEmptyLock", function()
+	local lp = LocalPlayer()
+	if not (lp and lp:IsValid()) then return end
+
+	local gm = GAMEMODE
+	if not (gm and gm.ReconnectWeaponEmptyLocked) then return end
+
+	for _, wep in pairs(lp:GetWeapons()) do
+		if wep:IsValid() and gm:ReconnectWeaponEmptyLocked(wep, lp) then
+			if wep:Clip1() ~= 0 then
+				wep:SetClip1(0)
+			end
+		end
+	end
 end)
 
 net.Receive("zs_legdamage", function(length)

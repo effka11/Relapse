@@ -23,6 +23,11 @@ SWEP.RelapsePreviewParts = {
 -- Makarov yaw 90 / pitch 8 are for a gun along X — here they show the rear and lean the grip.
 SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
 SWEP.RelapsePreviewLocalAng = Angle(0, 0, 90)
+-- Union AABB sits in the empty corner under the barrel (L-shape: long slide + hanging mag).
+-- Pull the orbit pivot back to the mag well / trigger, same idea as 680's stock offset.
+SWEP.RelapsePreviewOffset = Vector(-0.8, 0, 0.5)
+SWEP.RelapsePreviewLift = 0.7
+SWEP.RelapsePreviewCamScale = 1.4
 
 SWEP.Base = "mg_base"
 
@@ -69,7 +74,7 @@ SWEP.ParticleEffects = {
 
 SWEP.Primary = SWEP.Primary or {}
 SWEP.Primary.Sound = Sound("weap_mike1911_fire_plr")
-SWEP.Primary.Ammo = "pistol"
+SWEP.Primary.Ammo = "45acp"
 SWEP.Primary.Damage = R.Damage
 SWEP.Primary.Delay = R.Delay
 SWEP.Primary.NumShots = 1
@@ -199,7 +204,7 @@ SWEP.Shell = "mwb_shelleject_45"
 SWEP.WalkSpeed = SPEED_NORMAL or 95
 SWEP.NoDeploySpeedChange = true
 SWEP.RequiredClip = 1
-SWEP.Description = "A service .45. Retired before its owners\194\160\194\160–\194\160\194\160the heavy bullet never left."
+SWEP.Description = "An officer's Colt. Seven fat .45s: heavy in a room\194\160\194\160–\194\160\194\160just loud past it."
 
 function SWEP:GetWalkSpeed()
     return self.WalkSpeed or SPEED_NORMAL or 95

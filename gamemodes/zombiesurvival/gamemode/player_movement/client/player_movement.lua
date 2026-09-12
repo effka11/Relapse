@@ -37,6 +37,7 @@ end
 
 local TimeDuckHeld = 0
 function GM:_CreateMove(cmd)
+	if not IsValid(MySelf) then return end
 	if MySelf:IsPlayingTaunt() and MySelf:Alive() then
 		self:CreateMoveTaunt(cmd)
 		return

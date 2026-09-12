@@ -1,0 +1,30 @@
+---
+description: Relapse ammo is a real cartridge, never a weapon class. Same brass = same id.
+globs: gamemodes/zombiesurvival/gamemode/sh_relapse_ammo.lua,gamemodes/zombiesurvival/gamemode/sh_usefulness_model.lua,gamemodes/zombiesurvival/gamemode/sh_options.lua,addons/zzz_relapse_mw_sykov/**/*.lua
+alwaysApply: true
+---
+
+# Relapse патроны
+
+Один id — одна гильза. Не `pistol` / `smg1` / `ar2` / `357` / `buckshot` на Relapse-стволе.
+
+Таблица: `GM.RelapseAmmo` в `sh_relapse_ammo.lua`. Оружие: `RelapseWeapons.<class>.Ammo` и `SWEP.Primary.Ammo` — тот же id.
+
+## Добавить тип
+
+Новый калибр = новая строка в `RelapseAmmo` + ключ в `RelapseAmmoOrder`. Не копировать чужой id, даже если «оба 7.62».
+
+```lua
+-- ❌ СКС и будущий FAL на одном «винтовочном»
+Ammo = "357"
+
+-- ✅ одна гильза
+["762x39"] = { Dollars = 0.36, ShopCount = 20, Icon = "ammo_rifle", ... }
+Ammo = "762x39" -- СКС и АК делят
+```
+
+`Dollars` — bulk FMJ/surplus USD/шт, не матч. Якорь: 9×18 = `$0.30` = старый ящик 14 за 9 очков. Иконка пока чужая категория (`ammo_pistol` у 9×18 и .45). Конверсии аттачей тип не меняют.
+
+Тот же патрон на новом стволе — тот же id, без новой строки.
+
+После правки таблицы шоп/ресаплай/имена берутся из `BindRelapseAmmoTables` / `RegisterRelapseAmmoShopItems`. Не дублировать `AddPointShopItem` пачкой руками.

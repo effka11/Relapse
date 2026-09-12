@@ -25,10 +25,12 @@ SWEP.RelapsePreviewParts = {
 	"models/viper/mw/attachments/romeo870/attachment_vm_sh_romeo870_barrel.mdl",
 	"models/viper/mw/attachments/romeo870/attachment_vm_sh_romeo870_pump.mdl",
 }
--- Att meshes along +X (muzzle +X). Yaw 90 is a side view, like Makarov.
--- Stock pulls the AABB down; negative Z moves the orbit pivot toward the grip so the barrel sits with the pistols.
-SWEP.RelapsePreviewAngle = Angle(8, 90, 0)
+-- Att meshes along +X (muzzle +X). Yaw 90 is a side view. Pitch 8 plus the
+-- elevated camera points a long gun downhill; SKS box uses pitch 0.
+SWEP.RelapsePreviewAngle = Angle(0, 90, 0)
 SWEP.RelapsePreviewOffset = Vector(0, 0, -1.2)
+SWEP.RelapsePreviewLift = 2.2
+SWEP.RelapsePreviewCamScale = 1.4
 
 SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_vert_offset", "grip_wood_offset"}
@@ -83,7 +85,7 @@ SWEP.ParticleEffects = {
 
 SWEP.Primary = SWEP.Primary or {}
 SWEP.Primary.Sound = Sound("weap_romeo870_fire_plr_lfe")
-SWEP.Primary.Ammo = "buckshot"
+SWEP.Primary.Ammo = "12ga"
 SWEP.Primary.Damage = R.Damage
 SWEP.Primary.Delay = R.Delay
 SWEP.Primary.NumShots = R.Pellets
@@ -216,7 +218,7 @@ SWEP.Shell = "mwb_shelleject_12g"
 SWEP.WalkSpeed = SPEED_NORMAL or 95
 SWEP.NoDeploySpeedChange = true
 SWEP.RequiredClip = 1
-SWEP.Description = "A pump 12-gauge. Nine pellets, then the forend\194\160\194\160–\194\160\194\160it only speaks up close."
+SWEP.Description = "A patrol pump. For a hallway, not a field: it drops them at the door, then the shot wanders. Then the forend."
 
 function SWEP:GetWalkSpeed()
     return self.WalkSpeed or SPEED_NORMAL or 95

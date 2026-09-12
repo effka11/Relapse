@@ -53,6 +53,8 @@ include("sh_util.lua")
 
 include("skillweb/sh_skillweb.lua")
 
+include("sh_relapse_ammo.lua")
+include("sh_reconnect.lua")
 include("sh_options.lua")
 include("sh_zombieclasses.lua")
 include("sh_animations.lua")
@@ -73,6 +75,7 @@ include_library("player_movement")
 include_library("stride")
 include_library("inventory")
 include_library("ammoexpand")
+include_library("relapse_ai") -- server/: AI bots, client/: debug overlay
 
 ----------------------
 
@@ -129,6 +132,10 @@ local HITGROUP_RIGHTLEG = HITGROUP_RIGHTLEG
 local PTeam = FindMetaTable("Player").Team
 
 function GM:AddCustomAmmo()
+	for id in pairs(self.RelapseAmmo or {}) do
+		game.AddAmmoType({name = id})
+	end
+
 	game.AddAmmoType({name = "dummy"})
 	game.AddAmmoType({name = "pulse"})
 	game.AddAmmoType({name = "impactmine"})
@@ -467,7 +474,13 @@ function GM:GetDynamicSpawns(pl)
 end
 
 function GM:GetDesiredStartingZombies()
-	local numplayers = #player.GetAllActive()
+	local numplayers = 0
+	for _, pl in pairs(player.GetAllActive()) do
+		if not (pl.IsRelapseAIBot or pl:GetNWBool("RelapseAIBot", false)) then
+			numplayers = numplayers + 1
+		end
+	end
+	if numplayers <= 1 then return 0 end
 	return math.Clamp(math.ceil(numplayers * self.WaveOneZombies), 1, numplayers - 1)
 end
 

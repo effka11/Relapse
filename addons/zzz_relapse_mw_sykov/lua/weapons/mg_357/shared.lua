@@ -22,6 +22,8 @@ SWEP.RelapsePreviewParts = {
 -- WM barrel is along +Z at identity; roll 90 puts it along Y for a side view.
 SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
 SWEP.RelapsePreviewLocalAng = Angle(0, 0, 90)
+SWEP.RelapsePreviewLift = 0.7
+SWEP.RelapsePreviewCamScale = 1.65
 
 SWEP.Base = "mg_base"
 
@@ -69,7 +71,7 @@ SWEP.Trigger = {
 
 SWEP.Primary = SWEP.Primary or {}
 SWEP.Primary.Sound = Sound("weap_cpapa_fire_plr")
-SWEP.Primary.Ammo = "pistol"
+SWEP.Primary.Ammo = "357mag"
 SWEP.Primary.Damage = R.Damage
 SWEP.Primary.Delay = R.Delay
 SWEP.Primary.NumShots = 1
@@ -200,7 +202,7 @@ SWEP.Shell = "mwb_shelleject_50bmg"
 SWEP.WalkSpeed = SPEED_NORMAL or 95
 SWEP.NoDeploySpeedChange = true
 SWEP.RequiredClip = 1
-SWEP.Description = "A magnum revolver. Six in the cylinder\194\160\194\160–\194\160\194\160it never learned to hurry."
+SWEP.Description = "They carried it if six shots were enough. The trigger does not hurry, the hit does. It's worth aiming."
 
 function SWEP:GetWalkSpeed()
     return self.WalkSpeed or SPEED_NORMAL or 95

@@ -1,9 +1,12 @@
 local PANEL = {}
 
 local function WaveTitle()
-	if not MySelf:IsValid() then return "" end
+	if not IsValid(MySelf) then return "" end
 
-	local override = GetGlobalString("hudoverride" .. MySelf:Team(), "")
+	local teamid = MySelf:Team()
+	if not teamid then return "" end
+
+	local override = GetGlobalString("hudoverride" .. teamid, "")
 	if override and #override > 0 then
 		return override
 	end
@@ -149,7 +152,7 @@ function PANEL:Paint()
 		RelapseUI.HudText(clock, CLOCK_FONT, x, clockY, RelapseUI.UrgentCol(remain, c.Text))
 	end
 
-	if MySelf:IsValid() then
+	if IsValid(MySelf) then
 		if MySelf:Team() == TEAM_UNDEAD then
 			local toredeem = GAMEMODE:GetRedeemBrains()
 			local brains = toredeem > 0 and (MySelf:Frags() .. " / " .. toredeem) or MySelf:Frags()
