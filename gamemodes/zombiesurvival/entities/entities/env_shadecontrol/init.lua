@@ -27,7 +27,11 @@ function ENT:Think()
 			local eyepos = owner:EyePos()
 			if eyepos:DistToSqr(ent:NearestPoint(eyepos)) <= 160000 then --400^2
 				local phys = ent:GetPhysicsObject()
-				if phys:IsValid() and phys:IsMoveable() and phys:GetMass() <= 300 then
+				if phys:IsValid() and ent:IsRelapseMoveable() and phys:GetMass() <= 300 then
+					if ent.m_RelapsePushFrozen then
+						ent:RelapseUnfreezeAgainstPush()
+						phys = ent:GetPhysicsObject()
+					end
 					local ct = CurTime()
 
 					local frametime = ct - (self.LastThink or ct)

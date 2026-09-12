@@ -1,8 +1,3 @@
-local function HelpMenuPaint(self)
-	Derma_DrawBackgroundBlur(self, self.Created)
-	Derma_DrawBackgroundBlur(self, self.Created)
-end
-
 local pPlayerModel
 local function SwitchPlayerModel(self)
 	surface.PlaySound("buttons/button14.wav")
@@ -52,157 +47,89 @@ function MakepPlayerModel()
 	pPlayerModel:MakePopup()
 end
 
-function MakepPlayerColor()
-	if pPlayerColor and pPlayerColor:IsValid() then pPlayerColor:Remove() end
-
-	PlayMenuOpenSound()
-
-	pPlayerColor = vgui.Create("DFrame")
-	pPlayerColor:SetWide(math.min(ScrW(), 500))
-	pPlayerColor:SetTitle(" ")
-	pPlayerColor:SetDeleteOnClose(true)
-
-	local y = 8
-
-	local label = EasyLabel(pPlayerColor, "Colors", "ZSHUDFont", color_white)
-	label:SetPos((pPlayerColor:GetWide() - label:GetWide()) / 2, y)
-	y = y + label:GetTall() + 8
-
-	local lab = EasyLabel(pPlayerColor, "Player color")
-	lab:SetPos(8, y)
-	y = y + lab:GetTall()
-
-	local colpicker = vgui.Create("DColorMixer", pPlayerColor)
-	colpicker:SetAlphaBar(false)
-	colpicker:SetPalette(false)
-	colpicker.UpdateConVars = function(me, color)
-		me.NextConVarCheck = SysTime() + 0.2
-		RunConsoleCommand("cl_playercolor", color.r / 100 .." ".. color.g / 100 .." ".. color.b / 100)
+function GM:CloseHelpMenu(fromEsc)
+	if not (self.HelpMenu and self.HelpMenu:IsValid()) then
+		return false
 	end
-	local r, g, b = string.match(GetConVar("cl_playercolor"):GetString(), "(%g+) (%g+) (%g+)")
-	if r then
-		colpicker:SetColor(Color(r * 100, g * 100, b * 100))
+	if fromEsc then
+		self.HelpMenuBlockPause = true
 	end
-	colpicker:SetSize(pPlayerColor:GetWide() - 16, 72)
-	colpicker:SetPos(8, y)
-	y = y + colpicker:GetTall()
-
-	lab = EasyLabel(pPlayerColor, "Weapon color")
-	lab:SetPos(8, y)
-	y = y + lab:GetTall()
-
-	colpicker = vgui.Create("DColorMixer", pPlayerColor)
-	colpicker:SetAlphaBar(false)
-	colpicker:SetPalette(false)
-	colpicker.UpdateConVars = function(me, color)
-		me.NextConVarCheck = SysTime() + 0.2
-		RunConsoleCommand("cl_weaponcolor", color.r / 100 .." ".. color.g / 100 .." ".. color.b / 100)
+	self.HelpMenuIgnoreOpen = CurTime() + RelapseUI.Duration(2)
+	self.HelpMenu:Close()
+	if fromEsc then
+		gui.HideGameUI()
 	end
-	r, g, b = string.match(GetConVar("cl_weaponcolor"):GetString(), "(%g+) (%g+) (%g+)")
-	if r then
-		colpicker:SetColor(Color(r * 100, g * 100, b * 100))
-	end
-	colpicker:SetSize(pPlayerColor:GetWide() - 16, 72)
-	colpicker:SetPos(8, y)
-	y = y + colpicker:GetTall()
-
-	pPlayerColor:SetTall(y + 8)
-	pPlayerColor:Center()
-	pPlayerColor:MakePopup()
+	return true
 end
 
 function GM:ShowHelp()
-	if self.HelpMenu and self.HelpMenu:IsValid() then
-		self.HelpMenu:Remove()
+	if self.HelpMenuIgnoreOpen and self.HelpMenuIgnoreOpen > CurTime() then
+		return
+	end
+	if self:CloseHelpMenu() then
+		return
 	end
 
 	PlayMenuOpenSound()
+	RelapseUI.CreateFonts()
 
-	local screenscale = BetterScreenScale()
-	local menu = vgui.Create("Panel")
-	menu:SetSize(screenscale * 420, ScrH())
-	menu:Center()
-	menu.Paint = HelpMenuPaint
-	menu.Created = SysTime()
+	local items = {
+		{ "menu_help", MakepHelp },
+		{ "menu_player_model", MakepPlayerModel },
+		{ "menu_options", MakepOptions },
+		{ "menu_skills", function() GAMEMODE:ToggleSkillWeb() end },
+		{ "menu_credits", MakepCredits }
+	}
 
-	local header = EasyLabel(menu, self.Name, "ZSHUDFont")
-	header:SetContentAlignment(8)
-	header:DockMargin(0, ScrH() * 0.25, 0, 64)
-	header:Dock(TOP)
+	local font = "Relapse25"
+	local rowH = RelapseUI.Grid15(4)
+	local n = #items
+	local innerW = RelapseUI.HudW()
+	local bodyH = n * rowH
+	local frame = RelapseUI.BuildMenuFrame()
+	self.HelpMenu = frame
 
-	local buttonhei = 32 * screenscale
+	local x = RelapseUI.Snap((ScrW() - innerW) * 0.5)
+	local y = RelapseUI.Snap((ScrH() - bodyH) * 0.5)
+	local close = RelapseUI.MakeMenuClose(frame, function()
+		GAMEMODE:CloseHelpMenu()
+	end)
+	close:SetPos(x + innerW + RelapseUI.Grid15(), y - close:GetTall() - RelapseUI.Grid15())
+	for i, item in ipairs(items) do
+		local fn = item[2]
+		local btn = RelapseUI.MakeMenuButton(frame, RelapseUI.T(item[1]), function()
+			if IsValid(frame) then
+				frame:Close(true)
+			end
+			fn()
+		end)
+		btn:SetFont(font)
+		btn:SetPos(x, y)
+		btn:SetSize(innerW, rowH)
+		btn.RelapseRule = i < n
+		y = y + rowH
+	end
 
-	local but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Help")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 0, 0, 12)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() MakepHelp() end
+	frame:SetAlpha(0)
+	frame:MakePopup()
+	frame:SetKeyboardInputEnabled(false)
+	RelapseUI.PlayFade(frame, 255, RelapseUI.Duration(3), RelapseUI.EaseOut)
+end
 
-	but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Player Model")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 0, 0, 12)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() MakepPlayerModel() end
+hook.Add("PlayerButtonDown", "RelapseHelpMenuF1", function(pl, button)
+	if button ~= KEY_F1 then return end
+	if not IsFirstTimePredicted() then return end
+	if pl ~= MySelf then return end
+	local gm = GAMEMODE
+	if gm and gm.CloseHelpMenu then
+		gm:CloseHelpMenu()
+	end
+end)
 
-	but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Player Color")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 0, 0, 12)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() MakepPlayerColor() end
-
-	but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Options")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 0, 0, 12)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() MakepOptions() end
-
-	but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Weapon Database")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 0, 0, 12)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() MakepWeapons() end
-
-	but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Skills")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 0, 0, 12)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() GAMEMODE:ToggleSkillWeb() end
-
-	but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Credits")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 0, 0, 12)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() MakepCredits() end
-
-	but = vgui.Create("DButton", menu)
-	but:SetFont("ZSHUDFontSmaller")
-	but:SetText("Close")
-	but:SetTall(buttonhei)
-	but:DockMargin(0, 24, 0, 0)
-	but:DockPadding(0, 12, 0, 12)
-	but:Dock(TOP)
-	but.DoClick = function() menu:Remove() end
-
-	menu:MakePopup()
+function GM:OnPauseMenuShow()
+	if self:CloseHelpMenu(true) or self.HelpMenuBlockPause then
+		self.HelpMenuBlockPause = nil
+		gui.HideGameUI()
+		return false
+	end
 end

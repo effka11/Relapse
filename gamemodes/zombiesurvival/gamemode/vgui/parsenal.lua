@@ -1042,14 +1042,15 @@ local function ArsenalThink(self)
 end
 
 function GM:OpenArsenalMenu()
+	RelapseUI.HideOtherShops("points")
 	if self.ArsenalInterface and self.ArsenalInterface:IsValid() then
-		self.ArsenalInterface:SetVisible(true)
-		self.ArsenalInterface:MakePopup()
+		RelapseUI.ShowShopFrame(self.ArsenalInterface)
 		return
 	end
 
 	local frame, L, topspace, bottomspace, propertysheet = RelapseUI.BuildShopFrame("shop_points_title", {
-		deleteOnClose = false
+		deleteOnClose = false,
+		shop = "points"
 	})
 	frame.Think = ArsenalThink
 	self.ArsenalInterface = frame
@@ -1104,15 +1105,6 @@ function GM:OpenArsenalMenu()
 	local tierPanes = {}
 
 	for catid in ipairs(GAMEMODE.ItemCategories) do
-		local hasitems = false
-		for _, tab in ipairs(GAMEMODE.Items) do
-			if tab.Category == catid and tab.PointShop then
-				hasitems = true
-				break
-			end
-		end
-		if not hasitems then continue end
-
 		local trinkets = catid == ITEMCAT_TRINKETS
 		local usecats = catid == ITEMCAT_GUNS or catid == ITEMCAT_MELEE
 		local host, grids

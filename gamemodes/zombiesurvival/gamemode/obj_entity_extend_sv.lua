@@ -292,7 +292,8 @@ meta.IsNailFrozen = meta.GetNailFrozen
 function meta:SetNailFrozen(frozen)
 	if frozen then
 		local phys = self:GetPhysicsObject()
-		if phys:IsValid() and phys:IsMoveable() then
+		if phys:IsValid() and (phys:IsMoveable() or self.m_RelapsePushFrozen) then
+			self.m_RelapsePushFrozen = nil
 			self.m_NailFrozen = true
 			phys:EnableMotion(false)
 		end

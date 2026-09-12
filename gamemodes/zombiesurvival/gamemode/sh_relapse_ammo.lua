@@ -17,7 +17,9 @@ GM.RelapseAmmoOrder = {
 	"45acp",
 	"357mag",
 	"12ga",
+	"9x39",
 	"762x39",
+	"762x51",
 }
 
 GM.RelapseAmmo = {
@@ -56,9 +58,23 @@ GM.RelapseAmmo = {
 		Icon = "ammo_shotgun",
 		Model = "models/Items/BoxBuckshot.mdl",
 	},
+	["9x39"] = {
+		PrintName = "9×39",
+		Dollars = 0.45,
+		ShopCount = 20,
+		Icon = "ammo_rifle",
+		Model = "models/props_lab/box01a.mdl",
+	},
 	["762x39"] = {
 		PrintName = "7.62×39",
 		Dollars = 0.36,
+		ShopCount = 20,
+		Icon = "ammo_rifle",
+		Model = "models/props_lab/box01a.mdl",
+	},
+	["762x51"] = {
+		PrintName = "7.62×51",
+		Dollars = 0.55,
 		ShopCount = 20,
 		Icon = "ammo_rifle",
 		Model = "models/props_lab/box01a.mdl",

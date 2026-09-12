@@ -139,7 +139,7 @@ SWEP.BarrelSmoke = {
 }
 
 SWEP.Cone = {
-    Hip = R.Accuracy / 6,
+    Hip = R.Accuracy / 12,
     TacStance = false,
     Ads = R.Accuracy / 12,
     Increase = 0.12,

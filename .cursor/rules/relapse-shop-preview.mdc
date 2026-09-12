@@ -43,8 +43,14 @@ Offset крутится с моделью. «Выше/ниже в рамке» =
 | 680 | `(0, 90, 0)` | — | `(0, 0, -1.2)` | **2.2** | 1.4 |
 | СКС | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -5)` | **3.5** | 1.4 |
 | Uzi | `(0, 0, 0)` | `(0, 0, 90)` | — | **2.2** | 1.4 |
+| MP5 | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -2)` | **2.2** | 1.4 |
+| UMP-45 | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -2)` | **2.2** | **1.6** |
+| SCAR-H | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -3)` | **2.8** | 1.4 |
+| AS VAL | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -3)` | **2.8** | 1.4 |
+| АК-47 | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -3)` | **2.8** | 1.4 |
+| Origin-12 | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -3)` | **2.8** | 1.4 |
 
-Ближайший эталон для нового ствола: короткий −X → Макаров; короткий +Z → 1911/.357; длинный −X → 680; длинный +Z → СКС; средний +Z (ПП) → Uzi.
+Ближайший эталон для нового ствола: короткий −X → Макаров; короткий +Z → 1911/.357; длинный −X → 680; длинный +Z → СКС; средний +Z (ПП) → Uzi; автомат +Z (SCAR, VAL, АК, Origin-12) → сборка СКС (receiver на WM variant 0), кадр SCAR Lift 2.8 Offset −3. Не копировать MP5 `[0]=1` на АК/SCAR. Не копировать 680 yaw 90 на Origin-12 (у 680 пустой WM, у Origin-12 ресивер на variant 0).
 
 ## Сборка — не копируй соседа
 
@@ -74,6 +80,7 @@ MW `v_` / `w_` часто пустые: руки + stub. Пушка сидит �
 | Кусок уже на WM | .357: цилиндр/grip на `w_357`; mag `ShowOnWorldModel=false` | Не дублировать. Лишний mdl без кости WM зависает в origin и уводит пивот. |
 | WM — пустой риг | 680: `w_romeo870` не рисует ствол, `j_gun` нет | Не dummy-only WM. Не bone-merge receiver на эту WM. Дефолтные аттачи, один origin. |
 | WM mesh не на bodygroup 0 | Uzi: `w_uzulu` receiver `[0]` = 0 verts, `[1]` = вся пушка | Dummy = WM + bodygroup 1. DrawModel после SetupBones вдоль +Z — hull + LocalAng 90 как СКС. Yaw 90 ставит ПП вертикально. |
+| WM mesh на bodygroup 0, `[1]` пустой | АК / SCAR / Origin-12: `w_akilo47` / `w_scharlie` / `w_oscar12` receiver `[0]` = коробка, `[1]` = 0 verts | **Не** копировать MP5 `[0]=1` — спрячет коробку, приклад останется на `tag_stock_attach` с дырой. Дефолт 0, как СКС. Не копировать 680 (пустой WM, yaw 90) на Origin-12. |
 | WM — только рамка, пушка в аттачах | MP5: `w_mpapa5` `[0]=1` = receiver, mag/stock/barrel на `tag_*_attach` | Как СКС: dummy WM + extras. Не копируй Uzi (у Uzi вся пушка уже в variant 1). Кадр как Uzi: Lift 2.2, CamScale 1.4. |
 | Нет отдельного grip-аттача | Рамка = bodygroup receiver на `w_` **или** на att receiver (680: приклад на receiver) | Не выдумывай grip.mdl / stock.mdl. |
 
@@ -90,6 +97,8 @@ RelapsePreviewParts = { "models/viper/mw/weapons/w_romeo870.mdl" }
 -- ❌ Uzi как СКС: default WM пустой, extras без receiver → обломки в углу hull
 -- ❌ Uzi yaw 90: DrawModel вдоль +Z, ствол стоит вертикально
 -- ❌ MP5 как Uzi: только WM — рамка без магазина и приклада
+-- ❌ АК/SCAR/Origin-12 как MP5: `[0]=1` прячет коробку (у них variant 1 пустой / его нет)
+-- ❌ Origin-12 как 680: yaw 90, без bone merge — WM уже ресивер вдоль +Z
 
 -- ✅ Макаров — эталон короткого −X; WM пустая, barrel + grip
 RelapsePreviewParts = { barrel, grip }
@@ -151,6 +160,19 @@ RelapsePreviewAngle = Angle(0, 0, 0)
 RelapsePreviewLocalAng = Angle(0, 0, 90)
 RelapsePreviewOffset = Vector(0, 0, -2) -- hull = receiver; приклад сзади
 RelapsePreviewLift = 2.2
+RelapsePreviewCamScale = 1.4
+
+-- ✅ SCAR-H / AS VAL / АК-47 / Origin-12 — длинный +Z, сборка как СКС (не MP5 bodygroup).
+-- Путь аттача как в lua пака (SCAR без подпапки, VAL: attachments/valpha/, АК: attachments/akilo47/,
+-- Origin-12: attachments/oscar12/). Receiver уже на WM variant 0; `[0]=1` у АК/SCAR/Origin-12 пустой.
+-- Origin-12 default grip slot is a real sidegrip, not att_grip — include it. Do not copy 680.
+RelapsePreviewBoneMerge = true
+RelapsePreviewHullBounds = true
+RelapsePreviewParts = { w_scharlie, barrel, mag, stock } -- VAL: w_valpha + valpha/...; AK: w_akilo47 + akilo47/...; Origin-12: w_oscar12 + oscar12/... + sidegrip
+RelapsePreviewAngle = Angle(0, 0, 0)
+RelapsePreviewLocalAng = Angle(0, 0, 90)
+RelapsePreviewOffset = Vector(0, 0, -3)
+RelapsePreviewLift = 2.8
 RelapsePreviewCamScale = 1.4
 ```
 

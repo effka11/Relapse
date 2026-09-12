@@ -36,9 +36,14 @@ local function ServerVar(name, default, help, flags)
 	return CreateConVar(name, default, flags or bit.bor(FCVAR_ARCHIVE, FCVAR_NOTIFY), help)
 end
 
+function AI.IsSpawnOff()
+	return not AI.cv or not AI.cv.zombies or AI.cv.zombies:GetInt() <= 0
+end
+
 AI.cv = {
-	zombies = ServerVar("relapse_ai_zombies", "4", "Number of AI zombie bots kept on the server while a real player is connected. Same count in TAB and in the world."),
-	sense_radius = ServerVar("relapse_ai_sense_radius", "1024", "Radius in which a zombie bot notices humans (line of sight required)."),
+	-- No FCVAR_ARCHIVE: server.vdf used to fight server.cfg. D3bot spawn is off in relapse_d3bot glue.
+	zombies = ServerVar("relapse_ai_zombies", "4", "Number of Relapse AI zombie bots. 0 = off.", FCVAR_NOTIFY),
+	sense_radius = ServerVar("relapse_ai_sense_radius", "0", "Unused: zombie bots always know every living human on the map."),
 	horde_instinct = ServerVar("relapse_ai_horde_instinct", "1", "With no sigils and no sensed humans, drift toward a rough human position."),
 	think_rate = ServerVar("relapse_ai_think_rate", "10", "Brain thinks per second per bot.", FCVAR_ARCHIVE),
 	path_budget = ServerVar("relapse_ai_path_budget", "2", "Max path computations per server tick.", FCVAR_ARCHIVE),

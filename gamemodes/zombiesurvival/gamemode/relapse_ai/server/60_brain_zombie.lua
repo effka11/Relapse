@@ -192,8 +192,14 @@ local function ScoreIntents(bot, bb, senses, now)
 				ignore = nil
 			end
 
+			-- A human above us is not "unreachable" — we just need a ladder.
+			if ignore and math.abs(ent:GetPos().z - bot.Player:GetPos().z) > 36 then
+				ignore = nil
+			end
+
 			if not ignore then
-				local score = 100 - math.sqrt(c.Dist2) / 16
+				-- Distance is a tie-break only: a far human still beats a sigil.
+				local score = 80 - math.min(25, math.sqrt(c.Dist2) / 400)
 				if ent == bb.Target then score = score + 12 end
 				if mem.LastAttacker == ent and now - (mem.LastAttackTime or 0) < 6 then score = score + 20 end
 				if score > bestScore then
@@ -228,12 +234,22 @@ end
 
 local function HandleHopeless(bot, bb, intent, data, now)
 	local loco = bot.Loco
-	if intent == "sigil" and IsValid(data) then
-		bb.SigilGaveUp[data] = now + HOPELESS_SIGIL_COOLDOWN
-		bb.SigilReeval = 0
-	elseif intent == "hunt" and IsValid(data) then
+	if intent == "hunt" and IsValid(data) then
+		-- Still on another floor than the human: keep hunting. Stop() would
+		-- drop the ladder route and ScoreIntents would send us to a sigil.
+		if math.abs(data:GetPos().z - bot.Player:GetPos().z) > 36 then
+			loco.StuckEpisodes = 0
+			loco.FailedPaths = 0
+			loco.Exhausted = false
+			loco.PathValid = false
+			loco.NextRepath = 0
+			return
+		end
 		bb.IgnoreHumans[data] = now + HOPELESS_HUMAN_COOLDOWN
 		bot.Memory.Targets[data] = nil
+	elseif intent == "sigil" and IsValid(data) then
+		bb.SigilGaveUp[data] = now + HOPELESS_SIGIL_COOLDOWN
+		bb.SigilReeval = 0
 	elseif intent == "search" and data then
 		bot.Memory.Targets[data.Ent] = nil
 	else
@@ -255,9 +271,17 @@ local function DoHunt(bot, bb, target)
 	combat:SetTarget(target)
 	combat:Think()
 	loco.SpeedFrac = 1
+	loco.ClearPath = true
 	loco:SetGoal(target, combat:GetStandoff())
 	loco:SetHold(combat.InReach)
-	view:LookAtEntity(target, "target")
+
+	-- Looking at someone on another floor yaws us at their XY (under the slab)
+	-- and we walk into the wall instead of along the path to the ladder.
+	if math.abs(target:GetPos().z - bot.Player:GetPos().z) > 40 then
+		LookAlongPath(bot)
+	else
+		view:LookAtEntity(target, "target")
+	end
 	bb.Target = target
 end
 
@@ -265,6 +289,7 @@ local function DoSearch(bot, bb, mem)
 	local loco, combat, view = bot.Loco, bot.Combat, bot.View
 	combat:SetTarget(nil)
 	loco.SpeedFrac = 1
+	loco.ClearPath = true
 	loco:SetGoal(mem.Pos, 48)
 	loco:SetHold(false)
 	bb.Target = nil
@@ -296,6 +321,7 @@ local function DoSigil(bot, bb, sigil, profile)
 	end
 
 	loco.SpeedFrac = profile.SigilSpeed
+	loco.ClearPath = true
 	loco:SetGoal(approach, combat:GetStandoff(), sigil)
 	loco:SetHold(combat.InReach)
 	if combat.WantDuck then
@@ -364,6 +390,7 @@ local function DoWander(bot, bb, profile, now)
 	end
 
 	loco.SpeedFrac = profile.WanderSpeed
+	loco.ClearPath = false
 	loco:SetGoal(bb.WanderPos, 48)
 	bb.WanderSet = true
 	LookAlongPath(bot)

@@ -23,6 +23,7 @@ AddCSLuaFile("sh_options.lua")
 AddCSLuaFile("sh_zombieclasses.lua")
 AddCSLuaFile("sh_animations.lua")
 AddCSLuaFile("sh_sigils.lua")
+AddCSLuaFile("sh_relapse_sigil_shop.lua")
 AddCSLuaFile("sh_channel.lua")
 AddCSLuaFile("sh_weaponquality.lua")
 AddCSLuaFile("sh_relapse_ammo.lua")
@@ -45,6 +46,8 @@ AddCSLuaFile("cl_dermaskin.lua")
 AddCSLuaFile("cl_hint.lua")
 AddCSLuaFile("cl_thirdperson.lua")
 AddCSLuaFile("cl_voicesets.lua")
+AddCSLuaFile("cl_relapse_carry_holster.lua")
+AddCSLuaFile("cl_relapse_freecam.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -78,7 +81,6 @@ AddCSLuaFile("vgui/pmainmenu.lua")
 AddCSLuaFile("vgui/poptions.lua")
 AddCSLuaFile("vgui/phelp.lua")
 AddCSLuaFile("vgui/pclassselect.lua")
-AddCSLuaFile("vgui/pweapons.lua")
 AddCSLuaFile("vgui/pendboard.lua")
 AddCSLuaFile("vgui/relapse_ui.lua")
 AddCSLuaFile("vgui/pworth.lua")
@@ -106,6 +108,8 @@ include("sv_profiling.lua")
 include("sv_sigils.lua")
 include("sv_concommands.lua")
 include("sv_reconnect.lua")
+include("sv_relapse_prop_push.lua")
+include("sv_relapse_freecam.lua")
 
 include("itemstocks/sv_stock.lua")
 
@@ -205,10 +209,11 @@ function GM:TryHumanPickup(pl, entity)
 		local entclass = string.sub(entity:GetClass(), 1, 12)
 		local carrymaxmass = CARRY_MAXIMUM_MASS * (pl.PropCarryCapacityMul or 1)
 		local carrymaxvol = CARRY_MAXIMUM_VOLUME * (pl.PropCarryCapacityMul or 1)
-		if (entclass == "prop_physics" or entclass == "func_physbox" or entity.HumanHoldable and entity:HumanHoldable(pl)) and not entity:IsNailed() and entity:GetMoveType() == MOVETYPE_VPHYSICS and entity:GetPhysicsObject():IsValid() and entity:GetPhysicsObject():GetMass() <= carrymaxmass and entity:GetPhysicsObject():IsMoveable() and entity:OBBMins():Length() + entity:OBBMaxs():Length() <= carrymaxvol then
+		if (entclass == "prop_physics" or entclass == "func_physbox" or entity.HumanHoldable and entity:HumanHoldable(pl)) and not entity:IsNailed() and entity:GetMoveType() == MOVETYPE_VPHYSICS and entity:GetPhysicsObject():IsValid() and entity:GetPhysicsObject():GetMass() <= carrymaxmass and entity:IsRelapseMoveable() and entity:OBBMins():Length() + entity:OBBMaxs():Length() <= carrymaxvol then
 			local holder = entity:GetHolder()
 			if not holder and not pl:IsHolding() and CurTime() >= (pl.NextHold or 0)
 			and pl:GetShootPos():DistToSqr(entity:NearestPoint(pl:GetShootPos())) <= 4096 and pl:GetGroundEntity() ~= entity then --64^2
+				entity:RelapseUnfreezeAgainstPush()
 				local newstatus = ents.Create("status_human_holding")
 				if newstatus:IsValid() then
 					pl.NextHold = CurTime() + 0.25
@@ -452,7 +457,6 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_endround")
 	util.AddNetworkString("zs_centernotify")
 	util.AddNetworkString("zs_topnotify")
-	util.AddNetworkString("zs_zvols")
 	util.AddNetworkString("zs_nextboss")
 	util.AddNetworkString("zs_classunlock")
 	util.AddNetworkString("zs_sigilcorrupted")
@@ -1162,63 +1166,6 @@ function GM:SpawnBossZombie(bossplayer, silent, bossindex, triggerboss)
 	end
 end
 
-function GM:SendZombieVolunteers(pl, nonemptyonly)
-	if nonemptyonly and #self.ZombieVolunteers == 0 then return end
-
-	net.Start("zs_zvols")
-		net.WriteUInt(#self.ZombieVolunteers, 8)
-		for _, p in ipairs(self.ZombieVolunteers) do
-			net.WriteEntity(p)
-		end
-	if pl then
-		net.Send(pl)
-	else
-		net.Broadcast()
-	end
-end
-
-function GM:ZombieSpawnDistanceSort(other)
-	return self._ZombieSpawnDistance < other._ZombieSpawnDistance
-end
-
-function GM:ZombieSpawnDistanceSortSigils(other)
-	return self._ZombieSpawnDistance > other._ZombieSpawnDistance
-end
-
-function GM:SortZombieSpawnDistances(allplayers)
-	local plpos, dist
-
-	-- If using sigils then we sort by inverse distance from sigils instead of this.
-	local zspawns = self:GetSigils()
-	local sortbysigils = #zspawns > 0
-	if not sortbysigils then
-		zspawns = ents.FindByClass("zombiegasses")
-		if #zspawns == 0 then
-			zspawns = team.GetValidSpawnPoint(TEAM_UNDEAD)
-		end
-	end
-
-	local maxdist = 1280000000--12800000
-	for _, pl in pairs(allplayers) do
-		if pl:Team() == TEAM_UNDEAD then
-			pl._ZombieSpawnDistance = sortbysigils and maxdist + 2 or -2
-		elseif pl:GetInfo("zs_alwaysvolunteer") == "1" then
-			pl._ZombieSpawnDistance = sortbysigils and maxdist + 1 or -1
-		elseif CLIENT or pl.LastNotAFK and CurTime() <= pl.LastNotAFK + 60 then
-			plpos = pl:GetPos()
-			dist = maxdist
-			for __, ent in pairs(zspawns) do
-				dist = math.min(dist, ent:NearestPoint(plpos):DistToSqr(plpos))
-			end
-			pl._ZombieSpawnDistance = dist
-		else
-			pl._ZombieSpawnDistance = sortbysigils and 128 or maxdist -- AFK people should NOT be considered volunteers but also people ACTIVELY next to sigils should be picked AFTER AFK people.
-		end
-	end
-
-	table.sort(allplayers, sortbysigils and self.ZombieSpawnDistanceSortSigils or self.ZombieSpawnDistanceSort)
-end
-
 function GM:ShouldRestartRound()
 	if self.TimeLimit == -1 or self.RoundLimit == -1 then return true end
 
@@ -1289,26 +1236,10 @@ function GM:Think()
 		end
 	end
 
-	if wave == 0 then
-		self:CalculateZombieVolunteers()
-	end
-
 	if NextTick <= time then
 		NextTick = time + 1
 
 		local plpos
-
-		if wave == 0 and not self:GetWaveActive() then
-			for _, pl in pairs(allplayers) do
-				if P_Team(pl) == TEAM_HUMAN then
-					plpos = pl:GetPos()
-					if pl.LastAFKPosition and (pl.LastAFKPosition.x ~= plpos.x or pl.LastAFKPosition.y ~= plpos.y) then
-						pl.LastNotAFK = time
-					end
-					pl.LastAFKPosition = plpos
-				end
-			end
-		end
 
 		for _, pl in pairs(allplayers) do
 			if P_Team(pl) == TEAM_HUMAN and P_Alive(pl) then
@@ -1420,32 +1351,6 @@ function GM:PlayerSwitchWeapon(pl, old, new)
 	if pl:HasTrinket("autoreload") then
 		pl.NextAutomatedReload = CurTime() + 3.95
 		pl.OldWeaponToReload = old
-	end
-end
-
--- We calculate the volunteers. If the list changed then broadcast the new list.
-function GM:CalculateZombieVolunteers()
-	local volunteers = {}
-	local allplayers = player_GetAll()
-	self:SortZombieSpawnDistances(allplayers)
-	for i = 1, self:GetDesiredStartingZombies() do
-		volunteers[i] = allplayers[i]
-	end
-
-	local mismatch = false
-	if #volunteers ~= #self.ZombieVolunteers then
-		mismatch = true
-	else
-		for i=1, #volunteers do
-			if volunteers[i] ~= self.ZombieVolunteers[i] then
-				mismatch = true
-				break
-			end
-		end
-	end
-	if mismatch then
-		self.ZombieVolunteers = volunteers
-		self:SendZombieVolunteers()
 	end
 end
 
@@ -1847,7 +1752,6 @@ function GM:RestartLua()
 	self.PeakPopulation = 0
 
 	self.StartingZombie = {}
-	self.InitialVolunteers = {}
 	self.CheckedOut = {}
 	self.PreviouslyDied = {}
 	self.StoredUndeadFrags = {}
@@ -1909,9 +1813,12 @@ function GM:DoRestartGame()
 	gamemode.Call("InitPostEntityMap")
 
 	for _, pl in pairs(player.GetAll()) do
+		-- Team first, then spawn. Spawn-then-InitialSpawnRound left humans
+		-- with SprintDisable (run anim, walk speed) and zombies who should
+		-- be human without a human PlayerSpawn.
+		gamemode.Call("PlayerInitialSpawnRound", pl)
 		pl:UnSpectateAndSpawn()
 		pl:GodDisable()
-		gamemode.Call("PlayerInitialSpawnRound", pl)
 		gamemode.Call("PlayerReadyRound", pl)
 
 		if pl:Team() == TEAM_UNDEAD and not pl.IsRelapseAIBot then -- leftover undead, not AI crows
@@ -1931,8 +1838,13 @@ function GM:RestartGame()
 		pl:SetFrags(0)
 		pl:SetDeaths(0)
 		pl:SetPoints(0)
-		if pl.IsRelapseAIBot then
-			pl:ChangeTeam(TEAM_UNDEAD)
+		if pl:IsForcedUndeadBot() then
+			local brain = pl.IsRelapseAIBot and RelapseAI and RelapseAI.GetBrain(pl.RelapseAIBrain)
+			local teamid = brain and brain.Team or TEAM_UNDEAD
+			pl:ChangeTeam(teamid)
+			if teamid == TEAM_UNDEAD then
+				self.PreviouslyDied[pl:UniqueID()] = CurTime()
+			end
 		elseif not pl.IsZSBot then
 			pl:ChangeTeam(TEAM_HUMAN)
 		end
@@ -2094,7 +2006,7 @@ function GM:EndRound(winner)
 	elseif winner == TEAM_UNDEAD then
 		hook.Add("PlayerShouldTakeDamage", "EndRoundShouldTakeDamage", EndRoundPlayerCanSuicide)
 
-		-- Wave 0 wipe: SetClosestsToZombie never ran, everyone undead is still a prep zombie.
+		-- Wave 0 wipe: nobody was converted at wave start, everyone undead is still a prep zombie.
 		if self:GetWave() <= 0 then
 			for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do
 				self.StartingZombie[pl:UniqueID()] = true
@@ -2218,10 +2130,6 @@ function GM:PlayerReadyRound(pl)
 
 	if pl:GetInfo("zs_noredeem") == "1" then
 		pl.NoRedeeming = true
-	end
-
-	if self:GetWave() == 0 then
-		self:SendZombieVolunteers(pl, true)
 	end
 
 	if self:IsClassicMode() then
@@ -2393,14 +2301,19 @@ function GM:PlayerInitialSpawnRound(pl)
 
 	local uniqueid = pl:UniqueID()
 
-	if RelapseAIPending or pl.IsRelapseAIBot then
-		-- Relapse AI bot: the brain decides the team (also keeps it across round restarts).
+	if (RelapseAIPending and pl:IsBot()) or pl:IsForcedUndeadBot() then
+		-- Relapse AI / D3bot: brain or undead. Vanilla wave 0 would put leftover
+		-- D3bot NextBots on TEAM_HUMAN after a round replay.
+		-- RelapseAIPending is only for the NextBot being created; never apply it to a human.
 		local brain = pl.IsRelapseAIBot and RelapseAI and RelapseAI.GetBrain(pl.RelapseAIBrain)
 		pl:ChangeTeam(RelapseAIPending and RelapseAIPending.team or brain and brain.Team or TEAM_UNDEAD)
+		if pl:Team() == TEAM_UNDEAD then
+			self.PreviouslyDied[uniqueid] = CurTime()
+		end
 	elseif self:TryReconnectTeam(pl) then
 		-- Restored team, class, and round stats from a drop.
-	elseif self.PreviouslyDied[uniqueid] or ZSBOT then
-		-- They already died and reconnected.
+	elseif self.PreviouslyDied[uniqueid] or (ZSBOT and pl:IsBot()) then
+		-- They already died and reconnected. ZSBOT is a CreateBot leak flag — bots only.
 		pl:ChangeTeam(TEAM_UNDEAD)
 	elseif LASTHUMAN then ----
 		pl.SpawnedTime = CurTime()
@@ -2444,6 +2357,10 @@ function GM:PlayerInitialSpawnRound(pl)
 	if pl:Team() == TEAM_UNDEAD and self.StoredUndeadFrags[uniqueid] then
 		pl:SetFrags(self.StoredUndeadFrags[uniqueid])
 		self.StoredUndeadFrags[uniqueid] = nil
+	end
+
+	if pl:Team() == TEAM_HUMAN then
+		pl:SprintEnable()
 	end
 end
 
@@ -2717,12 +2634,12 @@ function GM:GiveRandomEquipment(pl)
 end
 
 function GM:PlayerCanCheckout(pl)
-	return pl:IsValid() and not pl.IsRelapseAIBot and pl:Team() == TEAM_HUMAN and pl:Alive() and not self.CheckedOut[pl:UniqueID()] and not self.StartingLoadout and not self.ZombieEscape and self.StartingWorth > 0 and self:GetWave() < 2
+	return pl:IsValid() and not pl:IsForcedUndeadBot() and pl:Team() == TEAM_HUMAN and pl:Alive() and not self.CheckedOut[pl:UniqueID()] and not self.StartingLoadout and not self.ZombieEscape and self.StartingWorth > 0 and self:GetWave() < 2
 end
 
 function GM:PlayerDeathThink(pl)
 	if self.RoundEnded or pl.Revive or self:GetWave() == 0 then return end
-	-- AI bots stay zombies (never crows) so TAB count matches bodies in the world.
+	-- Relapse AI bots stay zombies (never crows) so TAB count matches bodies in the world.
 	if pl.IsRelapseAIBot and not self:GetWaveActive() then return end
 
 	if pl:GetObserverMode() == OBS_MODE_CHASE then
@@ -3398,72 +3315,6 @@ function GM:SetBabyMode(mode)
 				self:SetToDefaultZombieClass(pl)
 			end
 		end
-	end
-end
-
-GM.InitialVolunteers = {}
-function GM:SetClosestsToZombie()
-	local allplayers = {}
-	for _, pl in pairs(player.GetAllActive()) do
-		if not pl.IsRelapseAIBot then
-			allplayers[#allplayers + 1] = pl
-		end
-	end
-	local numplayers = #allplayers
-	if numplayers <= 1 then return end
-
-	local desiredzombies = self:GetDesiredStartingZombies()
-
-	self:SortZombieSpawnDistances(allplayers)
-
-	local zombies = {}
-	for _, pl in pairs(allplayers) do
-		if pl:Team() ~= TEAM_HUMAN or not pl:Alive() then
-			table.insert(zombies, pl)
-		end
-	end
-
-	-- Need to place some people back on the human team.
-	if #zombies > desiredzombies then
-		local toswap = #zombies - desiredzombies
-		for _, pl in pairs(zombies) do
-			if pl.DiedDuringWave0 and pl:GetInfo("zs_alwaysvolunteer") ~= "1" and not pl.IsZSBot then
-				pl:ChangeTeam(TEAM_HUMAN)
-				pl:UnSpectateAndSpawn()
-				toswap = toswap - 1
-				if toswap <= 0 then
-					break
-				end
-			end
-		end
-	end
-
-	for i = 1, desiredzombies do
-		local pl = allplayers[i]
-		if pl:Team() ~= TEAM_UNDEAD then
-			pl:ChangeTeam(TEAM_UNDEAD)
-			self.PreviouslyDied[pl:UniqueID()] = CurTime()
-			self.InitialVolunteers[pl:UniqueID()] = true
-		end
-		pl:SetFrags(0)
-		pl:SetDeaths(0)
-
-		local unlocked = {}
-		for _, v in ipairs(self.ZombieClasses) do
-			if v.Unlocked and not v.Hidden and v.NotRandomStart then
-				unlocked[#unlocked + 1] = v.Index
-			end
-		end
-		pl:SetZombieClass(unlocked[math.random(#unlocked)])
-
-		self.StartingZombie[pl:UniqueID()] = true
-		pl:UnSpectateAndSpawn()
-	end
-
-	-- Remaining undead at the end of prep are the original infection.
-	self.StartingZombie = {}
-	for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do
-		self.StartingZombie[pl:UniqueID()] = true
 	end
 end
 
@@ -4395,7 +4246,11 @@ function GM:WaveStateChanged(newstate)
 		if self:GetWave() == 0 then
 			gamemode.Call("CreateSigils", true) -- Try creating sigils again. Only really matters if nobody seeded the map yet.
 
-			self:SetClosestsToZombie()
+			-- Anyone already undead at wave start (died in prep, bots) is the original infection.
+			self.StartingZombie = {}
+			for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do
+				self.StartingZombie[pl:UniqueID()] = true
+			end
 
 			local humans = {}
 			for _, pl in pairs(player.GetAll()) do
@@ -4407,31 +4262,6 @@ function GM:WaveStateChanged(newstate)
 			for _, pl in pairs(humans) do
 				if pl.PlayerReady then -- There's a chance they might not be ready to send their desired cart yet.
 					gamemode.Call("GiveDefaultOrRandomEquipment", pl)
-				end
-			end
-
-			-- We should spawn a crate in a random spawn point if no one has any.
-			if not self.ZombieEscape and #ents.FindByClass("prop_arsenalcrate") == 0 then
-				local have = false
-				for _, pl in pairs(humans) do
-					if pl:HasWeapon("weapon_zs_arsenalcrate") then
-						have = true
-						break
-					end
-				end
-
-				if not have and #humans >= 1 then
-					local spawn = self:PlayerSelectSpawn(humans[math.random(#humans)])
-					if spawn and spawn:IsValid() then
-						local ent = ents.Create("prop_arsenalcrate")
-						if ent:IsValid() then
-							ent:SetPos(spawn:GetPos() + Vector(0, 0, 8))
-							ent:Spawn()
-							ent:DropToFloor()
-							ent:SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER) -- Just so no one gets stuck in it.
-							ent.NoTakeOwnership = true
-						end
-					end
 				end
 			end
 		end

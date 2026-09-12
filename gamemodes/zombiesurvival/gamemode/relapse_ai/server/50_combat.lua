@@ -110,7 +110,11 @@ end
 function Melee:IsInReachOf(target)
 	if not IsValid(target) then return false end
 	local d2, reach = Measure(self, target, self:GetReach())
-	return d2 <= reach * reach
+	if d2 > reach * reach then return false end
+	if target:IsPlayer() and math.abs(target:GetPos().z - self.Player:GetPos().z) > reach then
+		return false
+	end
+	return true
 end
 
 function Melee:Think(dt)
@@ -144,6 +148,9 @@ function Melee:Think(dt)
 
 	self.Dist = math.sqrt(d2)
 	self.InReach = d2 <= effective * effective
+	if self.InReach and target:IsPlayer() and math.abs(target:GetPos().z - pl:GetPos().z) > effective then
+		self.InReach = false
+	end
 
 	-- Low prop right in front of us: crouch so the torso ray can reach it.
 	if not self.InReach and torso then

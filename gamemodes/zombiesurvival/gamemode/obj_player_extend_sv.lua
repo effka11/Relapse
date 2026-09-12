@@ -1222,6 +1222,16 @@ function meta:DoHulls(classid, teamid)
 	self:CollisionRulesChanged()
 end
 
+-- Relapse AI and D3bot NextBots stay undead when the round replays. Vanilla ZS
+-- puts everyone on TEAM_HUMAN at wave 0, and D3bot only stamps PreviouslyDied
+-- on CreateNextBot — leftover bots would otherwise spawn as survivors.
+function meta:IsForcedUndeadBot()
+	if not self:IsBot() then return false end
+	if self.IsRelapseAIBot then return true end
+	if self.D3bot_Mem then return true end
+	return D3bot and D3bot.IsEnabledCached and not D3bot.SurvivorsEnabled
+end
+
 function meta:ChangeTeam(teamid)
 	local oldteam = P_Team(self)
 	if oldteam ~= teamid then
@@ -1459,10 +1469,14 @@ function meta:SetLastAttacker(ent)
 	end
 end
 
-meta.OldUnSpectate = meta.UnSpectate
+-- lua_refresh used to re-wrap UnSpectate until OldUnSpectate == UnSpectate (stack overflow).
+if not meta.ZSOldUnSpectate then
+	meta.ZSOldUnSpectate = meta.UnSpectate
+end
+meta.OldUnSpectate = meta.ZSOldUnSpectate
 function meta:UnSpectate()
 	if self:GetObserverMode() ~= OBS_MODE_NONE then
-		self:OldUnSpectate(obsm)
+		meta.ZSOldUnSpectate(self)
 	end
 end
 

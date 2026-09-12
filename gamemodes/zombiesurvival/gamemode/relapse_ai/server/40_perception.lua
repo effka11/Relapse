@@ -1,7 +1,6 @@
 -- Relapse AI perception: a shared world cache (humans, sigils, sigil load) refreshed
--- a few times per second, per-bot sensing (radius + line of sight, close-range
--- "hearing"), target memory and damage awareness.
--- A future hearing system plugs into Sense()/Remember() without touching brains.
+-- a few times per second, per-bot sensing (every living human, no LOS), target
+-- memory and damage awareness.
 
 local AI = RelapseAI
 local Percep = {}
@@ -16,8 +15,6 @@ local util_TraceLine = util.TraceLine
 Percep.World = {Humans = {}, Sigils = {}, SigilLoad = {}, Time = -1}
 Percep.WorldInterval = 0.25
 Percep.MemoryTime = 6
-Percep.NearSenseRadius = 220 -- sensed without line of sight (footsteps, bumping)
-Percep.MaxTracesPerSense = 3
 
 ---------------------------------------------------------------------------
 -- World cache
@@ -31,7 +28,8 @@ function Percep.UpdateWorld(force)
 
 	local humans = {}
 	for _, pl in ipairs(team.GetPlayers(TEAM_HUMAN)) do
-		if IsValid(pl) and pl:Alive() and pl:GetObserverMode() == OBS_MODE_NONE and not pl.IsRelapseAIBot then
+		if IsValid(pl) and pl:Alive() and pl:GetObserverMode() == OBS_MODE_NONE and not pl.IsRelapseAIBot
+			and not (AI.Mesh and AI.Mesh.Editors[pl]) then
 			humans[#humans + 1] = pl
 		end
 	end
@@ -141,42 +139,18 @@ local function SortByDist(a, b)
 	return a.Dist2 < b.Dist2
 end
 
--- Returns an array of {Ent, Dist2, Visible} for humans inside the sense radius,
--- nearest first. Visible entries are also remembered.
+-- Every living human on the map, nearest first. Walls and floors do not hide them.
 function Percep.Sense(bot)
-	local pl = bot.Player
-	local eye = pl:EyePos()
-	local radius = AI.cv.sense_radius:GetFloat() * (bot.SenseMul or 1)
-	local r2 = radius * radius
-	local near2 = Percep.NearSenseRadius * Percep.NearSenseRadius
-
+	local eye = bot.Player:EyePos()
 	local list = {}
 	for _, human in ipairs(Percep.World.Humans) do
 		if IsValid(human) and human:Alive() then
 			local d2 = eye:DistToSqr(human:WorldSpaceCenter())
-			if d2 <= r2 then
-				list[#list + 1] = {Ent = human, Dist2 = d2, Visible = false}
-			end
+			list[#list + 1] = {Ent = human, Dist2 = d2, Visible = true}
+			Percep.Remember(bot, human, human:GetPos(), "seen")
 		end
 	end
-
-	if #list == 0 then return list end
 	table.sort(list, SortByDist)
-
-	local traces = 0
-	for _, c in ipairs(list) do
-		if c.Dist2 <= near2 then
-			c.Visible = true
-		elseif traces < Percep.MaxTracesPerSense then
-			traces = traces + 1
-			c.Visible = Percep.CanSee(pl, eye, c.Ent)
-		end
-
-		if c.Visible then
-			Percep.Remember(bot, c.Ent, c.Ent:GetPos(), "seen")
-		end
-	end
-
 	return list
 end
 

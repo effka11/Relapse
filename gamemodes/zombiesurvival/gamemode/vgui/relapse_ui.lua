@@ -52,6 +52,11 @@ function RelapseUI.Cells(n)
 	return RelapseUI.Grid15(n)
 end
 
+function RelapseUI.Snap(n)
+	local step = RelapseUI.Grid15()
+	return math.floor((n or 0) / step + 0.5) * step
+end
+
 function RelapseUI.M()
 	local step = RelapseUI.Grid15()
 	return {
@@ -1087,7 +1092,7 @@ end
 
 function RelapseUI.CreateFonts()
 	local s = RelapseUI.S()
-	local rev = 10
+	local rev = 11
 	if RelapseUI._FontS == s and RelapseUI._FontRev == rev then return end
 	RelapseUI._FontS = s
 	RelapseUI._FontRev = rev
@@ -1117,6 +1122,7 @@ function RelapseUI.CreateFonts()
 	mk("Relapse40", 40, 400)
 	mk("Relapse45", 45, 400)
 	mk("Relapse64", 64, 500)
+	mk("RelapseClose", 56, 200)
 end
 
 -- CreateFont size maps to the Windows cell (winAscent 2132 + winDescent 600).
@@ -1188,11 +1194,61 @@ function RelapseUI.RoundFill(r, x, y, w, h, col)
 	surface.DrawPoly(pts)
 end
 
+function RelapseUI.RoundStroke(r, x, y, w, h, col, thick)
+	if w < 2 or h < 2 or not col then return end
+	x, y = math.floor(x + 0.5), math.floor(y + 0.5)
+	w, h = math.floor(w), math.floor(h)
+	thick = math.max(1, math.floor((thick or RelapseUI.sPx(2)) + 0.5))
+	r = math.max(0, math.min(math.floor(r), math.floor(math.min(w, h) * 0.5)))
+
+	if r < 1 then
+		surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
+		surface.DrawRect(x, y, w, thick)
+		surface.DrawRect(x, y + h - thick, w, thick)
+		surface.DrawRect(x, y + thick, thick, math.max(0, h - 2 * thick))
+		surface.DrawRect(x + w - thick, y + thick, thick, math.max(0, h - 2 * thick))
+		return
+	end
+
+	local span = w - 2 * r
+	local midh = h - 2 * r
+	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
+	if span > 0 then
+		surface.DrawRect(x + r, y, span, thick)
+		surface.DrawRect(x + r, y + h - thick, span, thick)
+	end
+	if midh > 0 then
+		surface.DrawRect(x, y + r, thick, midh)
+		surface.DrawRect(x + w - thick, y + r, thick, midh)
+	end
+
+	local ri = math.max(0, r - thick)
+	local segs = math.max(4, math.min(8, r))
+	local function corner(cx, cy, a0, a1)
+		for i = 0, segs - 1 do
+			local a = math.rad(a0 + (a1 - a0) * (i / segs))
+			local b = math.rad(a0 + (a1 - a0) * ((i + 1) / segs))
+			RelapseUI.FillQuad(
+				cx + math.cos(a) * ri, cy + math.sin(a) * ri,
+				cx + math.cos(a) * r, cy + math.sin(a) * r,
+				cx + math.cos(b) * r, cy + math.sin(b) * r,
+				cx + math.cos(b) * ri, cy + math.sin(b) * ri,
+				col
+			)
+		end
+	end
+	corner(x + w - r, y + r, 270, 360)
+	corner(x + w - r, y + h - r, 0, 90)
+	corner(x + r, y + h - r, 90, 180)
+	corner(x + r, y + r, 180, 270)
+end
+
 function RelapseUI.RoundRing(r, x, y, w, h, col, inner, thick)
 	thick = math.max(1, math.floor((thick or RelapseUI.sPx(2)) + 0.5))
-	RelapseUI.RoundFill(r, x, y, w, h, col)
-	if w <= thick * 2 or h <= thick * 2 then return end
-	RelapseUI.RoundFill(math.max(0, r - thick), x + thick, y + thick, w - 2 * thick, h - 2 * thick, inner)
+	if inner then
+		RelapseUI.RoundFill(math.max(0, r - thick), x + thick, y + thick, w - 2 * thick, h - 2 * thick, inner)
+	end
+	RelapseUI.RoundStroke(r, x, y, w, h, col, thick)
 end
 
 function RelapseUI.HideChrome(frame)
@@ -1211,7 +1267,7 @@ local function DrawCentered(self, w, h, col)
 end
 
 function RelapseUI.PaintWindow(self, w, h)
-	RelapseUI.RoundFill(RelapseUI.RadPx("Window"), 0, 0, w, h, RelapseUI.Col.Bg)
+	RelapseUI.RoundFill(RelapseUI.RadPx("Window"), 0, 0, w, h, RelapseUI.Col.BgGlass)
 	return true
 end
 
@@ -1230,10 +1286,9 @@ function RelapseUI.PaintCard(self, w, h, selected, locked, unaffordable)
 		fill = c.CardHover
 	end
 	local r = RelapseUI.RadPx("Card")
+	RelapseUI.RoundFill(r, 0, 0, w, h, fill)
 	if selected then
-		RelapseUI.RoundRing(r, 0, 0, w, h, c.CardOn, fill)
-	else
-		RelapseUI.RoundFill(r, 0, 0, w, h, fill)
+		RelapseUI.RoundStroke(r, 0, 0, w, h, c.CardOn)
 	end
 
 	if locked then
@@ -1259,10 +1314,17 @@ function RelapseUI.PaintGhostButton(self, w, h)
 	return true
 end
 
--- Flora --flora-ease-out / energetic settle: cubic-bezier(0.33, 1, 0.2, 1)
+-- Flora motion: --flora-motion-base 150ms; --flora-ease-out / --flora-ease-in
+RelapseUI.MotionBase = 0.15
+
+function RelapseUI.Duration(n)
+	return RelapseUI.MotionBase * (n or 1)
+end
+
+-- energetic settle: cubic-bezier(0.33, 1, 0.2, 1)
 -- --flora-duration-3 = 3 × 150ms
 local TAB_EASE_X1, TAB_EASE_X2 = 0.33, 0.2
-local TAB_ANIM = 0.45
+local TAB_ANIM = RelapseUI.Duration(3)
 local TabInk = Color(255, 255, 255, 255)
 
 local function Bez(t, a, b)
@@ -1275,19 +1337,55 @@ local function BezD(t, a, b)
 	return 3 * u * u * a + 6 * u * t * (b - a) + 3 * t * t * (1 - b)
 end
 
-function RelapseUI.EaseOut(t)
-	t = math.Clamp(t, 0, 1)
-	if t == 0 or t == 1 then return t end
-	local s = t
+local function CubicBezier(linearT, x1, y1, x2, y2)
+	linearT = math.Clamp(linearT, 0, 1)
+	if linearT == 0 or linearT == 1 then return linearT end
+	local s = linearT
 	for _ = 1, 8 do
-		local x = Bez(s, TAB_EASE_X1, TAB_EASE_X2) - t
+		local x = Bez(s, x1, x2) - linearT
 		if math.abs(x) < 1e-6 then break end
-		local d = BezD(s, TAB_EASE_X1, TAB_EASE_X2)
+		local d = BezD(s, x1, x2)
 		if math.abs(d) < 1e-6 then break end
 		s = math.Clamp(s - x / d, 0, 1)
 	end
-	local u = 1 - s
-	return 1 - u * u * u
+	return Bez(s, y1, y2)
+end
+
+function RelapseUI.EaseOut(t)
+	return CubicBezier(t, 0.33, 1, 0.2, 1)
+end
+
+function RelapseUI.EaseIn(t)
+	return CubicBezier(t, 0.36, 0, 0.64, 1)
+end
+
+function RelapseUI.PlayFade(panel, target, duration, easeFn, onDone)
+	if not IsValid(panel) then return end
+	panel._RelapseFade = {
+		from = panel:GetAlpha(),
+		to = target,
+		t0 = RealTime(),
+		dur = math.max(0.01, duration or RelapseUI.Duration()),
+		ease = easeFn or RelapseUI.EaseOut,
+		done = onDone
+	}
+	if panel._RelapseFadeHooked then return end
+	panel._RelapseFadeHooked = true
+	local prev = panel.Think
+	panel.Think = function(me)
+		if prev then prev(me) end
+		local f = me._RelapseFade
+		if not f then return end
+		local u = (RealTime() - f.t0) / f.dur
+		if u >= 1 then
+			me:SetAlpha(f.to)
+			me._RelapseFade = nil
+			if f.done then f.done(me) end
+			return
+		end
+		local e = f.ease(math.Clamp(u, 0, 1))
+		me:SetAlpha(math.floor(f.from + (f.to - f.from) * e + 0.5))
+	end
 end
 
 function RelapseUI.TabStrip(sheet)
@@ -1569,6 +1667,14 @@ end
 function RelapseUI.StyleScroll(pnl)
 	if not IsValid(pnl) then return end
 
+	if pnl.SetPaintBackground then
+		pnl:SetPaintBackground(false)
+	end
+	local canvas = pnl.GetCanvas and pnl:GetCanvas()
+	if IsValid(canvas) and canvas.SetPaintBackground then
+		canvas:SetPaintBackground(false)
+	end
+
 	local bar = pnl.GetVBar and pnl:GetVBar() or pnl.VBar
 	if not IsValid(bar) then return end
 
@@ -1845,6 +1951,89 @@ function RelapseUI.PlaceShopTitle(title, L)
 	local titleCell = title:GetTall()
 	local tabCapY = L.headerh + math.ceil((L.tabhei - tabCell) * 0.5) + RelapseUI.sPx(5)
 	title:SetPos(L.pad, math.max(0, tabCapY - RelapseUI.sPx(45) - (titleCell - RelapseUI.sPx(6))))
+	RelapseUI.PlaceShopSwitch(title:GetParent())
+end
+
+function RelapseUI.HideOtherShops(kind)
+	if kind ~= "worth" and pWorth and pWorth:IsValid() then
+		pWorth:SetVisible(false)
+	end
+	if kind ~= "points" then
+		local ars = GAMEMODE and GAMEMODE.ArsenalInterface
+		if IsValid(ars) then
+			ars:SetVisible(false)
+		end
+	end
+end
+
+function RelapseUI.ShowShopFrame(frame)
+	if not IsValid(frame) then return end
+	frame:SetVisible(true)
+	frame:SetAlpha(0)
+	frame:AlphaTo(255, 0.12, 0)
+	frame:MakePopup()
+	frame:MoveToFront()
+end
+
+function RelapseUI.OpenShop(kind)
+	if kind == "points" then
+		if GAMEMODE and GAMEMODE.OpenArsenalMenu then
+			GAMEMODE:OpenArsenalMenu()
+		end
+		return
+	end
+
+	RelapseUI.HideOtherShops("worth")
+	if pWorth and pWorth:IsValid() then
+		RelapseUI.ShowShopFrame(pWorth)
+	elseif MakepWorth then
+		MakepWorth()
+	end
+end
+
+function RelapseUI.PlaceShopSwitch(frame)
+	if not IsValid(frame) then return end
+	local title = frame.RelapseTitle
+	local prev = frame.RelapseShopPrev
+	local nxt = frame.RelapseShopNext
+	if not IsValid(title) or not IsValid(prev) or not IsValid(nxt) then return end
+
+	local gap = RelapseUI.Grid5(2)
+	local tx, ty = title:GetPos()
+	local tw, th = title:GetSize()
+	local bh = prev:GetTall()
+	local by = ty + math.floor((th - bh) * 0.5)
+	prev:SetPos(tx + tw + gap, by)
+	nxt:SetPos(tx + tw + gap + prev:GetWide(), by)
+end
+
+local function PaintShopSwitch(self, w, h)
+	local c = RelapseUI.Col
+	local on = not self.RelapseCurrent
+	if self.Hovered then
+		RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, c.CardHover)
+	end
+	DrawCentered(self, w, h, (on or self.Hovered) and c.Text or c.Muted)
+	return true
+end
+
+local function MakeShopSwitch(frame, dir, target, current)
+	local btn = vgui.Create("DButton", frame)
+	btn:SetText(dir < 0 and "<" or ">")
+	btn:SetFont("Relapse32")
+	btn:SetPaintBackground(false)
+	btn:SetSize(RelapseUI.Grid15(2), RelapseUI.Grid15(2))
+	btn:SetCursor(current and "arrow" or "hand")
+	btn.RelapseDir = dir
+	btn.RelapseTarget = target
+	btn.RelapseCurrent = current
+	btn.Paint = PaintShopSwitch
+	btn.DoClick = function(me)
+		if me.RelapseCurrent then return end
+		surface.PlaySound("buttons/button14.wav")
+		RelapseUI.OpenShop(me.RelapseTarget)
+	end
+	return btn
 end
 
 function RelapseUI.BuildShopFrame(titleKey, opts)
@@ -1863,19 +2052,24 @@ function RelapseUI.BuildShopFrame(titleKey, opts)
 	frame:DockPadding(0, 0, 0, 0)
 	frame.RelapseFooter = L.footerh
 	frame.RelapseLayout = L
+	frame.RelapseShop = opts.shop
 	frame.Paint = RelapseUI.PaintWindow
 	RelapseUI.HideChrome(frame)
 
-	local title = EasyLabel(frame, RelapseUI.T(titleKey), "Relapse32", RelapseUI.Col.Text)
-	RelapseUI.PlaceShopTitle(title, L)
+	local title = EasyLabel(frame, RelapseUI.T(titleKey), "Relapse30", RelapseUI.Col.Text)
 	frame.RelapseTitle = title
+	if opts.shop then
+		frame.RelapseShopPrev = MakeShopSwitch(frame, -1, "worth", opts.shop == "worth")
+		frame.RelapseShopNext = MakeShopSwitch(frame, 1, "points", opts.shop == "points")
+	end
+	RelapseUI.PlaceShopTitle(title, L)
 
 	local close = vgui.Create("DButton", frame)
 	close:SetText("×")
-	close:SetFont("Relapse32")
+	close:SetFont("Relapse30")
 	close:SetSize(m.close, m.close)
 	close:AlignRight(pad)
-	close:AlignTop((L.headerh - m.close) * 0.5)
+	close:AlignTop(RelapseUI.Grid15(2))
 	close.Paint = RelapseUI.PaintGhostButton
 	close.DoClick = function() frame:Close() end
 	frame.RelapseClose = close
@@ -1895,6 +2089,14 @@ function RelapseUI.BuildShopFrame(titleKey, opts)
 	propertysheet:SetPos(pad, L.headerh)
 	propertysheet:SetPadding(0)
 	propertysheet.Paint = RelapseUI.PaintSheet
+
+	if IsValid(frame.RelapseShopPrev) then
+		frame.RelapseShopPrev:MoveToFront()
+		frame.RelapseShopNext:MoveToFront()
+	end
+	if IsValid(close) then
+		close:MoveToFront()
+	end
 
 	return frame, L, topspace, bottomspace, propertysheet
 end
@@ -2010,3 +2212,103 @@ function RelapseUI.FinishShopFrame(frame, propertysheet)
 	frame:MakePopup()
 	return frame
 end
+
+function RelapseUI.PaintMenuRow(self, w, h)
+	local text = self.GetText and self:GetText() or ""
+	local shadow = RelapseUI.Shadow
+	DisableClipping(true)
+	if text ~= "" then
+		RelapseUI.HudText(text, self:GetFont() or "Relapse25", w * 0.5, h * 0.5, RelapseUI.Col.Text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, shadow)
+	end
+	if self.RelapseRule then
+		local thick = math.max(1, RelapseUI.sPx(1))
+		local col = RelapseUI.Col.Muted
+		surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
+		surface.DrawRect(0, h, w, thick)
+	end
+	DisableClipping(false)
+	return true
+end
+
+function RelapseUI.PaintMenuClose(self, w, h)
+	DisableClipping(true)
+	RelapseUI.HudText("×", self:GetFont() or "RelapseClose", w * 0.5, h * 0.5, RelapseUI.Col.Text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 0)
+	DisableClipping(false)
+	return true
+end
+
+function RelapseUI.PaintMenuScrim(self, w, h)
+	local c = RelapseUI.Col.Scrim
+	surface.SetDrawColor(c.r, c.g, c.b, c.a or 160)
+	surface.DrawRect(0, 0, w, h)
+	return true
+end
+
+function RelapseUI.BuildMenuFrame()
+	RelapseUI.CreateFonts()
+	local frame = vgui.Create("DFrame")
+	frame:SetSize(ScrW(), ScrH())
+	frame:SetPos(0, 0)
+	frame:SetDeleteOnClose(true)
+	frame:SetKeyboardInputEnabled(false)
+	frame:SetTitle("")
+	frame:SetDraggable(false)
+	frame:SetSizable(false)
+	frame:DockPadding(0, 0, 0, 0)
+	frame.Paint = RelapseUI.PaintMenuScrim
+	RelapseUI.HideChrome(frame)
+	frame.OnMousePressed = function(me)
+		me:Close()
+	end
+	frame.OnKeyCodePressed = function(me, key)
+		if key == KEY_ESCAPE then
+			GAMEMODE:CloseHelpMenu(true)
+		elseif key == KEY_F1 then
+			GAMEMODE:CloseHelpMenu()
+		end
+	end
+	frame.Close = function(me, instant)
+		if not IsValid(me) then return end
+		if instant then
+			me._RelapseFade = nil
+			me:Remove()
+			return
+		end
+		if me._RelapseClosing then return end
+		me._RelapseClosing = true
+		RelapseUI.PlayFade(me, 0, RelapseUI.Duration(2), RelapseUI.EaseIn, function(pnl)
+			if IsValid(pnl) then
+				pnl:Remove()
+			end
+		end)
+	end
+	return frame
+end
+
+function RelapseUI.MakeMenuButton(parent, text, onClick)
+	local btn = vgui.Create("DButton", parent)
+	btn:SetText(text)
+	btn:SetFont("Relapse25")
+	btn:SetTextColor(Color(0, 0, 0, 0))
+	btn:SetPaintBackground(false)
+	btn:SetTall(RelapseUI.Grid15(4))
+	btn.Paint = RelapseUI.PaintMenuRow
+	btn.DoClick = onClick
+	return btn
+end
+
+function RelapseUI.MakeMenuClose(parent, onClick)
+	local close = vgui.Create("DButton", parent)
+	local s = RelapseUI.Grid15(5)
+	close:SetText("×")
+	close:SetFont("RelapseClose")
+	close:SetTextColor(Color(0, 0, 0, 0))
+	close:SetPaintBackground(false)
+	close:SetKeyboardInputEnabled(false)
+	close:SetSize(s, s)
+	close.Paint = RelapseUI.PaintMenuClose
+	close.DoClick = onClick
+	return close
+end
+
+

@@ -135,8 +135,8 @@ local function DrawPair(x, yNum, lab, val, valCol)
 	local lw = surface.GetTextSize(lab) or 0
 	-- CreateFont size is the Windows cell. Caps and lining figures share the baseline.
 	local labY = RelapseUI.ManropeBaseline(yNum, RelapseUI.sPx(30)) - RelapseUI.ManropeBaseline(0, RelapseUI.sPx(25))
-	RelapseUI.HudText(lab, PAIR_FONT, x, labY, RelapseUI.Col.Text)
-	RelapseUI.HudText(val, NUM_FONT, x + lw + RelapseUI.Grid5(2), yNum + RelapseUI.sPx(1), valCol)
+	RelapseUI.HudText(lab, PAIR_FONT, x, labY, RelapseUI.Col.Text, nil, nil, 1)
+	RelapseUI.HudText(val, NUM_FONT, x + lw + RelapseUI.Grid5(2), yNum + RelapseUI.sPx(1), valCol, nil, nil, 1)
 end
 
 function PANEL:Paint()
@@ -145,11 +145,11 @@ function PANEL:Paint()
 	local x = 0
 	local titleY, clockY, capY = HudStack()
 
-	RelapseUI.HudText(WaveTitle(), TITLE_FONT, x, titleY, c.Text)
+	RelapseUI.HudText(WaveTitle(), TITLE_FONT, x, titleY, c.Text, nil, nil, 1)
 
 	local _, clock, remain = WaveClock()
 	if clock then
-		RelapseUI.HudText(clock, CLOCK_FONT, x, clockY, RelapseUI.UrgentCol(remain, c.Text))
+		RelapseUI.HudText(clock, CLOCK_FONT, x, clockY, RelapseUI.UrgentCol(remain, c.Text), nil, nil, 1)
 	end
 
 	if IsValid(MySelf) then
@@ -157,7 +157,7 @@ function PANEL:Paint()
 			local toredeem = GAMEMODE:GetRedeemBrains()
 			local brains = toredeem > 0 and (MySelf:Frags() .. " / " .. toredeem) or MySelf:Frags()
 			local labY = capY + FontH(NUM_FONT) - FontH(PAIR_FONT)
-			RelapseUI.HudText(translate.Format("brains_eaten_x", brains), PAIR_FONT, x, labY, c.Danger)
+			RelapseUI.HudText(translate.Format("brains_eaten_x", brains), PAIR_FONT, x, labY, c.Danger, nil, nil, 1)
 		else
 			DrawPair(x, capY, translate.Get("hud_points"), MySelf:GetPoints(), c.Ok)
 		end

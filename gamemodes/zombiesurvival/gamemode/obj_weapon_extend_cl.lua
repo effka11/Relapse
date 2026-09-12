@@ -31,6 +31,7 @@ end
 function GM:DrawRelapseCrosshairDot()
 	if GetConVar("crosshair"):GetInt() ~= 1 then return end
 	if not MySelf:Alive() then return end
+	if self.RelapseFreecamActive then return end
 
 	local x = ScrW() * 0.5
 	local y = ScrH() * 0.5

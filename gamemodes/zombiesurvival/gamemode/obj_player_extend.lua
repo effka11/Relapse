@@ -520,6 +520,14 @@ function meta:SetSpeed(speed)
 	self:SetWalkSpeed(speed)
 	self:SetRunSpeed(runspeed)
 	self:SetMaxSpeed(runspeed)
+
+	if SERVER then
+		if P_Team(self) == TEAM_HUMAN then
+			self:SprintEnable()
+		else
+			self:SprintDisable()
+		end
+	end
 end
 
 function meta:SetHumanSpeed(speed)
@@ -935,6 +943,22 @@ function meta:IsHolding()
 	return self:GetHolding():IsValid()
 end
 meta.IsCarrying = meta.IsHolding
+
+function meta:GetCarryStatus()
+	local status = self.status_human_holding
+	if status and status:IsValid() then return status end
+
+	for _, ent in ipairs(ents.FindByClass("status_human_holding")) do
+		if ent:GetOwner() == self then
+			self.status_human_holding = ent
+			return ent
+		end
+	end
+end
+
+function meta:ShouldHolsterWeaponViewModel()
+	return self:GetCarryStatus() ~= nil
+end
 
 function meta:GetHolding()
 	local status = self.status_human_holding

@@ -1,5 +1,7 @@
-SWEP.PrintName = "Mechanic's Wrench"
-SWEP.Description = "This tool can be used to repair deployables as long as they were not damaged recently."
+SWEP.PrintName = "Гаечный ключ"
+SWEP.TranslationName = "wep_wrench"
+SWEP.TranslationDescription = "wep_wrench_desc"
+SWEP.Description = "A mechanic's wrench. It puts crates and machines back together, if they have not just been torn open."
 
 SWEP.Base = "weapon_zs_basemelee"
 

@@ -23,7 +23,7 @@ local function ApplyOne(class, def)
 	if def.PreviewHullBounds ~= nil then
 		wep.RelapsePreviewHullBounds = def.PreviewHullBounds
 	end
-	wep.RelapsePreviewBodygroups = def.PreviewBodygroups or wep.RelapsePreviewBodygroups
+	wep.RelapsePreviewBodygroups = def.PreviewBodygroups
 	wep.RelapsePreviewAngle = def.PreviewAngle or wep.RelapsePreviewAngle or Angle(8, 90, 0)
 	wep.RelapsePreviewLocalAng = def.PreviewLocalAng or wep.RelapsePreviewLocalAng
 	wep.RelapsePreviewOffset = def.PreviewOffset or wep.RelapsePreviewOffset
@@ -64,6 +64,18 @@ local function ApplyOne(class, def)
 	wep.ConeRamp = wep.ConeRamp or 2
 	wep.DrawCrosshair = false
 
+	-- Hipfire uses the ADS cone. Bloom while hip matches ADS (Increase * AdsMultiplier).
+	if istable(wep.Cone) then
+		if wep.Cone.Ads ~= nil then
+			wep.Cone.Hip = wep.Cone.Ads
+		end
+		if not wep.Cone.RelapseAdsBloomBaked and wep.Cone.AdsMultiplier ~= nil then
+			wep.Cone.Increase = (wep.Cone.Increase or 0) * wep.Cone.AdsMultiplier
+			wep.Cone.AdsMultiplier = 1
+			wep.Cone.RelapseAdsBloomBaked = true
+		end
+	end
+
 	local gm = GAMEMODE or GM
 	if gm and gm.SetupDefaultClip and not wep.Primary.DefaultClip then
 		gm:SetupDefaultClip(wep.Primary)
@@ -75,6 +87,9 @@ local function ApplyOne(class, def)
 		wep.Initialize = function(self, ...)
 			oldInit(self, ...)
 			self.m_bInitialized = true
+			if istable(self.Cone) and self.Cone.Ads ~= nil then
+				self.Cone.Hip = self.Cone.Ads
+			end
 			local gm = GAMEMODE or GM
 			local owner = self.GetOwner and self:GetOwner()
 			if gm and gm.ReconnectWeaponEmptyLocked and IsValid(owner) and gm:ReconnectWeaponEmptyLocked(self, owner) then

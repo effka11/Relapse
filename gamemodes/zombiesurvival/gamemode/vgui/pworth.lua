@@ -191,6 +191,7 @@ local function WorthThink(self)
 end
 
 function MakepWorth()
+	RelapseUI.HideOtherShops("worth")
 	if pWorth and pWorth:IsValid() then
 		pWorth:Remove()
 		pWorth = nil
@@ -198,7 +199,9 @@ function MakepWorth()
 
 	remainingworth = GetStartingWorth()
 
-	local frame, L, topspace, bottomspace, propertysheet = RelapseUI.BuildShopFrame("shop_worth_title")
+	local frame, L, topspace, bottomspace, propertysheet = RelapseUI.BuildShopFrame("shop_worth_title", {
+		shop = "worth"
+	})
 	pWorth = frame
 	frame.Think = WorthThink
 

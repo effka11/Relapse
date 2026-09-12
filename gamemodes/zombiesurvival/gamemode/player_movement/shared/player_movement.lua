@@ -3,6 +3,8 @@ local math_min = math.min
 local curtime = CurTime
 
 local TEAM_HUMAN = TEAM_HUMAN
+local IN_SPEED = IN_SPEED
+local MOVETYPE_NOCLIP = MOVETYPE_NOCLIP
 
 local GM_MaxLegDamage = GM.MaxLegDamage
 
@@ -13,7 +15,11 @@ local M_CMoveData = FindMetaTable("CMoveData")
 local E_GetTable = M_Entity.GetTable
 local E_GetDTFloat = M_Entity.GetDTFloat
 local E_GetDTBool = M_Entity.GetDTBool
+local E_GetMoveType = M_Entity.GetMoveType
 local P_Team = M_Player.Team
+local P_Crouching = M_Player.Crouching
+local P_GetWalkSpeed = M_Player.GetWalkSpeed
+local P_GetRunSpeed = M_Player.GetRunSpeed
 local P_CallZombieFunction1 = M_Player.CallZombieFunction1
 local P_GetLegDamage = M_Player.GetLegDamage
 local P_GetBarricadeGhosting = M_Player.GetBarricadeGhosting
@@ -26,12 +32,30 @@ local M_SetMaxClientSpeed = M_CMoveData.SetMaxClientSpeed
 local M_GetMaxClientSpeed = M_CMoveData.GetMaxClientSpeed
 local M_GetForwardSpeed = M_CMoveData.GetForwardSpeed
 local M_GetSideSpeed = M_CMoveData.GetSideSpeed
+local M_KeyDown = M_CMoveData.KeyDown
 
+-- Shift is IN_SPEED. Run anim / MW sprint follow the button; engine speed
+-- follows a sticky SprintEnable flag that can stay off after SprintDisable
+-- (round restart used to disable it after human spawn). Apply walk/run here.
 function GM:SetupMove(pl, move, cmd)
+	if P_Team(pl) ~= TEAM_HUMAN then return end
+	if E_GetMoveType(pl) == MOVETYPE_NOCLIP then return end
+
+	local spd
+	if M_KeyDown(move, IN_SPEED) and not P_Crouching(pl) then
+		spd = P_GetRunSpeed(pl)
+	else
+		spd = P_GetWalkSpeed(pl)
+	end
+
+	M_SetMaxSpeed(move, spd)
+	M_SetMaxClientSpeed(move, spd)
 end
 
 local fw, sd, pt, vel, mul, phase
 function GM:Move(pl, move)
+	if pl:GetMoveType() == MOVETYPE_NOCLIP then return end
+
 	pt = E_GetTable(pl)
 
 	if P_Team(pl) == TEAM_HUMAN then
@@ -66,6 +90,8 @@ function GM:Move(pl, move)
 end
 
 function GM:FinishMove(pl, move)
+	if pl:GetMoveType() == MOVETYPE_NOCLIP then return end
+
 	pt = E_GetTable(pl)
 
 	-- Simple anti bunny hopping. Flag is set in OnPlayerHitGround

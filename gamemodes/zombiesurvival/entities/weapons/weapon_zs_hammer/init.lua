@@ -115,7 +115,7 @@ function SWEP:SecondaryAttack()
 	or trent:IsNailed() and (#trent.Nails >= 8 or trent:GetPropsInContraption() >= GAMEMODE.MaxPropsInBarricade)
 	or trent:GetMaxHealth() == 1 and trent:Health() == 0 and not trent.TotalHealth
 	or trent.PreHoldCollisionGroup and (trent.PreHoldCollisionGroup == COLLISION_GROUP_DEBRIS or trent.PreHoldCollisionGroup == COLLISION_GROUP_DEBRIS_TRIGGER or trent.PreHoldCollisionGroup == COLLISION_GROUP_INTERACTIVE_DEBRIS)
-	or not trent:IsNailed() and not trent:GetPhysicsObject():IsMoveable() then return end
+	or not trent:IsNailed() and not trent:IsRelapseMoveable() then return end
 
 	if not gamemode.Call("CanPlaceNail", owner, tr) then return end
 
@@ -164,7 +164,7 @@ function SWEP:SecondaryAttack()
 
 	local ent = trtwo.Entity
 	if trtwo.HitWorld
-	or ent:IsValid() and util.IsValidPhysicsObject(ent, trtwo.PhysicsBone) and (ent:GetMoveType() == MOVETYPE_VPHYSICS or ent:GetNailFrozen()) and not ent.NoNails and not (not ent:IsNailed() and not ent:GetPhysicsObject():IsMoveable()) and not (ent:GetMaxHealth() == 1 and ent:Health() == 0 and not ent.TotalHealth) then
+	or ent:IsValid() and util.IsValidPhysicsObject(ent, trtwo.PhysicsBone) and (ent:GetMoveType() == MOVETYPE_VPHYSICS or ent:GetNailFrozen()) and not ent.NoNails and not (not ent:IsNailed() and not ent:IsRelapseMoveable()) and not (ent:GetMaxHealth() == 1 and ent:Health() == 0 and not ent.TotalHealth) then
 		if trtwo.MatType == MAT_GRATE or trtwo.MatType == MAT_CLIP then
 			owner:PrintTranslatedMessage(HUD_PRINTCENTER, "impossible")
 			return

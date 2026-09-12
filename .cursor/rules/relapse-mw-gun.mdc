@@ -1,0 +1,56 @@
+---
+description: How to add a Relapse MW gun to a shop shelf — real stats, auto-taxed damage, overlay, no GMA dump.
+globs: gamemodes/zombiesurvival/gamemode/sh_usefulness_model.lua,gamemodes/zombiesurvival/gamemode/sh_options.lua,gamemodes/zombiesurvival/gamemode/sh_relapse_ammo.lua,addons/zzz_relapse_mw_sykov/**/*.lua,documents/usefulness*.md
+alwaysApply: true
+---
+
+# Relapse MW-ствол на полку
+
+Эталон: **SCAR-H** (`mg_scharlie`, T5), **АС «Вал»** (`mg_valpha`, T4) и **АК-47** (`mg_akilo47`, T3). Новый ствол — тот же пайплайн. Патроны / иконки / 3D — отдельные правила.
+
+Не ретайрить уже в шопе. Не поднимать HP зомби. Не расширять разброс (hip = ADS, bloom 15%). U не задаёт TTK. Рычаг автомата — **урон за пулю**.
+
+## Что взять
+
+Пак MW2019 Viper. Сначала уже в `relapse_mw_workshop.lua`. Новый пак — `resource.AddWorkshop` + клиенты подписываются.
+
+Класс и mdl — из lua пака, не угадывать. GMA: `D:\steam\steamapps\workshop\content\4000\<id>\gmpublisher.gma`. Распаковка: `gmad.exe extract -file … -out …` (`GarrysMod\bin\gmad.exe`).
+
+В аддон копировать **только lua этого ствола**: `mg_<class>/{shared,animations,customization}.lua`, `attachments_ar_*.lua` / `attachments_sm_*.lua`, `attachmentss/<name>/`, `mw_sounds_*.lua`. Тонкий бэкап: `reference/mw2019_<name>/` (lua). Полный extract **удалить**, не коммитить.
+
+Пути mdl — как в lua пака. SCAR: аттачи **без** подпапки. VAL: `attachments/valpha/`. АК: `attachments/akilo47/`. UMP: `attachments/smgolf45/`. Origin-12: `attachments/oscar12/`.
+
+## Статы
+
+Реальные магазин / RPM / вес (пустой кг). `Reload` = Length анимации Reload. Урон — шкала ZS, налог очереди: быстрый автомат слабее за пулю, чем медленный «слабее калибром». Якорь: Макаров 20 semi. Не копировать CoD Damage.
+
+| | Патрон | Clip | Delay | RPM | Dmg | TTK 225 HP |
+|---|---|---:|---:|---:|---:|---|
+| MP5 T2 | 9×19 | 30 | 0.075 | 800 | 16 | ~1.05 с |
+| UMP T2 | .45 ACP | 25 | 0.10 | 600 | 22 | ~1.00 с |
+| AK T3 | 7.62×39 | 30 | 0.10 | 600 | 24 | ~0.90 с |
+| Origin-12 T3 | 12ga | 8 | 0.32 | ~188 | 12×9 | ~0.64 с |
+| VAL T4 | 9×39 | 20 | 0.068 | ~882 | 18 | ~0.82 с |
+| SCAR T5 | 7.62×51 | 20 | 0.105 | ~571 | 30 | ~0.73 с |
+
+19 на Вале = 12 попаданий = TTK SCAR — не поднимать. SCAR 30 < СКС 34 за пулю.
+
+Одинаковые числа в `SWEP.Relapse` и `GM.RelapseWeapons.<class>.Relapse`. `Primary.Ammo` = id гильзы (`relapse-ammo`). Новый калибр — строка в таблице, не чужой id.
+
+Тир — роль и волна, не дыра в U. Шоп дороже справедливого (`U / 27.607`): T2 30, T3 45, T4 55, T5 70. Веса U и `U_point` не трогать, если не просили. Пример в `documents/usefulness-model.md`.
+
+## Overlay
+
+`relapse_mw_sykov_zs.lua` копирует Relapse на `weapons.GetStored`. Воркшоп может выиграть файл — таблица всё равно нужна.
+
+```lua
+-- ❌ semi пака ставит RPM 450 и бьёт Relapse Delay
+self.Primary.RPM = 450
+
+-- ✅ только авто/полуавто
+self.Primary.Automatic = false
+```
+
+`GiveEmptyWeapon`. `item.Tier = N`. EN/RU: `wep_*`, `wep_*_desc`, `shop_ammo_<id>`. Иконка — правило иконок. Превью — правило превью (автомат как СКС: bone merge, hull; `[0]=1` только если default WM пустой — MP5/Uzi/UMP, не АК/SCAR). SCAR/VAL/АК/Origin-12 Lift **2.8**, Offset `(0,0,-3)`.
+
+Проверка: `changelevel`, не `restart`. Вкладка тира, поинты, волна, 3D, ящик патрона, TTK.

@@ -186,16 +186,6 @@ net.Receive("zs_nextboss", function(length)
 	GAMEMODE.NextBossZombieClass = GAMEMODE.ZombieClasses[net.ReadUInt(8)].Name
 end)
 
-net.Receive("zs_zvols", function(length)
-	local volunteers = {}
-	local count = net.ReadUInt(8)
-	for i=1, count do
-		volunteers[i] = net.ReadEntity()
-	end
-
-	GAMEMODE.ZombieVolunteers = volunteers
-end)
-
 net.Receive("zs_dmg", function(length)
 	local damage = net.ReadUInt(16)
 	local pos = net.ReadVector()

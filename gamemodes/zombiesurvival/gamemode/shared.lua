@@ -59,6 +59,7 @@ include("sh_options.lua")
 include("sh_zombieclasses.lua")
 include("sh_animations.lua")
 include("sh_sigils.lua")
+include("sh_relapse_sigil_shop.lua")
 include("sh_channel.lua")
 include("sh_weaponquality.lua")
 include("sh_usefulness.lua")
@@ -81,7 +82,6 @@ include_library("relapse_ai") -- server/: AI bots, client/: debug overlay
 
 GM.EndRound = false
 GM.StartingWorth = 100
-GM.ZombieVolunteers = {}
 
 team.SetUp(TEAM_ZOMBIE, "The Undead", Color(0, 255, 0, 255))
 team.SetUp(TEAM_SURVIVORS, "Survivors", Color(0, 160, 255, 255))
@@ -473,17 +473,6 @@ function GM:GetDynamicSpawns(pl)
 	return tab
 end
 
-function GM:GetDesiredStartingZombies()
-	local numplayers = 0
-	for _, pl in pairs(player.GetAllActive()) do
-		if not (pl.IsRelapseAIBot or pl:GetNWBool("RelapseAIBot", false)) then
-			numplayers = numplayers + 1
-		end
-	end
-	if numplayers <= 1 then return 0 end
-	return math.Clamp(math.ceil(numplayers * self.WaveOneZombies), 1, numplayers - 1)
-end
-
 function GM:GetEndRound()
 	return self.RoundEnded
 end
@@ -824,16 +813,10 @@ function GM:GetRagdollEyes(pl)
 end
 
 function GM:PlayerNoClip(pl, on)
-	if pl:IsAdmin() then
-		if SERVER then
-			PrintMessage(HUD_PRINTCONSOLE, translate.Format(on and "x_turned_on_noclip" or "x_turned_off_noclip", pl:Name()))
-		end
-
-		if SERVER then
-			pl:MarkAsBadProfile()
-		end
-
-		return true
+	-- V / noclip bind is hidden spectator. B is real MOVETYPE_NOCLIP.
+	-- Never let the engine noclip command move the pawn: bots would chase it.
+	if SERVER and self.RelapseFreecamNoclip then
+		return self:RelapseFreecamNoclip(pl, on)
 	end
 
 	return false

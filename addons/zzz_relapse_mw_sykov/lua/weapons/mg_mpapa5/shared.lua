@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_mpapa5", "zombiesurvival/killicons/weapon_zs_mp5_side4.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_mp5_side4.png")
+    killicon.Add("mg_mpapa5", "zombiesurvival/killicons/weapon_zs_mp5_side6.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_mp5_side6.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side4.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side6.png"
 -- Default WM bodygroup is empty. Variant 1 is the receiver only — not the whole
 -- gun like Uzi. Mag/stock/barrel bone-merge onto tag_*_attach (same as SKS).
 -- DrawModel after SetupBones is +Z: hull + LocalAng 90. Frame like Uzi, not SKS.
@@ -57,9 +57,9 @@ SWEP.Trigger = {
 -- Kinetic = fraction of close-range damage lost by EffectiveRange (0 = none, 1 = all).
 -- Accuracy = spread cone (higher = wider). Recoil = kick. Shop stability uses both.
 -- Weight is kilograms (MP5A3 empty ~2.5 kg, loaded ~3.1). Clip is the real 30-round mag, not CoD 25.
--- 9x19: stick damage (24), closed bolt, 800 RPM. Tighter than open-bolt Uzi.
+-- 9x19 auto tax: same 16 as Uzi. T2 is 800 RPM and closed bolt, not a heavier bullet.
 SWEP.Relapse = {
-    Damage = 24,
+    Damage = 16,
     Delay = 0.075,
     Reload = 2.20,
     Kinetic = 0.32,
@@ -142,7 +142,7 @@ SWEP.BarrelSmoke = {
 }
 
 SWEP.Cone = {
-    Hip = R.Accuracy / 6,
+    Hip = R.Accuracy / 36,
     TacStance = false,
     Ads = R.Accuracy / 36,
     Increase = 0.1 * (R.Accuracy / 1.8),

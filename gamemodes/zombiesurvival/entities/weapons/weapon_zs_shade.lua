@@ -41,7 +41,9 @@ function SWEP:PrimaryAttack()
 				local vel = owner:GetAimVector() * 1000
 
 				local phys = obj:GetPhysicsObject()
-				if phys:IsValid() and phys:IsMoveable() and phys:GetMass() <= 300 then
+				if phys:IsValid() and obj:IsRelapseMoveable() and phys:GetMass() <= 300 then
+					obj:RelapseUnfreezeAgainstPush()
+					phys = obj:GetPhysicsObject()
 					phys:Wake()
 					phys:SetVelocity(vel)
 					obj:SetPhysicsAttacker(owner)
@@ -85,7 +87,9 @@ function SWEP:SecondaryAttack()
 
 		if SERVER then
 		local phys = ent:GetPhysicsObject()
-		if phys:IsValid() and phys:IsMoveable() and phys:GetMass() <= 300 then
+		if phys:IsValid() and ent:IsRelapseMoveable() and phys:GetMass() <= 300 then
+			ent:RelapseUnfreezeAgainstPush()
+			phys = ent:GetPhysicsObject()
 			for _, ent2 in pairs(ents.FindByClass(self.ShadeControl)) do
 				if ent2:IsValid() and ent2:GetParent() == ent then
 					ent2:Remove()

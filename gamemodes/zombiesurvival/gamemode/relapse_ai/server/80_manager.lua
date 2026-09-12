@@ -28,6 +28,7 @@ function Mgr.CanCreate()
 	if game.SinglePlayer() then return false, "singleplayer" end
 	if not AI.HasRealPlayer() then return false, "no real players" end
 	if not GAMEMODE or GAMEMODE.RoundEnded then return false, "round ended" end
+	if not AI.Nav then return false, "nav module missing" end
 	if not AI.Nav.IsReady() then return false, "navmesh " .. AI.Nav.Status() end
 	return true
 end
@@ -106,8 +107,9 @@ end
 function Mgr.KickStrays()
 	for _, pl in ipairs(player.GetAll()) do
 		if IsValid(pl) and pl:IsBot() and not pl.IsRelapseAIBot
-		and (pl.IsRelapseBot or pl:Nick() == "Zombie" or pl:Nick() == "Spetsnaz") then
-			pl:Kick("Relapse AI: placeholder removed")
+		and (pl.IsRelapseBot or pl:Nick() == "Zombie" or pl:Nick() == "Spetsnaz"
+			or (D3bot and D3bot.RelapseDisabled and pl.D3bot_Mem)) then
+			pl:Kick("Relapse AI: leftover bot removed")
 		end
 	end
 end
@@ -137,10 +139,10 @@ function Mgr.Maintain(reason)
 	local have = AI.Count("zombie")
 
 	if have < want then
-		if not AI.Nav.IsReady() then
+		if not AI.Nav or not AI.Nav.IsReady() then
 			if not Mgr.WarnedNav then
 				Mgr.WarnedNav = true
-				AI.Log("no AI zombies: navmesh %s. Use relapse_ai_nav_generate on an empty server or nav_build.bat.", AI.Nav.Status())
+				AI.Log("no AI zombies: temporary Source nav %s. Walking still uses .nav until Relapse mesh exists.", AI.Nav and AI.Nav.Status() or "module missing")
 			end
 			return
 		end
@@ -179,8 +181,12 @@ hook.Add("InitPostEntity", "RelapseAI.Manager", function()
 		local brains = {}
 		for name in pairs(AI.Brains) do brains[#brains + 1] = name end
 		table.sort(brains)
-		AI.Log("ready on %s: brains [%s], quota relapse_ai_zombies=%d, navmesh %s",
-			game.GetMap(), table.concat(brains, ", "), AI.cv.zombies:GetInt(), AI.Nav.Status())
+		if AI.IsSpawnOff() then
+			AI.Log("spawn off on %s (relapse_ai_zombies=0).", game.GetMap())
+		else
+			AI.Log("ready on %s: brains [%s], quota relapse_ai_zombies=%d, navmesh %s",
+				game.GetMap(), table.concat(brains, ", "), AI.cv.zombies:GetInt(), AI.Nav and AI.Nav.Status() or "module missing")
+		end
 		Mgr.Maintain("init")
 	end)
 end)
@@ -209,7 +215,7 @@ end)
 ---------------------------------------------------------------------------
 
 hook.Add("PrePlayerRedeemed", "RelapseAI.Manager", function(pl)
-	if pl.IsRelapseAIBot then return true end
+	if pl:IsForcedUndeadBot() then return true end
 end)
 
 hook.Add("PlayerSpawn", "RelapseAI.Manager", function(pl)

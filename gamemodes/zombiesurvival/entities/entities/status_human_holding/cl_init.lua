@@ -14,14 +14,11 @@ function ENT:OnRemove()
 
 	local owner = self:GetOwner()
 	if owner == MySelf then
-		if self.Rotating then
-			hook.Remove("CreateMove", "HoldingCreateMove")
-		end
-
 		local wep = owner:GetActiveWeapon()
 		if wep:IsValid() then
-			if wep.NoHolsterOnCarry then
-				self.NoHolster = true
+			owner:DrawViewModel(true)
+			if wep.PlayViewModelAnimation then
+				wep:PlayViewModelAnimation("Draw")
 			else
 				wep:SendWeaponAnim(ACT_VM_DRAW)
 			end
@@ -31,8 +28,27 @@ function ENT:OnRemove()
 	self.BaseClass.OnRemove(self)
 end
 
+function ENT:CreateMoveRotate(cmd)
+	if self:GetOwner() ~= MySelf then return end
+	if bit.band(cmd:GetButtons(), IN_WALK) == 0 then return end
+
+	local gm = GAMEMODE
+	local x, y = gm.InputMouseX, gm.InputMouseY
+	local snap = gm.PropRotationSnap
+	if snap > 0 then
+		x = math.Round(x / snap) * snap
+		y = math.Round(y / snap) * snap
+	end
+
+	net.Start("zs_rotateang", true)
+		net.WriteFloat(x)
+		net.WriteFloat(y)
+	net.SendToServer()
+end
+
 function ENT:Initialize()
 	hook.Add("Move", self, self.Move)
+	hook.Add("CreateMove", self, self.CreateMoveRotate)
 
 	local object = self:GetObject()
 	if object:IsValid() then
@@ -43,11 +59,14 @@ function ENT:Initialize()
 
 	self.Created = CurTime()
 
-	if not self.NoHolster then
-		local owner = self:GetOwner()
-		if owner == MySelf then
-			local wep = owner:GetActiveWeapon()
-			if wep:IsValid() then
+	local owner = self:GetOwner()
+	if owner == MySelf then
+		local wep = owner:GetActiveWeapon()
+		if wep:IsValid() then
+			owner:DrawViewModel(false)
+			if wep.PlayViewModelAnimation then
+				wep:PlayViewModelAnimation("Holster")
+			else
 				wep:SendWeaponAnim(ACT_VM_HOLSTER)
 			end
 		end
@@ -57,18 +76,24 @@ function ENT:Initialize()
 end
 
 function ENT:Think()
-	if self:GetOwner() ~= MySelf then return end
-
-	if not self.NoHolster then
-		self:SetSequence(2)
-		self:SetCycle(0.68 + math.sin(CurTime() * math.pi) * 0.01)
+	local owner = self:GetOwner()
+	if owner:IsValid() then
+		owner.status_human_holding = self
 	end
+
+	if owner ~= MySelf then
+		self.BaseClass.Think(self)
+		return
+	end
+
+	self:SetSequence(2)
+	self:SetCycle(0.68 + math.sin(CurTime() * math.pi) * 0.01)
 
 	self.BaseClass.Think(self)
 end
 
 function ENT:Draw()
-	if self:GetOwner() ~= MySelf or self.NoHolster or MySelf:ShouldDrawLocalPlayer() then return end
+	if self:GetOwner() ~= MySelf or MySelf:ShouldDrawLocalPlayer() then return end
 
 	local pos = EyePos()
 	local ang = EyeAngles()

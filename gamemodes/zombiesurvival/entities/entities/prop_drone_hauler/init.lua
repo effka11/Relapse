@@ -290,7 +290,9 @@ function ENT:RopeAttach()
 		local entclass = ropetraceent:GetClass()
 		if table.HasValue(carryclasses, entclass) then
 			local phys = ropetraceent:GetPhysicsObject()
-			if phys:IsValid() and phys:GetMass() <= self.CarryMass and phys:IsMoveable() and not phys:HasGameFlag(FVPHYSICS_PLAYER_HELD) and (ropetraceent:OBBMins():Length() + ropetraceent:OBBMaxs():Length() < CARRY_DRAG_VOLUME or ropetraceent.NoVolumeCarryCheck) and not constraint.HasConstraints(ropetraceent) then
+			if phys:IsValid() and phys:GetMass() <= self.CarryMass and ropetraceent:IsRelapseMoveable() and not phys:HasGameFlag(FVPHYSICS_PLAYER_HELD) and (ropetraceent:OBBMins():Length() + ropetraceent:OBBMaxs():Length() < CARRY_DRAG_VOLUME or ropetraceent.NoVolumeCarryCheck) and not constraint.HasConstraints(ropetraceent) then
+				ropetraceent:RelapseUnfreezeAgainstPush()
+				phys = ropetraceent:GetPhysicsObject()
 				local rope = constraint.Rope(self, ropetraceent, 0, tr.PhysicsBone, vector_origin, WorldToLocal(tr.HitPos, angle_zero, ropetraceent:GetPos(), ropetraceent:GetAngles()), 0, 140, 2000, 1.5, "cable/rope.vmt", false)
 				if not rope then
 					return

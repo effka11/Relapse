@@ -8,6 +8,7 @@ function ENT:Initialize()
 
 	self:SetModel("models/props_wasteland/medbridge_post01.mdl")
 	self:PhysicsInitBox(Vector(-16.285, -16.285, -0.29) * self.ModelScale, Vector(16.285, 16.285, 104.29) * self.ModelScale)
+	self:SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER)
 	self:SetUseType(SIMPLE_USE)
 
 	self:CollisionRulesChanged()

@@ -20,6 +20,7 @@ function ENT:Initialize()
 
 		local wep = owner:GetActiveWeapon()
 		if wep:IsValid() then
+			owner:DrawViewModel(false)
 			wep:SendWeaponAnim(ACT_VM_HOLSTER)
 			if wep.SetIronsights then
 				wep:SetIronsights(false)
@@ -49,6 +50,8 @@ function ENT:Initialize()
 
 		local objectphys = object:GetPhysicsObject()
 		if objectphys:IsValid() then
+			object:RelapseUnfreezeAgainstPush()
+			objectphys = object:GetPhysicsObject()
 			objectphys:AddGameFlag(FVPHYSICS_NO_IMPACT_DMG)
 			objectphys:AddGameFlag(FVPHYSICS_NO_NPC_IMPACT_DMG)
 
@@ -117,6 +120,7 @@ function ENT:OnRemove()
 		--owner.status_human_holding = nil
 
 		owner:DrawWorldModel(true)
+		owner:DrawViewModel(true)
 
 		if owner:Alive() and owner:Team() == TEAM_HUMAN then
 			local wep = owner:GetActiveWeapon()
@@ -140,6 +144,7 @@ function ENT:OnRemove()
 			objectphys:ClearGameFlag(FVPHYSICS_NO_IMPACT_DMG)
 			objectphys:ClearGameFlag(FVPHYSICS_NO_NPC_IMPACT_DMG)
 			objectphys:EnableGravity(true)
+			objectphys:Wake()
 			if object._OriginalMass then
 				objectphys:SetMass(object._OriginalMass)
 				object._OriginalMass = nil
@@ -181,17 +186,17 @@ function ENT:OnRemove()
 	end
 end
 
-concommand.Add("_zs_rotateang", function(sender, command, arguments)
-	local x = tonumbersafe(arguments[1])
-	local y = tonumbersafe(arguments[2])
+util.AddNetworkString("zs_rotateang")
 
-	if x and y then
-		sender.InputMouseX = math.NormalizeAngle(x)--sender.InputMouseX + math.Clamp(x * 0.02, -180, 180)
-		sender.InputMouseY = math.NormalizeAngle(y)--sender.InputMouseY + math.Clamp(y * 0.02, -180, 180)
-	end
+net.Receive("zs_rotateang", function(_, sender)
+	if not IsValid(sender) or not sender:Alive() or sender:Team() ~= TEAM_HUMAN then return end
+	if not sender:IsHolding() then return end
+
+	sender.InputMouseX = math.NormalizeAngle(net.ReadFloat())
+	sender.InputMouseY = math.NormalizeAngle(net.ReadFloat())
 end)
 
-local ShadowParams = {secondstoarrive = 0.01, maxangular = 1000, maxangulardamp = 10000, maxspeed = 500, maxspeeddamp = 1000, dampfactor = 0.65, teleportdistance = 0}
+local ShadowParams = {secondstoarrive = 0.01, maxangular = 36000, maxangulardamp = 36000, maxspeed = 500, maxspeeddamp = 1000, dampfactor = 0.65, teleportdistance = 0}
 function ENT:Think()
 	local ct = CurTime()
 
@@ -262,14 +267,16 @@ function ENT:Think()
 		elseif owner:KeyDown(IN_WALK) then
 			local xdiff = math.NormalizeAngle(self.StartX - (owner.InputMouseX or 0))
 			local ydiff = math.NormalizeAngle(self.StartY - (owner.InputMouseY or 0))
-			local sxdiff = xdiff * FrameTime() * 8
-			local sydiff = ydiff * FrameTime() * 8
 
-			self.ObjectAngles:RotateAroundAxis(owner:GetUp(), sxdiff)
-			self.ObjectAngles:RotateAroundAxis(owner:GetRight(), sydiff)
+			if xdiff ~= 0 then
+				self.ObjectAngles:RotateAroundAxis(owner:GetUp(), xdiff)
+			end
+			if ydiff ~= 0 then
+				self.ObjectAngles:RotateAroundAxis(owner:GetRight(), ydiff)
+			end
 
-			self.StartX = math.NormalizeAngle(self.StartX - (sxdiff))
-			self.StartY = math.NormalizeAngle(self.StartY - (sydiff))
+			self.StartX = owner.InputMouseX or 0
+			self.StartY = owner.InputMouseY or 0
 		end
 
 		ShadowParams.pos = self.ObjectPosition

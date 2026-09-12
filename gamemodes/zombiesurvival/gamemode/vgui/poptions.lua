@@ -47,12 +47,6 @@ function MakepOptions()
 	list:AddItem(check)
 
 	check = vgui.Create("DCheckBoxLabel", Window)
-	check:SetText("Always volunteer to start as a zombie")
-	check:SetConVar("zs_alwaysvolunteer")
-	check:SizeToContents()
-	list:AddItem(check)
-
-	check = vgui.Create("DCheckBoxLabel", Window)
 	check:SetText("Always quick buy from arsenal and remantler")
 	check:SetConVar("zs_alwaysquickbuy")
 	check:SizeToContents()

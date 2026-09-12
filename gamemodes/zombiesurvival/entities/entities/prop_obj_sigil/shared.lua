@@ -18,7 +18,7 @@ function ENT:SetSigilCorrupted(corrupt)
 	self.IsBarricadeObject = not corrupt
 
 	if SERVER then
-		self:SetCollisionGroup(corrupt and COLLISION_GROUP_DEBRIS_TRIGGER or COLLISION_GROUP_NONE)
+		self:SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER)
 	end
 
 	self:CollisionRulesChanged()

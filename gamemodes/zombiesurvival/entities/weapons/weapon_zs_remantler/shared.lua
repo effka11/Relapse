@@ -1,5 +1,7 @@
-SWEP.PrintName = "Weapon Remantler"
-SWEP.Description = "A deployable device capable of disassembling weapons into scrap, and upgrading weapons with scrap.\nIt can be used to assemble trinkets with scrap also.\nPress PRIMARY ATTACK to deploy the remantler.\nPress SECONDARY ATTACK and RELOAD to rotate the remantler."
+SWEP.PrintName = "Оружейный станок"
+SWEP.TranslationName = "wep_remantler"
+SWEP.TranslationDescription = "wep_remantler_desc"
+SWEP.Description = "A workshop box. It takes guns apart for scrap, and puts scrap back into better ones. Trinkets too."
 
 SWEP.ViewModel = "models/weapons/v_pistol.mdl"
 SWEP.WorldModel = Model("models/props_lab/powerbox01a.mdl")

@@ -52,9 +52,10 @@ SWEP.Trigger = {
 -- Kinetic = fraction of close-range damage lost by EffectiveRange (0 = none, 1 = all).
 -- Accuracy = spread cone (higher = wider). Recoil = kick. Shop stability uses both.
 -- Weight is kilograms (Uzi with stock ~3.50 kg). Clip is the real 32-round stick, not CoD 50.
--- 9x19: hotter than 9x18 PM (20), just under the 9x19 stick (24). Open bolt, 600 RPM.
+-- 9x19 auto tax: below 9x18 PM (20) per shot so 600 RPM stays T1, not T3 DPS.
+-- Open bolt, real cyclic rate. Same cartridge on the card, ZS HP budget.
 SWEP.Relapse = {
-    Damage = 23,
+    Damage = 16,
     Delay = 0.10,
     Reload = 2.50,
     Kinetic = 0.38,
@@ -137,7 +138,7 @@ SWEP.BarrelSmoke = {
 }
 
 SWEP.Cone = {
-    Hip = R.Accuracy / 6,
+    Hip = R.Accuracy / 36,
     TacStance = false,
     Ads = R.Accuracy / 36,
     Increase = 0.1 * (R.Accuracy / 1.8),

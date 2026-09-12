@@ -41,7 +41,6 @@ include("vgui/pmainmenu.lua")
 include("vgui/poptions.lua")
 include("vgui/phelp.lua")
 include("vgui/pclassselect.lua")
-include("vgui/pweapons.lua")
 include("vgui/pendboard.lua")
 include("vgui/relapse_ui.lua")
 include("vgui/pworth.lua")
@@ -64,6 +63,8 @@ include("cl_thirdperson.lua")
 include("itemstocks/cl_stock.lua")
 
 include("cl_zombieescape.lua")
+include("cl_relapse_carry_holster.lua")
+include("cl_relapse_freecam.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -243,17 +244,15 @@ end
 function GM:_InputMouseApply(cmd, x, y, ang)
 	if not IsValid(MySelf) then return end
 	if MySelf:KeyDown(IN_WALK) and MySelf:IsHolding() then
-		self.InputMouseX = math.NormalizeAngle(self.InputMouseX - x * 0.02 * GAMEMODE.PropRotationSensitivity)
-		self.InputMouseY = math.NormalizeAngle(self.InputMouseY - y * 0.02 * GAMEMODE.PropRotationSensitivity)
+		local yaw, pitch = 0.022, 0.022
+		local cvYaw = GetConVar("m_yaw")
+		local cvPitch = GetConVar("m_pitch")
+		if cvYaw then yaw = cvYaw:GetFloat() end
+		if cvPitch then pitch = math.abs(cvPitch:GetFloat()) end
 
-		local snap = GAMEMODE.PropRotationSnap
-		local snapanglex, snapangley = self.InputMouseX, self.InputMouseY
-		if snap > 0 then
-			snapanglex = Angle(self.InputMouseX, 0, 0):SnapTo("p", snap).p
-			snapangley = Angle(self.InputMouseY, 0, 0):SnapTo("p", snap).p
-		end
-
-		RunConsoleCommand("_zs_rotateang", snapanglex, snapangley)
+		local sens = GAMEMODE.PropRotationSensitivity
+		self.InputMouseX = math.NormalizeAngle(self.InputMouseX - x * yaw * sens)
+		self.InputMouseY = math.NormalizeAngle(self.InputMouseY - y * pitch * sens)
 		return true
 	end
 
@@ -796,31 +795,6 @@ function GM:HumanHUD(screenscale)
 	end
 
 	if not self.RoundEnded then
-		if self:GetWave() == 0 and not self:GetWaveActive() then
-			local txth = draw_GetFontHeight("ZSHUDFontSmall")
-			local desiredzombies = self:GetDesiredStartingZombies()
-
-			if desiredzombies > 0 then
-				draw_SimpleTextBlurry(translate.Format("number_of_initial_zombies_this_game", self.WaveOneZombies * 100, desiredzombies), "ZSHUDFontSmall", w * 0.5, h * 0.7, COLOR_GRAY, TEXT_ALIGN_CENTER)
-
-				for i, pl in ipairs(self.ZombieVolunteers) do
-					if pl:IsValid() then
-						draw_SimpleTextBlurry(translate.Get("zombie_volunteers"), "ZSHUDFontSmall", w * 0.5, h * 0.7 + txth, COLOR_GRAY, TEXT_ALIGN_CENTER)
-						break
-					end
-				end
-
-				local y = h * 0.7 + txth * 1.9
-				txth = draw_GetFontHeight("ZSHUDFontTiny")
-				for i, pl in ipairs(self.ZombieVolunteers) do
-					if pl:IsValid() then
-						draw_SimpleTextBlurry(pl:Name(), "ZSHUDFontTiny", w * 0.5, y, pl == MySelf and COLOR_SOFTRED or COLOR_GRAY, TEXT_ALIGN_CENTER)
-						y = y + txth * 0.8
-					end
-				end
-			end
-		end
-
 		local drown = MySelf.status_drown
 		if drown and drown:IsValid() then
 			surface_SetDrawColor(0, 0, 0, 60)
@@ -836,10 +810,6 @@ function GM:HumanHUD(screenscale)
 	if lockon and self:ValidMenuLockOnTarget(MySelf, lockon) then
 		local txth = draw_GetFontHeight("ZSHUDFontSmall")
 		draw_SimpleTextBlurry(translate.Format("giving_items_to", lockon:Name()), "ZSHUDFontSmall", w * 0.5, h * 0.55 + txth, COLOR_GRAY, TEXT_ALIGN_CENTER)
-	end
-
-	if gamemode.Call("PlayerCanPurchase", MySelf) then
-		draw_SimpleTextBlurry(translate.Get("press_f2_for_the_points_shop"), "ZSHUDFontSmall", w * 0.5, screenscale * 135, COLOR_GRAY, TEXT_ALIGN_CENTER)
 	end
 end
 
@@ -1784,6 +1754,16 @@ function GM:ZombieSpawnMenu()
 end
 
 function GM:PlayerBindPress(pl, bind, wasin)
+	if wasin and bind == "gm_showhelp" and (
+		(self.HelpMenu and self.HelpMenu:IsValid())
+		or (self.HelpMenuIgnoreOpen and self.HelpMenuIgnoreOpen > CurTime())
+	) then
+		self:CloseHelpMenu()
+		return true
+	end
+	if wasin and bind == "cancelselect" and self:CloseHelpMenu(true) then
+		return true
+	end
 	if bind == "gmod_undo" or bind == "undo" then
 		RunConsoleCommand("+zoom")
 		timer.Create("ReleaseZoom", 1, 1, function() RunConsoleCommand("-zoom") end)
@@ -1915,8 +1895,15 @@ end
 function GM:HUDPaintEndRound()
 end
 
+local function ShouldHideWeaponViewModel(pl)
+	if not pl or not pl:IsValid() then return false end
+	if GAMEMODE.HideViewModels then return true end
+	if GAMEMODE.RelapseFreecamActive then return true end
+	return pl.ShouldHolsterWeaponViewModel and pl:ShouldHolsterWeaponViewModel()
+end
+
 function GM:PreDrawViewModel(vm, pl, wep)
-	if pl and pl:IsValid() and (pl:IsHolding() or GAMEMODE.HideViewModels) then return true end
+	if ShouldHideWeaponViewModel(pl) then return true end
 
 	if wep and wep:IsValid() and wep.PreDrawViewModel then
 		return wep:PreDrawViewModel(vm)
@@ -1924,6 +1911,10 @@ function GM:PreDrawViewModel(vm, pl, wep)
 end
 
 function GM:PostDrawViewModel(vm, pl, wep)
+	-- MW guns draw the real weapon here. Returning true from PreDrawViewModel
+	-- only hides the engine VM, so skip this pass while carrying a prop.
+	if ShouldHideWeaponViewModel(pl) then return end
+
 	if wep and wep:IsValid() then
 		if wep.UseHands or not wep:IsScripted() then
 			local hands = pl:GetHands()
