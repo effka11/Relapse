@@ -25,6 +25,7 @@ function ENT:PlayerHurt(victim, attacker, healthleft, damage)
 
 			local points = attributeddamage / victim:GetMaxHealth() * victim:GetZombieClassTable().Points
 			applier.PointQueue = applier.PointQueue + points
+			GAMEMODE:CreditTabClass(applier, "medic", points)
 
 			local pos = victim:GetPos()
 			pos.z = pos.z + 32

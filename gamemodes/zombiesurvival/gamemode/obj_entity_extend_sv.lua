@@ -433,6 +433,7 @@ function meta:DamageNails(attacker, inflictor, damage, dmginfo)
 
 		applier.PropDef = (applier.PropDef or 0) + dmgbefore
 		applier:AddPoints(points)
+		GAMEMODE:CreditTabClass(applier, "medic", points)
 	end
 
 	if gamemode.Call("IsEscapeDoorOpen") then

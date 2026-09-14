@@ -30,6 +30,7 @@ AddCSLuaFile("sh_relapse_ammo.lua")
 AddCSLuaFile("sh_reconnect.lua")
 AddCSLuaFile("sh_usefulness.lua")
 AddCSLuaFile("sh_usefulness_model.lua")
+AddCSLuaFile("sh_relapse_tabclass.lua")
 
 AddCSLuaFile("vault/shared.lua")
 
@@ -1242,6 +1243,9 @@ function GM:Think()
 		local plpos
 
 		for _, pl in pairs(allplayers) do
+			if P_Team(pl) == TEAM_HUMAN then
+				self:UpdateTabClassDisplay(pl)
+			end
 			if P_Team(pl) == TEAM_HUMAN and P_Alive(pl) then
 				plpos = pl:GetPos()
 				if doafk then
@@ -1500,6 +1504,7 @@ function GM:PlayerHealedTeamMember(pl, other, health, wep, pointmul, nobymsg, fl
 		local points = health / hpperpoint * pointmul
 
 		pl:AddPoints(points)
+		self:CreditTabClass(pl, "medic", points)
 	end
 
 	net.Start("zs_healother")
@@ -1531,6 +1536,7 @@ function GM:PlayerRepairedObject(pl, other, health, wep)
 	local points = health / hpperpoint
 
 	pl:AddPoints(points)
+	self:CreditTabClass(pl, self:GetTabClassForRepair(wep), points)
 
 	net.Start("zs_repairobject")
 		net.WriteEntity(other)
@@ -1546,7 +1552,9 @@ function GM:GiveCadeOwnerPointsTo(pl, damage)
 	if hpper <= 0 or damage <= 0 then return end
 
 	pl.DefenceDamage = (pl.DefenceDamage or 0) + damage
-	pl:AddPoints(damage / hpper)
+	local points = damage / hpper
+	pl:AddPoints(points)
+	self:CreditTabClass(pl, "builder", points)
 end
 
 function GM:GiveCadeOwnerPoints(ent, damage)
@@ -2277,6 +2285,8 @@ function GM:PlayerInitialSpawnRound(pl)
 	pl.PointQueue = 0
 	pl.LastDamageDealtTime = 0
 
+	self:ResetTabClassState(pl)
+
 	pl.HealedThisRound = 0
 	pl.RepairedThisRound = 0
 	pl.NextRegenerate = 0
@@ -2838,6 +2848,10 @@ function GM:EntityTakeDamage(ent, dmginfo)
 									points = points * ent.PointsMultiplier
 								end
 								attacker.PointQueue = attacker.PointQueue + points
+								local tabclass = self:GetTabClassForDamage(attacker, inflictor)
+								if tabclass then
+									self:CreditTabClass(attacker, tabclass, points)
+								end
 
 								GAMEMODE.StatTracking:IncreaseElementKV(STATTRACK_TYPE_WEAPON, inflictor:GetClass(), "PointsEarned", points)
 								GAMEMODE.StatTracking:IncreaseElementKV(STATTRACK_TYPE_WEAPON, inflictor:GetClass(), "Damage", damage)
@@ -3183,6 +3197,7 @@ function GM:OnPlayerChangedTeam(pl, oldteam, newteam)
 
 	if newteam ~= TEAM_HUMAN then
 		pl:RemoveSkills()
+		self:UpdateTabClassDisplay(pl)
 	end
 
 	pl:SetLastAttacker(nil)
@@ -3572,7 +3587,12 @@ function GM:HumanKilledZombie(pl, attacker, inflictor, dmginfo, headshot, suicid
 	attacker.ZombiesKilled = attacker.ZombiesKilled + 1
 
 	if attacker:IsValid() and attacker:Team() == TEAM_HUMAN then
-		attacker.PointQueue = (attacker.PointQueue or 0) + (self.ZombieFinishPoints or 1)
+		local fin = self.ZombieFinishPoints or 1
+		attacker.PointQueue = (attacker.PointQueue or 0) + fin
+		local tabclass = self:GetTabClassForDamage(attacker, inflictor)
+		if tabclass then
+			self:CreditTabClass(attacker, tabclass, fin)
+		end
 	end
 
 	if mostdamager then

@@ -35,7 +35,9 @@ function ENT:OnTakeDamage(dmginfo)
 			emitter:SetAmmo(math.max(emitter:GetAmmo() - floor, 0))
 
 			if owner:IsValidLivingHuman() then
-				owner:AddPoints(dmginfo:GetDamage() * 0.02)
+				local pts = dmginfo:GetDamage() * 0.02
+				owner:AddPoints(pts)
+				GAMEMODE:CreditTabClass(owner, "mechanic", pts)
 
 				if emitter:GetAmmo() == 0 then
 					owner:SendDeployableOutOfAmmoMessage(emitter)

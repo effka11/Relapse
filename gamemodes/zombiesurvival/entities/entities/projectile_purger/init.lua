@@ -33,6 +33,7 @@ function ENT:Think()
 
 					ent:RemoveStatus(v, false, true)
 					owner:AddPoints(0.2)
+					GAMEMODE:CreditTabClass(owner, "medic", 0.2)
 				end
 			end
 		end

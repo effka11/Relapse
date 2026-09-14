@@ -27,6 +27,7 @@ function ENT:EntityTakeDamage(ent, dmginfo)
 			applier.StrengthBoostDamage = (applier.StrengthBoostDamage or 0) + extradamage
 			local points = extradamage / ent:GetMaxHealth() * ent:GetZombieClassTable().Points
 			applier.PointQueue = applier.PointQueue + points * 1.5
+			GAMEMODE:CreditTabClass(applier, "medic", points * 1.5)
 
 			local pos = ent:GetPos()
 			pos.z = pos.z + 32

@@ -962,6 +962,7 @@ function meta:Resupply(owner, obj)
 			end
 
 			owner:AddPoints(0.15, nil, nil, true)
+			GAMEMODE:CreditTabClass(owner, "supplier", 0.15)
 
 			net.Start("zs_commission")
 				net.WriteEntity(obj)

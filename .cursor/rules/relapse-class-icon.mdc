@@ -1,0 +1,24 @@
+---
+description: Relapse human class icons — builder/shooter/supplier/melee/mechanic/medic etalon
+globs: gamemodes/zombiesurvival/gamemode/cl_scoreboard.lua,gamemodes/zombiesurvival/gamemode/sh_relapse_tabclass.lua,gamemodes/zombiesurvival/content/materials/zombiesurvival/class_*.png,reference/class_icons/**
+alwaysApply: false
+---
+
+# Relapse иконки классов
+
+Эталон в `reference/class_icons/`:
+
+| Класс | Эталон | TAB | Игра |
+|---|---|---|---|
+| Строитель | `cader.png` | молот, `sPx(24)`, отступ от `+` `Grid5(2)` | `class_hm.png` |
+| Стрелок | `shooter.png` | автомат, `sPx(29)` | `class_ar.png` |
+| Снабженец | `supplier.png` | ящик 45°, `sPx(24)` | `class_li.png` |
+| Милишник | `melee.png` | нож, `sPx(24)` | `class_ml.png` |
+| Механик | `mechanic.png` | шестерня, `sPx(24)` | `class_ge.png` |
+| Медик | `medic.png` | шприц 45°, `sPx(24)`, отступ от `+` `Grid5(2)` | `class_sf.png` |
+
+Новый класс — тот же язык, не шоп-рендер и не silkicon.
+
+Белый силуэт, прозрачный фон, без обводки. Длинная ось **45° вверх-влево** (молот, автомат, нож, шприц). Снабженец — закрытый ящик, чисто белый; крышка цельная, шов только под ней на корпусе. Медик — шприц, чисто белый. Поворот и зеркало — в PNG, в TAB только `DrawTexturedRect`.
+
+TAB рисует 1 или 2 класса из `sh_relapse_tabclass.lua`, не хардкод молот+шприц. Новый файл — новое имя (`class_*.png`), иначе клиентский `garrysmod/download` держит старую текстуру.

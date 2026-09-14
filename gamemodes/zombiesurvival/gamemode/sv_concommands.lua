@@ -128,6 +128,7 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 	sender:PrintTranslatedMessage(HUD_PRINTTALK, usescrap and "created_x_for_y_scrap" or "purchased_x_for_y_points", itemtab.Name, cost)
 
 	GAMEMODE:AddItemStocks(id, -1)
+	GAMEMODE:UpdateTabClassDisplay(sender)
 
 	if usescrap then
 		local nearest = sender:NearestRemantler()
@@ -147,6 +148,7 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 				local commission = cost * GAMEMODE.ArsenalCrateCommission
 				if commission > 0 then
 					owner:AddPoints(commission, nil, nil, true)
+					GAMEMODE:CreditTabClass(owner, "supplier", commission)
 
 					net.Start("zs_commission")
 						net.WriteEntity(nearest)
@@ -363,6 +365,7 @@ concommand.Add("worthcheckout", function(sender, command, arguments)
 	end
 
 	gamemode.Call("RemoveDuplicateAmmo", sender)
+	GAMEMODE:UpdateTabClassDisplay(sender)
 end)
 
 concommand.Add("zsdropweapon", function(sender, command, arguments)

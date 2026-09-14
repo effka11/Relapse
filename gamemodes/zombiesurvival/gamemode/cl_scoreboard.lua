@@ -118,42 +118,41 @@ local function ClassCapCenter(remortLeft)
 	return remortLeft + capW * 0.5
 end
 
-local matCader
-local matShooter
-
-local function ClassIconMat(name)
-	if name == "cader" then
-		if not matCader or matCader:IsError() then
-			matCader = Material("zombiesurvival/class_hm.png", "smooth")
-		end
-		return matCader
-	end
-	if not matShooter or matShooter:IsError() then
-		matShooter = Material("zombiesurvival/class_ar.png", "smooth")
-	end
-	return matShooter
-end
-
 local function DrawClassIcon(name, x, y, sz, col)
-	local mat = ClassIconMat(name)
+	local mat = GAMEMODE:GetTabClassMaterial(name)
 	if not mat then return end
 	surface.SetMaterial(mat)
 	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
 	surface.DrawTexturedRect(math.floor(x + 0.5), math.floor(y + 0.5), sz, sz)
 end
 
-local function PaintClassSplit(originX, cy, remortLeft)
+local function ClassIconSize(name)
+	local def = GAMEMODE.TabClassDefs and GAMEMODE.TabClassDefs[name]
+	return RelapseUI.sPx((def and def.Size) or 24)
+end
+
+local function ClassIconGap(name)
+	local def = GAMEMODE.TabClassDefs and GAMEMODE.TabClassDefs[name]
+	return RelapseUI.Grid5((def and def.PlusGap) or 2)
+end
+
+local function PaintClassSplit(originX, cy, remortLeft, classA, classB)
+	if not classA then return end
 	local cx = originX + ClassCapCenter(remortLeft)
-	local ham = RelapseUI.sPx(24)
-	local gun = RelapseUI.sPx(29)
-	local gap = RelapseUI.Grid5()
 	local ink = RelapseUI.Col.Text
+	local szA = ClassIconSize(classA)
+	if not classB then
+		DrawClassIcon(classA, cx - szA * 0.5, cy - szA * 0.5, szA, ink)
+		return
+	end
+	local szB = ClassIconSize(classB)
+	local gapA = ClassIconGap(classA)
+	local gapB = ClassIconGap(classB)
 	draw.SimpleText("+", "Relapse20", cx, cy, RelapseUI.Col.Muted, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 	surface.SetFont("Relapse20")
 	local plusW = surface.GetTextSize("+") or RelapseUI.sPx(12)
-	DrawClassIcon("cader", cx - plusW * 0.5 - gap - ham, cy - ham * 0.5, ham, ink)
-	local gunX = cx + plusW * 0.5 + gap + ham * 0.5 - gun * 0.5
-	DrawClassIcon("shooter", gunX, cy - gun * 0.5, gun, ink)
+	DrawClassIcon(classA, cx - plusW * 0.5 - gapA - szA, cy - szA * 0.5, szA, ink)
+	DrawClassIcon(classB, cx + plusW * 0.5 + gapB, cy - szB * 0.5, szB, ink)
 end
 
 function GM:ScoreboardShow()
@@ -485,7 +484,8 @@ function PANEL:Paint(w, h)
 	RelapseUI.PaintCard(self, w, h, selected)
 	self.Hovered = hovered
 	if pl:IsValid() and pl:Team() == TEAM_HUMAN then
-		PaintClassSplit(0, h * 0.5, RowMetrics(w).remortLeft)
+		local classA, classB = GAMEMODE:GetPlayerTabClasses(pl)
+		PaintClassSplit(0, h * 0.5, RowMetrics(w).remortLeft, classA, classB)
 	end
 	return true
 end

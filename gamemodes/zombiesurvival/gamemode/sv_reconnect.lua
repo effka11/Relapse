@@ -181,6 +181,7 @@ function GM:BuildReconnectState(pl)
 		damagedealt = pl.DamageDealt and table.Copy(pl.DamageDealt) or nil,
 		healedthisround = pl.HealedThisRound or 0,
 		repairedthisround = pl.RepairedThisRound or 0,
+		tabclassearned = pl.TabClassEarned and table.Copy(pl.TabClassEarned) or nil,
 		resupplyboxusedbyothers = pl.ResupplyBoxUsedByOthers or 0,
 		nestsdestroyed = pl.NestsDestroyed or 0,
 		nestspawns = pl.NestSpawns or 0,
@@ -222,6 +223,7 @@ function GM:ApplyReconnectRoundStats(pl, state)
 	pl.PointQueue = state.pointqueue or 0
 	pl.HealedThisRound = state.healedthisround or 0
 	pl.RepairedThisRound = state.repairedthisround or 0
+	pl.TabClassEarned = state.tabclassearned and table.Copy(state.tabclassearned) or {}
 	pl.ResupplyBoxUsedByOthers = state.resupplyboxusedbyothers or 0
 	pl.NestsDestroyed = state.nestsdestroyed or 0
 	pl.NestSpawns = state.nestspawns or 0
@@ -246,6 +248,10 @@ function GM:ApplyReconnectRoundStats(pl, state)
 	end
 	if state.deaths ~= nil then
 		pl:SetDeaths(state.deaths)
+	end
+
+	if pl:Team() == TEAM_HUMAN then
+		self:UpdateTabClassDisplay(pl)
 	end
 end
 
@@ -603,6 +609,7 @@ function GM:ApplyReconnectSpawn(pl)
 			if not IsValid(pl) then return end
 			self:ApplyReconnectWeaponAmmo(pl, state)
 			RestoreReconnectActiveWeapon(pl, state.activeweapon)
+			self:UpdateTabClassDisplay(pl)
 		end)
 		timer.Simple(0.15, function()
 			RestoreReconnectActiveWeapon(pl, state.activeweapon)

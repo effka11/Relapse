@@ -64,6 +64,7 @@ include("sh_channel.lua")
 include("sh_weaponquality.lua")
 include("sh_usefulness.lua")
 include("sh_usefulness_model.lua")
+include("sh_relapse_tabclass.lua")
 
 include("noxapi/noxapi.lua")
 

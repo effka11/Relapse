@@ -29,6 +29,7 @@ function ENT:EntityTakeDamage(ent, dmginfo)
 		if self.Applier and self.Applier:IsValidLivingHuman() then
 			self.Applier.DefenceDamage = (applier.DefenceDamage or 0) + dmgfraction
 			self.Applier:AddPoints(points)
+			GAMEMODE:CreditTabClass(self.Applier, "medic", points)
 		end
 	end
 end
