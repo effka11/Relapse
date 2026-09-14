@@ -52,6 +52,7 @@ local function ApplyOne(class, def)
 		wep.Primary.Delay = R.Delay
 		wep.Primary.ClipSize = -1
 		wep.Primary.Ammo = "none"
+		wep.Primary.Automatic = true
 		wep.Primary.RPM = math.floor(60 / math.max(R.Delay or 0.5, 0.05) + 0.5)
 		if wep.Bullet then
 			wep.Bullet.Damage = {R.Damage, R.Damage}

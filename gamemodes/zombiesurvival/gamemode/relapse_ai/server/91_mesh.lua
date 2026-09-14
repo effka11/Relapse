@@ -89,7 +89,7 @@ concommand.Add("relapse_viewmesh", function(pl)
 		return
 	end
 	Mesh.SetMode(pl, "view")
-	Mesh.Reply(pl, "[Relapse AI] mesh overlay on. Painted walkable skin, not Source .nav. relapse_hidemesh to hide.")
+	Mesh.Reply(pl, "[Relapse AI] mesh overlay on. Painted walkable skin, not Source .nav. Linked shafts in orange. relapse_hidemesh to hide.")
 end)
 
 concommand.Add("relapse_editmesh", function(pl)

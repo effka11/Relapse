@@ -35,9 +35,9 @@ function MakepOptions()
 
 	local hudTab = RelapseUI.MakeOptionsScroll(propertysheet)
 	local hudCap = RelapseUI.OptionsCaption(hudTab, RelapseUI.T("options_hud_general"))
-	-- Check cap sits 5px into the row; 2 cells minus that = 30 to the capital.
-	hudCap:DockMargin(0, 0, 0, RelapseUI.Grid15(2) - RelapseUI.sPx(5))
+	hudCap:DockMargin(0, 0, 0, RelapseUI.OptionsCheckGap())
 	RelapseUI.OptionsCheck(hudTab, RelapseUI.T("options_draw_xp"), "zs_drawxp")
+	RelapseUI.OptionsCheck(hudTab, RelapseUI.T("options_window_transparency"), "zs_windowtransparency")
 	propertysheet:AddSheet(RelapseUI.T("options_tab_hud"), hudTab)
 
 	local tabs = {}

@@ -1,3 +1,6 @@
+-- Relapse ping figure for TAB rows.
+-- Fog when the line is clean, wine when it is dying. No Source bars.
+
 local PANEL = {}
 
 PANEL.IdealPing = 50
@@ -9,39 +12,14 @@ PANEL.m_Player = NULL
 PANEL.m_Ping = 0
 PANEL.NextRefresh = 0
 
-function PANEL:Init()
-end
+local colPing = Color(0, 0, 0, 255)
 
-local colPing = Color(255, 255, 60, 255)
-function PANEL:Paint()
+function PANEL:Paint(w, h)
 	local ping = self:GetPing()
-	local pingmul = 1 - math.Clamp((ping - self.IdealPing) / self.MaxPing, 0, 1)
-	local wid, hei = self:GetWide(), self:GetTall()
-	local pingbars = math.max(1, self.PingBars)
-	local barwidth = math.floor(wid / pingbars)
-	local baseheight = math.floor(hei / pingbars)
-
-	colPing.r = (1 - pingmul) * 255
-	colPing.g = pingmul * 255
-
-	for i=1, pingbars do
-		local barheight = math.floor(baseheight * i)
-		local x, y = (i - 1) * barwidth, hei - barheight
-
-		surface.SetDrawColor(20, 20, 20, 255)
-		surface.DrawRect(x, y, barwidth, barheight)
-
-		if i == 1 or pingmul >= i / pingbars then
-			surface.SetDrawColor(colPing)
-			surface.DrawRect(x, y, barwidth, barheight)
-		end
-
-		surface.SetDrawColor(80, 80, 80, 255)
-		surface.DrawOutlinedRect(x, y, barwidth, barheight)
-	end
-
-	draw.SimpleText(ping, "ZSScoreBoardPing", 0, 0, colPing)
-
+	local span = math.max(1, self.MaxPing - self.IdealPing)
+	local q = 1 - math.Clamp((ping - self.IdealPing) / span, 0, 1)
+	RelapseUI.HealthCol(q, colPing)
+	draw.SimpleText(tostring(ping), "Relapse15", w, h * 0.5, colPing, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
 	return true
 end
 

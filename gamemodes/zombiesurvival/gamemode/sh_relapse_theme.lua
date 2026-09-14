@@ -7,8 +7,8 @@
 
 RelapseUI = RelapseUI or {}
 
-local Fog   = Color(214, 211, 205)   -- chrome: bright enough to snap, not paper
-local Gray  = Color(118, 116, 112)   -- captions, spare
+local Fog   = Color(208, 211, 214)   -- chrome: cool off-white, snap not paper
+local Gray  = Color(114, 116, 118)   -- captions, spare; same hue as Fog
 local Wine  = Color(116, 38, 52)     -- бордо, not tomato
 local Brass = Color(154, 122, 70)    -- old lamp
 
@@ -16,13 +16,15 @@ local function With(c, a)
 	return Color(c.r, c.g, c.b, a)
 end
 
--- Surfaces: Fog's value, no hue. Dust stays in the ink, not the slab.
+-- Surfaces: Fog's value. Dust stays in the ink, not the slab.
+-- A hair of cool so the glass sits in bunker concrete, not warm charcoal.
 local FogLum = math.floor((Fog.r + Fog.g + Fog.b) / 3 + 0.5)
 
 local function FogVal(t)
 	t = math.Clamp(t or 1, 0, 1)
 	local v = math.floor(FogLum * t + 0.5)
-	return Color(v, v, v, 255)
+	local cool = math.max(2, math.floor(v * 0.1 + 0.5))
+	return Color(math.max(0, v - cool), v, math.min(255, v + cool))
 end
 
 local function FogValA(t, a)
@@ -31,8 +33,8 @@ local function FogValA(t, a)
 	return c
 end
 
-local GlassA = 246
-local CardA  = 200
+local GlassA = 220
+local CardA  = 175
 
 RelapseUI.Col = {
 	Bg        = FogVal(0.09),
@@ -79,7 +81,8 @@ RelapseUI.Rad = {
 	Panel  = 14,
 	Card   = 14,
 	Button = 16,
-	Bar    = 8
+	Bar    = 8,
+	Avatar = 6
 }
 
 local colSigil = Color(0, 0, 0, 255)

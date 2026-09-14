@@ -1,76 +1,41 @@
+-- Relapse team heading for the TAB scoreboard.
+-- Name + live count only; column captions are painted by the board.
+
 local PANEL = {}
 PANEL.m_Team = 0
-PANEL.NextRefresh = 0
-PANEL.RefreshTime = 2
 
 function PANEL:Init()
-	self.m_TeamNameLabel = EasyLabel(self, " ", "ZSScoreBoardHeading", color_black)
-	self.m_TeamCountLabel = EasyLabel(self, " ", "ZSScoreBoardHeading", color_black)
-
-	self.m_Icon = vgui.Create("DImage", self)
-	self.m_Icon:SetVisible(false)
-	self.m_Icon:NoClipping(true)
-
-	self:InvalidateLayout()
-end
-
-function PANEL:Think()
-	if RealTime() >= self.NextRefresh then
-		self.NextRefresh = RealTime() + self.RefreshTime
-		self:RefreshContents()
+	if self.SetPaintBackground then
+		self:SetPaintBackground(false)
 	end
 end
 
-function PANEL:PerformLayout()
-	self.m_TeamNameLabel:Center()
-
-	self.m_TeamCountLabel:AlignRight(16)
-	self.m_TeamCountLabel:CenterVertical()
-
-	self.m_Icon:AlignLeft(2)
-	self.m_Icon:CenterVertical()
-end
-
-function PANEL:RefreshContents()
+function PANEL:Paint(w, h)
 	local teamid = self:GetTeam()
-
-	self.m_TeamNameLabel:SetText(team.GetName(teamid))
-	self.m_TeamNameLabel:SizeToContents()
-
-	self.m_TeamCountLabel:SetText(team.NumPlayers(teamid))
-	self.m_TeamCountLabel:SizeToContents()
-
-	self:InvalidateLayout()
-end
-
-function PANEL:Paint()
-	local wid, hei = self:GetWide(), self:GetTall()
-
-	surface.SetDrawColor(130, 130, 130, 180)
-	surface.DrawRect(0, 0, wid, hei)
-	surface.SetDrawColor(60, 60, 60, 180)
-	surface.DrawOutlinedRect(0, 0, wid, hei)
-
+	local name = teamid == TEAM_UNDEAD and RelapseUI.T("hud_undead") or RelapseUI.T("hud_humans")
+	local c = RelapseUI.Col
+	surface.SetFont("Relapse25")
+	local _, tabCell = surface.GetTextSize("Ay")
+	if not tabCell or tabCell < 1 then
+		tabCell = RelapseUI.sPx(25)
+	end
+	local yNum = math.ceil((h - tabCell) * 0.5)
+	local label = name .. ":"
+	-- Caps and lining figures share the baseline, same as HUD points.
+	local labY = RelapseUI.ManropeBaseline(yNum, RelapseUI.sPx(25)) - RelapseUI.ManropeBaseline(0, RelapseUI.sPx(20))
+	draw.SimpleText(label, "Relapse20", 0, labY, c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	surface.SetFont("Relapse20")
+	local nw = surface.GetTextSize(label)
+	draw.SimpleText(tostring(team.NumPlayers(teamid)), "Relapse25", nw + RelapseUI.Grid15(), yNum - RelapseUI.sPx(1), c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
 	return true
 end
 
 function PANEL:SetTeam(teamid)
 	self.m_Team = teamid
-
-	if teamid == TEAM_HUMAN then
-		self.m_Icon:SetVisible(true)
-		self.m_Icon:SetImage("zombiesurvival/humanhead")
-		self.m_Icon:SizeToContents()
-		self:InvalidateLayout()
-	elseif teamid == TEAM_UNDEAD then
-		self.m_Icon:SetVisible(true)
-		self.m_Icon:SetImage("zombiesurvival/zombiehead")
-		self.m_Icon:SizeToContents()
-		self:InvalidateLayout()
-	else
-		self.m_Icon:SetVisible(false)
-	end
 end
-function PANEL:GetTeam() return self.m_Team end
 
-vgui.Register("DTeamHeading", PANEL, "Panel")
+function PANEL:GetTeam()
+	return self.m_Team
+end
+
+vgui.Register("DTeamHeading", PANEL, "DPanel")

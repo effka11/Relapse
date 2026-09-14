@@ -24,6 +24,7 @@ SWEP.RelapsePreviewLocalAng = Angle(45, 0, 135)
 SWEP.RelapsePreviewOffset = Vector(0, 0, -1)
 SWEP.RelapsePreviewLift = 0.7
 SWEP.RelapsePreviewCamScale = 1.0
+SWEP.RelapseMeleeCameraScale = 0.10
 
 SWEP.PrintName = "Нож"
 SWEP.Description = "A service knife. Issued with the kit: it reaches the one in the doorway, not the one behind him."
@@ -64,6 +65,7 @@ SWEP.Primary.Damage = R.Damage
 SWEP.Primary.Delay = R.Delay
 SWEP.Primary.ClipSize = -1
 SWEP.Primary.Ammo = "none"
+SWEP.Primary.Automatic = true
 SWEP.MeleeDamage = R.Damage
 SWEP.MeleeRange = R.Range
 SWEP.MeleeKnockBack = R.Stopping
@@ -129,7 +131,7 @@ SWEP.ViewModelOffsets = {
 	},
 
 	RecoilMultiplier = 1,
-	KickMultiplier = 1
+	KickMultiplier = 0.10
 }
 
 SWEP.Customization = {

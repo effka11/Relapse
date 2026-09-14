@@ -374,9 +374,9 @@ function RelapseUI.LayoutViewerStats(viewer)
 	local barR = blockW - RelapseUI.ViewerStatRight()
 	local barW = math.max(1, barR - barX)
 
-	for i, sb in ipairs(bars) do
-		if not IsValid(sb) then continue end
-		local y = firstY + (i - 1) * (barH + barGap)
+	local function place(i, y)
+		local sb = bars[i]
+		if not IsValid(sb) then return end
 		sb:SetPos(barX, y)
 		sb:SetSize(barW, barH)
 		local ly = y + math.floor((barH - labH) * 0.5 + 0.5)
@@ -392,6 +392,13 @@ function RelapseUI.LayoutViewerStats(viewer)
 			val:SetTall(labH)
 			val:SetY(ly)
 		end
+	end
+
+	local y = firstY
+	for i, sb in ipairs(bars) do
+		if not IsValid(sb) or not sb:IsVisible() then continue end
+		place(i, y)
+		y = y + barH + barGap
 	end
 
 	local left0, left1 = 0, barX - gap
@@ -1245,6 +1252,27 @@ function RelapseUI.RoundFill(r, x, y, w, h, col)
 	surface.DrawPoly(pts)
 end
 
+function RelapseUI.MaskRound(r, w, h, fn)
+	if w < 2 or h < 2 or not fn then return end
+	render.ClearStencil()
+	render.SetStencilEnable(true)
+	render.SetStencilWriteMask(255)
+	render.SetStencilTestMask(255)
+	render.SetStencilReferenceValue(1)
+	render.SetStencilCompareFunction(STENCIL_ALWAYS)
+	render.SetStencilPassOperation(STENCIL_REPLACE)
+	render.SetStencilFailOperation(STENCIL_KEEP)
+	render.SetStencilZFailOperation(STENCIL_KEEP)
+	render.OverrideColorWriteEnable(true, false)
+	RelapseUI.RoundFill(r, 0, 0, w, h, RelapseUI.Col.Ink)
+	render.OverrideColorWriteEnable(false)
+	render.SetStencilCompareFunction(STENCIL_EQUAL)
+	render.SetStencilPassOperation(STENCIL_KEEP)
+	fn()
+	render.SetStencilEnable(false)
+	render.ClearStencil()
+end
+
 function RelapseUI.FillCircle(cx, cy, rad, col)
 	if not col or not rad or rad < 0.75 then return end
 	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
@@ -1331,7 +1359,11 @@ local function DrawCentered(self, w, h, col)
 end
 
 function RelapseUI.PaintWindow(self, w, h)
-	RelapseUI.RoundFill(RelapseUI.RadPx("Window"), 0, 0, w, h, RelapseUI.Col.BgGlass)
+	local fill = RelapseUI.Col.BgGlass
+	if GAMEMODE and GAMEMODE.WindowTransparency == false then
+		fill = RelapseUI.Col.Bg
+	end
+	RelapseUI.RoundFill(RelapseUI.RadPx("Window"), 0, 0, w, h, fill)
 	return true
 end
 
@@ -1914,6 +1946,7 @@ function RelapseUI.PinViewerToItems(frame, sheet)
 		viewer.m_Title:InvalidateLayout(true)
 	end
 	RelapseUI.LayoutViewerAmmo(viewer)
+	RelapseUI.LayoutViewerStats(viewer)
 end
 
 function RelapseUI.FooterInset()
@@ -2084,16 +2117,51 @@ function RelapseUI.ShopWindowSize()
 	}
 end
 
-function RelapseUI.PlaceShopTitle(title, L)
-	if not IsValid(title) then return end
+function RelapseUI.ScoreboardWindowSize()
+	local L = RelapseUI.ShopWindowSize()
+	local m = L.m
+	local colGap = RelapseUI.Grid15(3)
+	local listW = math.floor((L.innerW - colGap) * 0.5)
+	return {
+		wid = L.wid,
+		hei = L.hei,
+		m = m,
+		pad = L.pad,
+		headerh = L.headerh,
+		headingH = L.tabhei,
+		tabhei = L.tabhei,
+		tabGap = L.tabGap,
+		colGap = colGap,
+		colW = math.max(m.step, listW - m.scroll),
+		listW = listW,
+		rowH = RelapseUI.Grid15(2) + RelapseUI.Grid15() * 2,
+		rowGap = RelapseUI.Grid15(),
+		innerW = L.innerW
+	}
+end
+
+-- 45px from Relapse30 optical bottom to the Relapse20 tab capital.
+function RelapseUI.TitleAboveTabY(L, titleCell)
 	surface.SetFont("Relapse20")
 	local _, tabCell = surface.GetTextSize("Ay")
 	if not tabCell or tabCell < 1 then
 		tabCell = RelapseUI.sPx(20)
 	end
-	local titleCell = title:GetTall()
-	local tabCapY = L.headerh + math.ceil((L.tabhei - tabCell) * 0.5) + RelapseUI.sPx(5)
-	title:SetPos(L.pad, math.max(0, tabCapY - RelapseUI.sPx(45) - (titleCell - RelapseUI.sPx(6))))
+	if not titleCell or titleCell < 1 then
+		surface.SetFont("Relapse30")
+		titleCell = select(2, surface.GetTextSize("Ay"))
+		if not titleCell or titleCell < 1 then
+			titleCell = RelapseUI.sPx(30)
+		end
+	end
+	local tabhei = L.tabhei or L.headingH or RelapseUI.M().tabs
+	local tabCapY = L.headerh + math.ceil((tabhei - tabCell) * 0.5) + RelapseUI.sPx(5)
+	return math.max(0, tabCapY - RelapseUI.sPx(45) - (titleCell - RelapseUI.sPx(6)))
+end
+
+function RelapseUI.PlaceShopTitle(title, L)
+	if not IsValid(title) then return end
+	title:SetPos(L.pad, RelapseUI.TitleAboveTabY(L, title:GetTall()))
 	RelapseUI.PlaceShopSwitch(title:GetParent())
 end
 
@@ -2514,11 +2582,13 @@ function RelapseUI.PaintOptionsCheck(self, w, h)
 	local c = RelapseUI.Col
 	local cx, cy = s * 0.5, y + s * 0.5
 	local rad = s * 0.5
-	RelapseUI.FillCircle(cx, cy, rad, self.Hovered and c.CardHover or c.Card)
+	local fill = c.Card
 	if on then
-		local p = math.max(1, RelapseUI.sPx(2))
-		RelapseUI.FillCircle(cx, cy, math.max(1, rad - p), c.Text)
+		fill = c.Text
+	elseif self.Hovered then
+		fill = c.CardHover
 	end
+	RelapseUI.FillCircle(cx, cy, rad, fill)
 	draw.SimpleText(self.RelapseLabel or "", "Relapse20", s + RelapseUI.Grid15(2), 0, c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
 	return true
 end
@@ -2556,12 +2626,17 @@ function RelapseUI.MakeOptionsScroll(sheet)
 	return scroll
 end
 
+function RelapseUI.OptionsCheckGap()
+	-- Check cap sits 5px into the row; 2 cells minus that = 30 to the capital.
+	return RelapseUI.Grid15(2) - RelapseUI.sPx(5)
+end
+
 function RelapseUI.OptionsCheck(parent, text, cvar)
 	local row = vgui.Create("DButton", parent)
 	row:SetText("")
-	row:SetTall(RelapseUI.Grid15(3))
+	row:SetTall(RelapseUI.sPx(20))
 	row:Dock(TOP)
-	row:DockMargin(0, 0, 0, RelapseUI.Grid15())
+	row:DockMargin(0, 0, 0, RelapseUI.OptionsCheckGap())
 	row:SetPaintBackground(false)
 	row.RelapseCvar = cvar
 	row.RelapseLabel = text

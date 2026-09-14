@@ -277,6 +277,11 @@ cvars.AddChangeCallback("zs_drawxp", function(cvar, oldvalue, newvalue)
 	gamemode.Call("EvaluateFilmMode")
 end)
 
+GM.WindowTransparency = CreateClientConVar("zs_windowtransparency", "1", true, false):GetBool()
+cvars.AddChangeCallback("zs_windowtransparency", function(cvar, oldvalue, newvalue)
+	GAMEMODE.WindowTransparency = tonumber(newvalue) == 1
+end)
+
 GM.FontEffects = CreateClientConVar("zs_fonteffects", "0", true, false):GetBool()
 cvars.AddChangeCallback("zs_fonteffects", function(cvar, oldvalue, newvalue)
 	GAMEMODE.FontEffects = tonumber(newvalue) == 1

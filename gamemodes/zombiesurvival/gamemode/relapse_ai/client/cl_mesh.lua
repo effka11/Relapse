@@ -4,6 +4,7 @@ local Mode = 0 -- 0 off, 1 view, 2 edit
 local GenId = 0
 local CellSize = 40
 local Cells = {}
+local Ladders = {} -- linked shafts only (AABB + snapped cell ends)
 local Count = 0
 local Pct = 0
 local Building = false
@@ -14,6 +15,7 @@ net.Receive("RelapseAI.MeshEdit", function()
 	Mode = net.ReadUInt(2)
 	if Mode <= 0 then
 		Cells = {}
+		Ladders = {}
 		Count = 0
 		GenId = 0
 	end
@@ -44,9 +46,24 @@ net.Receive("RelapseAI.MeshCells", function()
 	end
 end)
 
+net.Receive("RelapseAI.MeshLadders", function()
+	local n = net.ReadUInt(8)
+	local list = {}
+	for _ = 1, n do
+		list[#list + 1] = {
+			mins = net.ReadVector(),
+			maxs = net.ReadVector(),
+			bot = net.ReadVector(),
+			top = net.ReadVector(),
+		}
+	end
+	Ladders = list
+end)
+
 hook.Add("InitPostEntity", "RelapseAI.MeshEdit", function()
 	Mode = 0
 	Cells = {}
+	Ladders = {}
 	GenId = 0
 end)
 
@@ -73,6 +90,30 @@ hook.Add("PostDrawTranslucentRenderables", "RelapseAI.MeshEdit", function(_, sky
 		end
 	end
 
+	local up = Vector(0, 0, 1)
+	local lift = Vector(0, 0, 1.5)
+	local mark = math.max(14, size * 0.55)
+	for i = 1, #Ladders do
+		local L = Ladders[i]
+		local mins, maxs = L.mins, L.maxs
+		local cx = (mins.x + maxs.x) * 0.5
+		local cy = (mins.y + maxs.y) * 0.5
+		local z = math.Clamp(eye.z, mins.z, maxs.z)
+		local dx, dy = eye.x - cx, eye.y - cy
+		local d2 = dx * dx + dy * dy + (eye.z - z) * (eye.z - z)
+		if d2 <= maxd2 then
+			local fade = 1 - (d2 / maxd2)
+			local origin = (mins + maxs) * 0.5
+			local lm = mins - origin
+			local lx = maxs - origin
+			render.DrawBox(origin, angle_zero, lm, lx, Color(255, 140, 40, 18 + math.floor(fade * 36)))
+			render.DrawWireframeBox(origin, angle_zero, lm, lx, Color(255, 210, 70, 70 + math.floor(fade * 140)), false)
+			render.DrawLine(L.bot, L.top, Color(255, 230, 90, 90 + math.floor(fade * 140)), false)
+			render.DrawQuadEasy(L.bot + lift, up, mark, mark, Color(255, 170, 50, 80 + math.floor(fade * 120)), 0)
+			render.DrawQuadEasy(L.top + lift, up, mark, mark, Color(255, 220, 80, 80 + math.floor(fade * 120)), 0)
+		end
+	end
+
 	cam.IgnoreZ(false)
 end)
 
@@ -94,7 +135,12 @@ hook.Add("HUDPaint", "RelapseAI.MeshEdit", function()
 	end
 	draw.SimpleTextOutlined(status, "DermaDefault", x, y, Color(220, 220, 220), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 1, Color(0, 0, 0, 220))
 	y = y + 16
-	draw.SimpleTextOutlined("Standable skin, not Source tiles. Bots walk it after links.", "DermaDefault", x, y, Color(170, 170, 170), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 1, Color(0, 0, 0, 220))
+	if not Building then
+		local ladders = string.format("linked shafts   %d   (orange)", #Ladders)
+		draw.SimpleTextOutlined(ladders, "DermaDefault", x, y, Color(255, 180, 70), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 1, Color(0, 0, 0, 220))
+		y = y + 16
+	end
+	draw.SimpleTextOutlined("Standable skin, not Source tiles. Orange = ladder edges in the graph.", "DermaDefault", x, y, Color(170, 170, 170), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 1, Color(0, 0, 0, 220))
 	y = y + 16
 	draw.SimpleTextOutlined("relapse_buildmesh   relapse_hidemesh   relapse_savemesh", "DermaDefault", x, y, Color(150, 150, 150), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 1, Color(0, 0, 0, 220))
 end)

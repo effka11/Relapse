@@ -1,130 +1,309 @@
+-- Relapse TAB scoreboard: 5/15 grid, shop glass, two team columns.
+-- Size and fade follow RelapseUI; JetBoom credits stay in F1.
+
 local ScoreBoard
+
+local function Ellipsize(text, font, maxW)
+	if not text or text == "" or maxW <= 0 then return "" end
+	surface.SetFont(font)
+	if surface.GetTextSize(text) <= maxW then return text end
+	local ell = ".."
+	local ew = surface.GetTextSize(ell)
+	for i = #text, 1, -1 do
+		local b = string.byte(text, i)
+		if b and (b < 128 or b >= 192) then
+			local s = string.sub(text, 1, i - 1)
+			if surface.GetTextSize(s) + ew <= maxW then
+				return s .. ell
+			end
+		end
+	end
+	return ell
+end
+
+local function RowMetrics(w)
+	local pad = RelapseUI.Grid15()
+	local avatar = RelapseUI.Grid15(2)
+	local icon = RelapseUI.sPx(16)
+	local num = RelapseUI.Grid15(3)
+	local fine = RelapseUI.Grid5()
+	local gap = RelapseUI.Grid15()
+	local muteX = w - pad - icon
+	local friendX = muteX - fine - icon
+	local classX = friendX - gap - RelapseUI.Grid15(2)
+	local scoreRight = RelapseUI.Grid15(18) + RelapseUI.sPx(35)
+	local scoreW = RelapseUI.Grid15(6)
+	local scoreX = scoreRight - scoreW
+	local remortLeft = scoreRight + RelapseUI.Grid15(5)
+	local nameX = pad + avatar + gap
+	return {
+		pad = pad,
+		avatar = avatar,
+		icon = icon,
+		num = num,
+		nameX = nameX,
+		nameW = math.max(RelapseUI.Grid15(), scoreX - gap - nameX),
+		scoreX = scoreX,
+		scoreRight = scoreRight,
+		remortLeft = remortLeft,
+		classX = classX,
+		class = RelapseUI.Grid15(2),
+		friendX = friendX,
+		muteX = muteX
+	}
+end
+
+local function CardColumn(list, fallbackW, fallbackX)
+	local x = fallbackX or 0
+	local w = fallbackW or 0
+	if not IsValid(list) then
+		return x, w
+	end
+	x = select(1, list:GetPos())
+	w = list:GetWide()
+	local canvas = list.GetCanvas and list:GetCanvas()
+	if IsValid(canvas) then
+		x = x + canvas:GetX()
+		if canvas:GetWide() > 1 then
+			w = canvas:GetWide()
+		end
+	end
+	return x, w
+end
+
+local function TabCellY(h)
+	surface.SetFont("Relapse25")
+	local _, tabCell = surface.GetTextSize("Ay")
+	if not tabCell or tabCell < 1 then
+		tabCell = RelapseUI.sPx(25)
+	end
+	return math.ceil((h - tabCell) * 0.5)
+end
+
+local function PaintColCaps(x, y, w, h, scoreKey)
+	local met = RowMetrics(w)
+	local c = RelapseUI.Col.Muted
+	local yNum = TabCellY(h)
+	local labY = RelapseUI.ManropeBaseline(yNum, RelapseUI.sPx(25)) - RelapseUI.ManropeBaseline(0, RelapseUI.sPx(20))
+	draw.SimpleText(RelapseUI.T(scoreKey), "Relapse20", x + met.scoreRight, y + labY, c, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+	draw.SimpleText(RelapseUI.T("hud_class"), "Relapse20", x + met.remortLeft, y + labY, c, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+end
+
+local function ScoreCapKey(pl)
+	if pl and pl:IsValid() and pl:Team() == TEAM_UNDEAD then
+		return "hud_brains"
+	end
+	return "hud_score"
+end
+
+local function ScoreLabelX(text, scoreRight, capKey)
+	surface.SetFont("Relapse20")
+	local capW = surface.GetTextSize(RelapseUI.T(capKey) or "") or 0
+	local capCenter = scoreRight - capW * 0.5
+	surface.SetFont("Relapse15")
+	text = text or ""
+	local slash = string.find(text, "/", 1, true)
+	if not slash then
+		local tw = surface.GetTextSize(text)
+		return math.floor(capCenter - tw * 0.5 + 0.5)
+	end
+	local beforeW = surface.GetTextSize(string.sub(text, 1, slash - 1))
+	local slashW = surface.GetTextSize("/")
+	return math.floor(capCenter - beforeW - slashW * 0.5 + 0.5)
+end
+
+local function ClassCapCenter(remortLeft)
+	surface.SetFont("Relapse20")
+	local capW = surface.GetTextSize(RelapseUI.T("hud_class") or "") or 0
+	return remortLeft + capW * 0.5
+end
+
+local matCader
+local matShooter
+
+local function ClassIconMat(name)
+	if name == "cader" then
+		if not matCader or matCader:IsError() then
+			matCader = Material("zombiesurvival/class_hm.png", "smooth")
+		end
+		return matCader
+	end
+	if not matShooter or matShooter:IsError() then
+		matShooter = Material("zombiesurvival/class_ar.png", "smooth")
+	end
+	return matShooter
+end
+
+local function DrawClassIcon(name, x, y, sz, col)
+	local mat = ClassIconMat(name)
+	if not mat then return end
+	surface.SetMaterial(mat)
+	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
+	surface.DrawTexturedRect(math.floor(x + 0.5), math.floor(y + 0.5), sz, sz)
+end
+
+local function PaintClassSplit(originX, cy, remortLeft)
+	local cx = originX + ClassCapCenter(remortLeft)
+	local ham = RelapseUI.sPx(24)
+	local gun = RelapseUI.sPx(29)
+	local gap = RelapseUI.Grid5()
+	local ink = RelapseUI.Col.Text
+	draw.SimpleText("+", "Relapse20", cx, cy, RelapseUI.Col.Muted, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+	surface.SetFont("Relapse20")
+	local plusW = surface.GetTextSize("+") or RelapseUI.sPx(12)
+	DrawClassIcon("cader", cx - plusW * 0.5 - gap - ham, cy - ham * 0.5, ham, ink)
+	local gunX = cx + plusW * 0.5 + gap + ham * 0.5 - gun * 0.5
+	DrawClassIcon("shooter", gunX, cy - gun * 0.5, gun, ink)
+end
+
 function GM:ScoreboardShow()
 	gui.EnableScreenClicker(true)
 	PlayMenuOpenSound()
+	RelapseUI.CreateFonts()
 
-	if not ScoreBoard then
+	if not IsValid(ScoreBoard) then
 		ScoreBoard = vgui.Create("ZSScoreBoard")
 	end
 
-	local screenscale = BetterScreenScale()
-
-	ScoreBoard:SetSize(math.min(974, ScrW() * 0.65) * math.max(1, screenscale), ScrH() * 0.85)
-	ScoreBoard:AlignTop(ScrH() * 0.05)
-	ScoreBoard:CenterHorizontal()
-	ScoreBoard:SetAlpha(0)
-	ScoreBoard:AlphaTo(255, 0.15, 0)
+	ScoreBoard:ApplyLayout()
 	ScoreBoard:SetVisible(true)
+	RelapseUI.FadeOpen(ScoreBoard)
 end
 
 function GM:ScoreboardRebuild()
-	self:ScoreboardHide()
+	local vis = IsValid(ScoreBoard) and ScoreBoard:IsVisible()
+	if IsValid(ScoreBoard) then
+		ScoreBoard:Remove()
+	end
 	ScoreBoard = nil
+	if vis then
+		self:ScoreboardShow()
+	else
+		gui.EnableScreenClicker(false)
+	end
 end
 
 function GM:ScoreboardHide()
 	gui.EnableScreenClicker(false)
-
-	if ScoreBoard then
-		PlayMenuCloseSound()
-		ScoreBoard:SetVisible(false)
-	end
+	if not (IsValid(ScoreBoard) and ScoreBoard:IsVisible()) then return end
+	if ScoreBoard._RelapseClosing then return end
+	PlayMenuCloseSound()
+	RelapseUI.FadeClose(ScoreBoard, false, function(pnl)
+		if not IsValid(pnl) then return end
+		pnl:SetVisible(false)
+		pnl:SetAlpha(0)
+		pnl:SetMouseInputEnabled(true)
+	end)
 end
+
+---------------------------------------------------------------------------
+-- Board
+---------------------------------------------------------------------------
 
 local PANEL = {}
 
 PANEL.RefreshTime = 2
 PANEL.NextRefresh = 0
-PANEL.m_MaximumScroll = 0
-
-local function BlurPaint(self)
-	draw.SimpleTextBlur(self:GetValue(), self.Font, 0, 0, self:GetTextColor())
-
-	return true
-end
 
 function PANEL:Init()
+	RelapseUI.CreateFonts()
 	self.NextRefresh = RealTime() + 0.1
+	self.PlayerPanels = {}
+	self:SetMouseInputEnabled(true)
+	self:SetKeyboardInputEnabled(false)
+	self:SetVisible(false)
+	self:SetAlpha(0)
 
-	self.m_TitleLabel = vgui.Create("DLabel", self)
-	self.m_TitleLabel.Font = "ZSScoreBoardTitle"
-	self.m_TitleLabel:SetFont(self.m_TitleLabel.Font)
-	self.m_TitleLabel:SetText(GAMEMODE.Name)
-	self.m_TitleLabel:SetTextColor(COLOR_GRAY)
-	self.m_TitleLabel:SizeToContents()
-	self.m_TitleLabel:NoClipping(true)
-	self.m_TitleLabel.Paint = BlurPaint
+	local title = EasyLabel(self, RelapseUI.T("menu_title"), "Relapse30", RelapseUI.Col.Text)
+	title:SetContentAlignment(4)
+	title:SizeToContents()
+	self.m_TitleLabel = title
+	self.RelapseTitle = title
 
-	self.m_ServerNameLabel = vgui.Create("DLabel", self)
-	self.m_ServerNameLabel.Font = "ZSScoreBoardSubTitle"
-	self.m_ServerNameLabel:SetFont(self.m_ServerNameLabel.Font)
-	self.m_ServerNameLabel:SetText(GetHostName())
-	self.m_ServerNameLabel:SetTextColor(COLOR_GRAY)
+	self.m_ServerNameLabel = EasyLabel(self, GetHostName(), "Relapse20", RelapseUI.Col.Muted)
+	self.m_ServerNameLabel:SetContentAlignment(4)
 	self.m_ServerNameLabel:SizeToContents()
-	self.m_ServerNameLabel:NoClipping(true)
-	self.m_ServerNameLabel.Paint = BlurPaint
-
-	self.m_AuthorLabel = EasyLabel(self, "by "..GAMEMODE.Author.." ("..GAMEMODE.Email..")", "ZSScoreBoardPing", COLOR_GRAY)
-	self.m_ContactLabel = EasyLabel(self, GAMEMODE.Website, "ZSScoreBoardPing", COLOR_GRAY)
 
 	self.m_HumanHeading = vgui.Create("DTeamHeading", self)
 	self.m_HumanHeading:SetTeam(TEAM_HUMAN)
+	self.m_HumanHeading:SetMouseInputEnabled(false)
 
 	self.m_ZombieHeading = vgui.Create("DTeamHeading", self)
 	self.m_ZombieHeading:SetTeam(TEAM_UNDEAD)
-
-	self.m_PointsLabel = EasyLabel(self, "Score", "ZSScoreBoardPlayer", COLOR_GRAY)
-	self.m_RemortCLabel = EasyLabel(self, "R.LVL", "ZSScoreBoardPlayer", COLOR_GRAY)
-
-	self.m_BrainsLabel = EasyLabel(self, "Brains", "ZSScoreBoardPlayer", COLOR_GRAY)
-	self.m_RemortCZLabel = EasyLabel(self, "R.LVL", "ZSScoreBoardPlayer", COLOR_GRAY)
+	self.m_ZombieHeading:SetMouseInputEnabled(false)
 
 	self.ZombieList = vgui.Create("DScrollPanel", self)
 	self.ZombieList.Team = TEAM_UNDEAD
+	self.ZombieList.Paint = function() return true end
+	RelapseUI.StyleScroll(self.ZombieList)
 
 	self.HumanList = vgui.Create("DScrollPanel", self)
 	self.HumanList.Team = TEAM_HUMAN
+	self.HumanList.Paint = function() return true end
+	RelapseUI.StyleScroll(self.HumanList)
+end
 
-	self:InvalidateLayout()
+function PANEL:ApplyLayout()
+	RelapseUI.CreateFonts()
+	local L = RelapseUI.ScoreboardWindowSize()
+	self.RelapseLayout = L
+	self:SetSize(L.wid, L.hei)
+	self:Center()
+	for _, panel in pairs(self.PlayerPanels or {}) do
+		if IsValid(panel) then
+			panel:SetTall(L.rowH)
+			panel:DockMargin(0, 0, 0, L.rowGap)
+			panel:InvalidateLayout(true)
+		end
+	end
+	self:InvalidateLayout(true)
 end
 
 function PANEL:PerformLayout()
-	local screenscale = math.max(0.95, BetterScreenScale())
+	local L = self.RelapseLayout or RelapseUI.ScoreboardWindowSize()
+	self.RelapseLayout = L
+	local x = L.pad
+	local y = L.headerh
+	local listY = y + L.headingH + L.tabGap
+	local listH = math.max(L.m.step, L.hei - listY - L.pad)
 
-	self.m_AuthorLabel:MoveBelow(self.m_TitleLabel)
-	self.m_ContactLabel:MoveBelow(self.m_AuthorLabel)
+	self.HumanList:SetSize(L.listW, listH)
+	self.HumanList:SetPos(x, listY)
+	self.HumanList:InvalidateLayout(true)
 
-	self.m_ServerNameLabel:SetPos(math.min(self:GetWide() - self.m_ServerNameLabel:GetWide(), self:GetWide() * 0.75 - self.m_ServerNameLabel:GetWide() * 0.5), 32 - self.m_ServerNameLabel:GetTall() / 2)
+	self.ZombieList:SetSize(L.listW, listH)
+	self.ZombieList:SetPos(x + L.listW + L.colGap, listY)
+	self.ZombieList:InvalidateLayout(true)
 
-	self.m_HumanHeading:SetSize(self:GetWide() / 2 - 32, 28 * screenscale)
-	self.m_HumanHeading:SetPos(self:GetWide() * 0.25 - self.m_HumanHeading:GetWide() * 0.5, 110 * screenscale - self.m_HumanHeading:GetTall())
+	local hx, hw = CardColumn(self.HumanList, L.colW, x)
+	self.m_HumanHeading:SetSize(hw, L.headingH)
+	self.m_HumanHeading:SetPos(hx, y)
 
-	self.m_ZombieHeading:SetSize(self:GetWide() / 2 - 32, 28 * screenscale)
-	self.m_ZombieHeading:SetPos(self:GetWide() * 0.75 - self.m_ZombieHeading:GetWide() * 0.5, 110 * screenscale - self.m_ZombieHeading:GetTall())
+	local zx, zw = CardColumn(self.ZombieList, L.colW, x + L.listW + L.colGap)
+	self.m_ZombieHeading:SetSize(zw, L.headingH)
+	self.m_ZombieHeading:SetPos(zx, y)
 
-	self.m_PointsLabel:SizeToContents()
-	self.m_PointsLabel:SetPos((self:GetWide() / 2 - 24) * 0.6 - self.m_PointsLabel:GetWide() * 0.35, 110 * screenscale - self.m_HumanHeading:GetTall())
-	self.m_PointsLabel:MoveBelow(self.m_HumanHeading, 1 * screenscale)
+	RelapseUI.PlaceShopTitle(self.m_TitleLabel, L)
+	self.m_ServerNameLabel:SetText(GetHostName())
+	self.m_ServerNameLabel:SizeToContents()
+	local _, titleY = self.m_TitleLabel:GetPos()
+	self.m_ServerNameLabel:SetPos(self:GetWide() - L.pad - self.m_ServerNameLabel:GetWide(), titleY + RelapseUI.sPx(10))
+end
 
-	self.m_RemortCLabel:SizeToContents()
-	self.m_RemortCLabel:SetPos((self:GetWide() / 2 - 24) * 0.71 - self.m_RemortCLabel:GetWide() * 0.5, 110 * screenscale - self.m_HumanHeading:GetTall())
-	self.m_RemortCLabel:MoveBelow(self.m_HumanHeading, 1 * screenscale)
+function PANEL:Paint(w, h)
+	RelapseUI.PaintWindow(self, w, h)
+	return true
+end
 
-	self.m_BrainsLabel:SizeToContents()
-	self.m_BrainsLabel:SetPos(self:GetWide() / 2 + 3 * screenscale + (self:GetWide() / 2 - 24) * 0.61 - self.m_BrainsLabel:GetWide() * 0.35, 110 * screenscale - self.m_HumanHeading:GetTall())
-	self.m_BrainsLabel:MoveBelow(self.m_ZombieHeading, 1 * screenscale)
-
-	self.m_RemortCZLabel:SizeToContents()
-	self.m_RemortCZLabel:SetPos(self:GetWide() / 2 + 3 * screenscale + (self:GetWide() / 2 - 24) * 0.71 - self.m_RemortCZLabel:GetWide() * 0.5, 110 * screenscale - self.m_HumanHeading:GetTall())
-	self.m_RemortCZLabel:MoveBelow(self.m_ZombieHeading, 1 * screenscale)
-
-	self.HumanList:SetSize(self:GetWide() / 2 - 24, self:GetTall() - 150 * screenscale)
-	self.HumanList:AlignBottom(16 * screenscale)
-	self.HumanList:AlignLeft(8 * screenscale)
-
-	self.ZombieList:SetSize(self:GetWide() / 2 - 24, self:GetTall() - 150 * screenscale)
-	self.ZombieList:AlignBottom(16 * screenscale)
-	self.ZombieList:AlignRight(8 * screenscale)
+function PANEL:PaintOver()
+	local L = self.RelapseLayout
+	if not L then return end
+	local _, hy = self.m_HumanHeading:GetPos()
+	local hx, hw = CardColumn(self.HumanList, L.colW, L.pad)
+	PaintColCaps(hx, hy, hw, L.headingH, "hud_score")
+	local _, zy = self.m_ZombieHeading:GetPos()
+	local zx, zw = CardColumn(self.ZombieList, L.colW, L.pad + L.listW + L.colGap)
+	PaintColCaps(zx, zy, zw, L.headingH, "hud_brains")
 end
 
 function PANEL:Think()
@@ -132,33 +311,6 @@ function PANEL:Think()
 		self.NextRefresh = RealTime() + self.RefreshTime
 		self:RefreshScoreboard()
 	end
-end
-
-local texRightEdge = surface.GetTextureID("gui/gradient")
-local texCorner = surface.GetTextureID("zombiesurvival/circlegradient")
-local texDownEdge = surface.GetTextureID("gui/gradient_down")
-function PANEL:Paint()
-	local wid, hei = self:GetSize()
-	local barw = 64
-
-	surface.SetDrawColor(5, 5, 5, 180)
-	surface.DrawRect(0, 64, wid, hei - 64)
-	surface.SetDrawColor(90, 90, 90, 180)
-	surface.DrawOutlinedRect(0, 64, wid, hei - 64)
-
-	surface.SetDrawColor(5, 5, 5, 220)
-	PaintGenericFrame(self, 0, 0, wid, 64, 32)
-
-	surface.SetDrawColor(5, 5, 5, 160)
-	surface.DrawRect(wid * 0.5 - 16, 64, 32, hei - 128)
-	surface.SetTexture(texRightEdge)
-	surface.DrawTexturedRect(wid * 0.5 + 16, 64, barw, hei - 128)
-	surface.DrawTexturedRectRotated(wid * 0.5 - 16 - barw / 2, 64 + (hei - 128) / 2, barw, hei - 128, 180)
-	surface.SetTexture(texCorner)
-	surface.DrawTexturedRectRotated(wid * 0.5 - 16 - barw / 2, hei - 32, barw, 64, 90)
-	surface.DrawTexturedRectRotated(wid * 0.5 + 16 + barw / 2, hei - 32, barw, 64, 180)
-	surface.SetTexture(texDownEdge)
-	surface.DrawTexturedRect(wid * 0.5 - 16, hei - 64, 32, 64)
 end
 
 function PANEL:GetPlayerPanel(pl)
@@ -172,23 +324,29 @@ end
 function PANEL:CreatePlayerPanel(pl)
 	local curpan = self:GetPlayerPanel(pl)
 	if curpan and curpan:IsValid() then return curpan end
-
 	if pl:Team() == TEAM_SPECTATOR then return end
 
+	local L = self.RelapseLayout or RelapseUI.ScoreboardWindowSize()
 	local panel = vgui.Create("ZSPlayerPanel", pl:Team() == TEAM_UNDEAD and self.ZombieList or self.HumanList)
-	panel:SetPlayer(pl)
+	panel:SetTall(L.rowH)
 	panel:Dock(TOP)
-	panel:DockMargin(8, 2, 8, 2)
+	panel:DockMargin(0, 0, 0, L.rowGap)
+	panel:SetPlayer(pl)
 
 	self.PlayerPanels[pl] = panel
-
 	return panel
 end
 
 function PANEL:RefreshScoreboard()
-	self.m_ServerNameLabel:SetText(GetHostName())
-	self.m_ServerNameLabel:SizeToContents()
-	self.m_ServerNameLabel:SetPos(math.min(self:GetWide() - self.m_ServerNameLabel:GetWide(), self:GetWide() * 0.75 - self.m_ServerNameLabel:GetWide() * 0.5), 32 - self.m_ServerNameLabel:GetTall() / 2)
+	if IsValid(self.m_ServerNameLabel) then
+		self.m_ServerNameLabel:SetText(GetHostName())
+		self.m_ServerNameLabel:SizeToContents()
+		local L = self.RelapseLayout
+		if L then
+			local _, titleY = self.m_TitleLabel:GetPos()
+			self.m_ServerNameLabel:SetPos(self:GetWide() - L.pad - self.m_ServerNameLabel:GetWide(), titleY + RelapseUI.sPx(10))
+		end
+	end
 
 	if self.PlayerPanels == nil then self.PlayerPanels = {} end
 
@@ -212,10 +370,13 @@ end
 
 vgui.Register("ZSScoreBoard", PANEL, "Panel")
 
+---------------------------------------------------------------------------
+-- Player row
+---------------------------------------------------------------------------
+
 PANEL = {}
 
 PANEL.RefreshTime = 1
-
 PANEL.m_Player = NULL
 PANEL.NextRefresh = 0
 
@@ -228,11 +389,6 @@ local function MuteDoClick(self)
 end
 
 GM.ZSFriends = {}
---[[hook.Add("Initialize", "LoadZSFriends", function()
-	if file.Exists(GAMEMODE.FriendsFile, "DATA") then
-		GAMEMODE.ZSFriends = Deserialize(file.Read(GAMEMODE.FriendsFile)) or {}
-	end
-end)]]
 
 local function ToggleZSFriend(self)
 	if MySelf.LastFriendAdd and MySelf.LastFriendAdd + 2 > CurTime() then return end
@@ -253,7 +409,6 @@ local function ToggleZSFriend(self)
 		net.SendToServer()
 
 		MySelf.LastFriendAdd = CurTime()
-		--file.Write(GAMEMODE.FriendsFile, Serialize(GAMEMODE.ZSFriends))
 	end
 end
 
@@ -269,73 +424,69 @@ local function AvatarDoClick(self)
 	end
 end
 
-local function empty() end
-
 function PANEL:Init()
-	local screenscale = math.max(0.95, BetterScreenScale())
-	self:SetTall(32 * screenscale)
+	RelapseUI.CreateFonts()
+	self:SetTall(RelapseUI.ScoreboardWindowSize().rowH)
 
 	self.m_AvatarButton = self:Add("DButton", self)
 	self.m_AvatarButton:SetText(" ")
-	self.m_AvatarButton:SetSize(32 * screenscale, 32 * screenscale)
-	self.m_AvatarButton:Center()
 	self.m_AvatarButton.DoClick = AvatarDoClick
-	self.m_AvatarButton.Paint = empty
 	self.m_AvatarButton.PlayerPanel = self
 
 	self.m_Avatar = vgui.Create("AvatarImage", self.m_AvatarButton)
-	self.m_Avatar:SetSize(32 * screenscale, 32 * screenscale)
 	self.m_Avatar:SetVisible(false)
 	self.m_Avatar:SetMouseInputEnabled(false)
+	self.m_Avatar:SetPaintedManually(true)
+	self.m_AvatarButton.Paint = function(me, w, h)
+		local av = me.PlayerPanel and me.PlayerPanel.m_Avatar
+		if not (IsValid(av) and av:IsVisible()) then return true end
+		RelapseUI.MaskRound(RelapseUI.RadPx("Avatar"), w, h, function()
+			av:PaintManual()
+		end)
+		return true
+	end
 
 	self.m_SpecialImage = vgui.Create("DImage", self)
-	self.m_SpecialImage:SetSize(16, 16)
 	self.m_SpecialImage:SetMouseInputEnabled(true)
 	self.m_SpecialImage:SetVisible(false)
 
 	self.m_ClassImage = vgui.Create("DImage", self)
-	self.m_ClassImage:SetSize(22 * screenscale, 22 * screenscale)
 	self.m_ClassImage:SetMouseInputEnabled(false)
 	self.m_ClassImage:SetVisible(false)
 
-	self.m_PlayerLabel = EasyLabel(self, " ", "ZSScoreBoardPlayer", COLOR_WHITE)
-	self.m_ScoreLabel = EasyLabel(self, " ", "ZSScoreBoardPlayerSmall", COLOR_WHITE)
-	self.m_RemortLabel = EasyLabel(self, " ", "ZSScoreBoardPlayerSmaller", COLOR_WHITE)
-
-	self.m_PingMeter = vgui.Create("DPingMeter", self)
-	self.m_PingMeter.PingBars = 5
+	self.m_PlayerLabel = EasyLabel(self, " ", "Relapse20", RelapseUI.Col.Text)
+	self.m_ScoreLabel = EasyLabel(self, " ", "Relapse15", RelapseUI.Col.Text)
+	self.m_RemortLabel = EasyLabel(self, " ", "Relapse15", RelapseUI.Col.Muted)
+	self.m_RemortLabel:SetVisible(false)
 
 	self.m_Mute = vgui.Create("DImageButton", self)
+	if self.m_Mute.SetPaintBackground then
+		self.m_Mute:SetPaintBackground(false)
+	end
 	self.m_Mute.DoClick = MuteDoClick
 
 	self.m_Friend = vgui.Create("DImageButton", self)
+	if self.m_Friend.SetPaintBackground then
+		self.m_Friend:SetPaintBackground(false)
+	end
 	self.m_Friend.DoClick = ToggleZSFriend
 end
 
-local colTemp = Color(255, 255, 255, 200)
-function PANEL:Paint()
-	local col = color_black_alpha220
-	local mul = 0.5
+function PANEL:Paint(w, h)
+	local selected = false
+	local hovered = self.Hovered
 	local pl = self:GetPlayer()
 	if pl:IsValid() then
-		col = team.GetColor(pl:Team())
-
+		selected = pl == MySelf
 		if self.m_Flash then
-			mul = 0.6 + math.abs(math.sin(RealTime() * 6)) * 0.4
-		elseif pl == MySelf then
-			mul = 0.8
+			self.Hovered = hovered or math.abs(math.sin(RealTime() * 6)) > 0.35
 		end
 	end
-
-	if self.Hovered then
-		mul = math.min(1, mul * 1.5)
+	RelapseUI.PaintCard(self, w, h, selected)
+	self.Hovered = hovered
+	if pl:IsValid() and pl:Team() == TEAM_HUMAN then
+		PaintClassSplit(0, h * 0.5, RowMetrics(w).remortLeft)
 	end
-
-	colTemp.r = col.r * mul
-	colTemp.g = col.g * mul
-	colTemp.b = col.b * mul
-	draw.RoundedBox(4, 0, 0, self:GetWide(), self:GetTall(), colTemp)
-
 	return true
 end
 
@@ -347,40 +498,44 @@ function PANEL:DoClick()
 end
 
 function PANEL:PerformLayout()
-	self.m_AvatarButton:AlignLeft(16)
-	self.m_AvatarButton:CenterVertical()
+	local L = RelapseUI.ScoreboardWindowSize()
+	self:SetTall(L.rowH)
+	local w, h = self:GetWide(), L.rowH
+	local met = RowMetrics(w)
 
-	self.m_PlayerLabel:SizeToContents()
-	self.m_PlayerLabel:MoveRightOf(self.m_AvatarButton, 4)
-	self.m_PlayerLabel:CenterVertical()
+	self.m_AvatarButton:SetSize(met.avatar, met.avatar)
+	self.m_AvatarButton:SetPos(met.pad, met.pad)
+	self.m_Avatar:SetSize(met.avatar, met.avatar)
+	self.m_Avatar:SetPos(0, 0)
+
+	self.m_PlayerLabel:SetPos(met.nameX, 0)
+	self.m_PlayerLabel:SetSize(met.nameW, h)
+	self.m_PlayerLabel:SetContentAlignment(4)
 
 	self.m_ScoreLabel:SizeToContents()
-	self.m_ScoreLabel:SetPos(self:GetWide() * 0.6 - self.m_ScoreLabel:GetWide() / 2, 0)
-	self.m_ScoreLabel:CenterVertical()
+	self.m_ScoreLabel:SetPos(
+		ScoreLabelX(self.m_ScoreLabel:GetText(), met.scoreRight, ScoreCapKey(self:GetPlayer())),
+		math.floor((h - self.m_ScoreLabel:GetTall()) * 0.5)
+	)
 
-	self.m_SpecialImage:CenterVertical()
+	self.m_RemortLabel:SetVisible(false)
 
-	self.m_ClassImage:SetSize(self:GetTall(), self:GetTall())
-	self.m_ClassImage:SetPos(self:GetWide() * 0.75 - self.m_ClassImage:GetWide() * 0.5, 0)
-	self.m_ClassImage:CenterVertical()
+	self.m_ClassImage:SetSize(met.class, met.class)
+	self.m_ClassImage:SetPos(met.classX, math.floor((h - met.class) * 0.5))
 
-	local pingsize = self:GetTall() - 4
+	self.m_SpecialImage:SetSize(met.icon, met.icon)
+	self.m_SpecialImage:SetPos(met.pad + met.avatar - met.icon, met.pad + met.avatar - met.icon)
 
-	self.m_PingMeter:SetSize(pingsize, pingsize)
-	self.m_PingMeter:AlignRight(8)
-	self.m_PingMeter:CenterVertical()
+	if IsValid(self.m_PingMeter) then
+		self.m_PingMeter:Remove()
+		self.m_PingMeter = nil
+	end
 
-	self.m_Mute:SetSize(16, 16)
-	self.m_Mute:MoveLeftOf(self.m_PingMeter, 8)
-	self.m_Mute:CenterVertical()
+	self.m_Mute:SetSize(met.icon, met.icon)
+	self.m_Mute:SetPos(met.muteX, math.floor((h - met.icon) * 0.5))
 
-	self.m_Friend:SetSize(16, 16)
-	self.m_Friend:MoveLeftOf(self.m_Mute, 8)
-	self.m_Friend:CenterVertical()
-
-	self.m_RemortLabel:SizeToContents()
-	self.m_RemortLabel:MoveLeftOf(self.m_ClassImage, 2)
-	self.m_RemortLabel:CenterVertical()
+	self.m_Friend:SetSize(met.icon, met.icon)
+	self.m_Friend:SetPos(met.friendX, math.floor((h - met.icon) * 0.5))
 end
 
 function PANEL:RefreshPlayer()
@@ -390,49 +545,43 @@ function PANEL:RefreshPlayer()
 		return
 	end
 
-	local name = pl:Name()
-	if #name > 23 then
-		name = string.sub(name, 1, 21)..".."
+	local met = RowMetrics(self:GetWide())
+	self.m_PlayerLabel:SetText(Ellipsize(pl:Name(), "Relapse20", met.nameW))
+	self.m_PlayerLabel:SetTextColor(RelapseUI.Col.Text)
+
+	if pl:Team() == TEAM_HUMAN then
+		self.m_ScoreLabel:SetText(math.floor(pl:GetPoints()) .. " / " .. pl:Frags())
+	else
+		self.m_ScoreLabel:SetText(tostring(pl:Frags()))
 	end
-	self.m_PlayerLabel:SetText(name)
-	self.m_PlayerLabel:SetAlpha(240)
+	self.m_ScoreLabel:SetTextColor(RelapseUI.Col.Text)
 
-	self.m_ScoreLabel:SetText(pl:Frags())
-	self.m_ScoreLabel:SetAlpha(240)
+	self.m_RemortLabel:SetVisible(false)
 
-	local rlvl = pl:GetZSRemortLevel()
-	self.m_RemortLabel:SetText(rlvl > 0 and rlvl or "")
-
-	local rlvlmod = math.floor((rlvl % 40) / 4)
-	local hcolor, hlvl = COLOR_GRAY, 0
-	for rlvlr, rcolor in pairs(GAMEMODE.RemortColors) do
-		if rlvlmod >= rlvlr and rlvlr >= hlvl then
-			hlvl = rlvlr
-			hcolor = rcolor
-		end
-	end
-	self.m_RemortLabel:SetColor(hcolor)
-	self.m_RemortLabel:SetAlpha(240)
-
-	if MySelf:Team() == TEAM_UNDEAD and pl:Team() == TEAM_UNDEAD and pl:GetZombieClassTable().Icon then
+	if IsValid(MySelf) and MySelf:Team() == TEAM_UNDEAD and pl:Team() == TEAM_UNDEAD and pl:GetZombieClassTable().Icon then
 		self.m_ClassImage:SetVisible(true)
 		self.m_ClassImage:SetImage(pl:GetZombieClassTable().Icon)
-		self.m_ClassImage:SetImageColor(pl:GetZombieClassTable().IconColor or color_white)
+		self.m_ClassImage:SetImageColor(pl:GetZombieClassTable().IconColor or RelapseUI.Col.Text)
 	else
 		self.m_ClassImage:SetVisible(false)
 	end
 
+	local ink = RelapseUI.Col.Muted
 	if pl == MySelf then
 		self.m_Mute:SetVisible(false)
 		self.m_Friend:SetVisible(false)
 	else
+		self.m_Mute:SetVisible(true)
+		self.m_Friend:SetVisible(true)
 		if pl:IsMuted() then
 			self.m_Mute:SetImage("icon16/sound_mute.png")
+			self.m_Mute:SetColor(RelapseUI.Col.Danger)
 		else
 			self.m_Mute:SetImage("icon16/sound.png")
+			self.m_Mute:SetColor(ink)
 		end
 
-		self.m_Friend:SetColor(pl.ZSFriendAdded and COLOR_LIMEGREEN or COLOR_GRAY)
+		self.m_Friend:SetColor(pl.ZSFriendAdded and RelapseUI.Col.Text or ink)
 		self.m_Friend:SetImage(GAMEMODE.ZSFriends[pl:SteamID()] and "icon16/heart_delete.png" or "icon16/heart.png")
 	end
 
@@ -440,7 +589,11 @@ function PANEL:RefreshPlayer()
 
 	if pl:Team() ~= self._LastTeam then
 		self._LastTeam = pl:Team()
+		local L = RelapseUI.ScoreboardWindowSize()
 		self:SetParent(self._LastTeam == TEAM_HUMAN and ScoreBoard.HumanList or ScoreBoard.ZombieList)
+		self:SetTall(L.rowH)
+		self:Dock(TOP)
+		self:DockMargin(0, 0, 0, L.rowGap)
 	end
 
 	self:InvalidateLayout()
@@ -472,8 +625,6 @@ function PANEL:SetPlayer(pl)
 		self.m_Avatar:SetVisible(false)
 		self.m_SpecialImage:SetVisible(false)
 	end
-
-	self.m_PingMeter:SetPlayer(pl)
 
 	self:RefreshPlayer()
 end

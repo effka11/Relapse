@@ -75,6 +75,21 @@ local groundTr = {
 	start = groundStart,
 	endpos = groundEnd,
 }
+-- Shaft landing: a room behind the wall has paint at the same Z. Trace to the
+-- brush centre; a world hit outside the AABB is that wall. No CONTENTS_LADDER
+-- (the brush is often SOLID anyway — classify the hit by AABB instead).
+local WALL_MASK = bit.bor(CONTENTS_SOLID, CONTENTS_PLAYERCLIP or 0, CONTENTS_MOVEABLE or 0, CONTENTS_WINDOW or 0)
+local REACH_Z = 16
+local REACH_PAD = 8
+local reachRes = {}
+local reachStart, reachEnd = Vector(), Vector()
+local reachTr = {
+	mask = WALL_MASK,
+	filter = LinkFilter,
+	output = reachRes,
+	start = reachStart,
+	endpos = reachEnd,
+}
 
 Mesh.Blocked = Mesh.Blocked or {}
 Mesh.LinkCount = Mesh.LinkCount or 0
@@ -324,9 +339,184 @@ local function StripLadderNbs()
 	end
 end
 
+-- Paint floors next to a shaft: both open faces (±normal), not a room 200u away
+-- and not Mesh.Nearest without a Z cap (that snaps the pit to the roof).
+-- Same-Z paint behind a wall is not a landing: the trace to the shaft must
+-- not hit world outside the brush AABB. Then the wider reachable pad wins.
+local LANDING_XY = 96
+local LANDING_ZPAD = 72
+local CLUSTER_Z = 48
+
+local function WalkDegree(c)
+	local nbs = c.nbs
+	if not nbs then return 0 end
+	local n = 0
+	for i = 1, #nbs do
+		if nbs[i].kind == "walk" then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+-- A walkable pad (higher walk degree) over a speck in the hole; then nearer.
+local function BetterLanding(cur, nxt)
+	local cDeg, nDeg = WalkDegree(cur.c), WalkDegree(nxt.c)
+	if nDeg ~= cDeg then return nDeg > cDeg end
+	return nxt.d2 < cur.d2
+end
+
+local function SideWeight(list)
+	local w = 0
+	for i = 1, #list do
+		w = w + WalkDegree(list[i].c)
+	end
+	return w
+end
+
+local function BestOnSide(list)
+	local best = list[1]
+	for i = 2, #list do
+		if BetterLanding(best, list[i]) then
+			best = list[i]
+		end
+	end
+	return best.c
+end
+
+-- Brush AABB, not the overlay pad (that inflates XY and can swallow the wall).
+local function ShaftAABB(ladder)
+	local vol = Nav.LadderVolumeOf and Nav.LadderVolumeOf(ladder)
+	if vol and vol.mins and vol.maxs then
+		return vol.mins, vol.maxs
+	end
+	local b = ladder.GetBottom and ladder:GetBottom()
+	local t = ladder.GetTop and ladder:GetTop()
+	if not b or not t then
+		return Vector(-1, -1, -1), Vector(1, 1, 1)
+	end
+	local w = (ladder.GetWidth and ladder:GetWidth() or 32) * 0.5
+	local cx = (b.x + t.x) * 0.5
+	local cy = (b.y + t.y) * 0.5
+	local z0, z1 = math.min(b.z, t.z), math.max(b.z, t.z)
+	return Vector(cx - w, cy - w, z0), Vector(cx + w, cy + w, z1)
+end
+
+local function InShaftAABB(x, y, z, mins, maxs)
+	return x >= mins.x - REACH_PAD and x <= maxs.x + REACH_PAD
+		and y >= mins.y - REACH_PAD and y <= maxs.y + REACH_PAD
+		and z >= mins.z - REACH_PAD and z <= maxs.z + REACH_PAD
+end
+
+-- Horizontal poke at knee height toward the shaft centre.
+local function ReachToShaft(px, py, pz, cx, cy, mins, maxs)
+	local z = pz + REACH_Z
+	reachStart:SetUnpacked(px, py, z)
+	reachEnd:SetUnpacked(cx, cy, z)
+	util.TraceLine(reachTr)
+	if reachRes.StartSolid then return false end
+	if not reachRes.Hit then return true end
+	local h = reachRes.HitPos
+	return InShaftAABB(h.x, h.y, h.z, mins, maxs)
+end
+
+-- One landing per Z: the half-plane with more walk links (big pad vs wall strip).
+-- Sign of LadderNormal is not a filter; it only splits the cluster.
+local function PickFloor(group, cx, cy, nx, ny)
+	local pos, neg = {}, {}
+	for i = 1, #group do
+		local e = group[i]
+		local p = e.c.pos
+		if (p.x - cx) * nx + (p.y - cy) * ny >= 0 then
+			e.d2 = e.d2pos
+			pos[#pos + 1] = e
+		else
+			e.d2 = e.d2neg
+			neg[#neg + 1] = e
+		end
+	end
+	if #pos == 0 then return BestOnSide(neg) end
+	if #neg == 0 then return BestOnSide(pos) end
+	local wp, wn = SideWeight(pos), SideWeight(neg)
+	if wn > wp then return BestOnSide(neg) end
+	if wp > wn then return BestOnSide(pos) end
+	if #neg > #pos then return BestOnSide(neg) end
+	return BestOnSide(pos)
+end
+
+local function ShaftLandings(ladder)
+	local cx, cy = Nav.LadderCenter(ladder)
+	local nrm = Nav.LadderNormal and Nav.LadderNormal(ladder) or Vector(0, 0, 0)
+	local mins, maxs = ShaftAABB(ladder)
+	local z0 = Nav.LadderLandingZ(ladder, false)
+	local z1 = Nav.LadderLandingZ(ladder, true)
+	if z0 > z1 then z0, z1 = z1, z0 end
+	z0, z1 = z0 - LANDING_ZPAD, z1 + LANDING_ZPAD
+
+	local mx1, my1 = cx + nrm.x * 24, cy + nrm.y * 24
+	local mx2, my2 = cx - nrm.x * 24, cy - nrm.y * 24
+	local size = CellSize()
+	local maxd2 = LANDING_XY * LANDING_XY
+	local reach = math.max(2, math.ceil(LANDING_XY / size) + 1)
+	local cands, seen = {}, {}
+
+	local function consider(mx, my)
+		local gx, gy = math.floor(mx / size), math.floor(my / size)
+		for dx = -reach, reach do
+			for dy = -reach, reach do
+				local bucket = GridGet(gx + dx, gy + dy)
+				if bucket then
+					for b = 1, #bucket do
+						local idx = bucket[b]
+						local c = Mesh.Cells[idx]
+						if c and not seen[idx] and c.pos.z >= z0 and c.pos.z <= z1 then
+							local xyd1 = (c.pos.x - mx1) * (c.pos.x - mx1) + (c.pos.y - my1) * (c.pos.y - my1)
+							local xyd2 = (c.pos.x - mx2) * (c.pos.x - mx2) + (c.pos.y - my2) * (c.pos.y - my2)
+							local d2 = xyd1 < xyd2 and xyd1 or xyd2
+							if d2 <= maxd2 then
+								seen[idx] = true
+								if not c.i then c.i = idx end
+								cands[#cands + 1] = {c = c, d2pos = xyd1, d2neg = xyd2}
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	consider(mx1, my1)
+	consider(mx2, my2)
+
+	if #cands == 0 then return cands end
+	table.sort(cands, function(a, b) return a.c.pos.z < b.c.pos.z end)
+
+	local floors = {}
+	local i, n = 1, #cands
+	while i <= n do
+		local seedZ = cands[i].c.pos.z
+		local group = {cands[i]}
+		i = i + 1
+		while i <= n and cands[i].c.pos.z - seedZ <= CLUSTER_Z do
+			group[#group + 1] = cands[i]
+			i = i + 1
+		end
+		local live = {}
+		for g = 1, #group do
+			local p = group[g].c.pos
+			if ReachToShaft(p.x, p.y, p.z, cx, cy, mins, maxs) then
+				live[#live + 1] = group[g]
+			end
+		end
+		if #live > 0 then
+			floors[#floors + 1] = PickFloor(live, cx, cy, nrm.x, nrm.y)
+		end
+	end
+	return floors
+end
+
 -- Shafts become graph edges so A* can chain two ladders (down, street, up)
--- between same-Z roofs. Snap each end to a cell on that floor, not the ground
--- under the rungs.
+-- between same-Z roofs. One brush may pass several floors; each pair of
+-- neighbouring landings is an edge (cost is that rise, not the whole brush).
 function Mesh.LinkLadders()
 	if not Nav or not Mesh.Cells or #Mesh.Cells == 0 or not Mesh.Grid then
 		return 0
@@ -346,41 +536,43 @@ function Mesh.LinkLadders()
 		elseif Nav.IsShaft and not Nav.IsShaft(ladder) then
 			stairs = stairs + 1
 		else
-			local b, t = ladder:GetBottom(), ladder:GetTop()
-			if b and t then
-				local rise = math.abs(t.z - b.z)
-				local snapD, snapZ = 220, 56
-				if rise > 120 then
-					snapD, snapZ = 360, 96
+			local floors = ShaftLandings(ladder)
+			local id = (Nav.LadderID and Nav.LadderID(ladder)) or (ladder.GetID and ladder:GetID()) or 0
+			if #floors == 0 then
+				noBottom = noBottom + 1
+				if AI.cv.debug:GetInt() > 0 then
+					local b = ladder.GetBottom and ladder:GetBottom()
+					AI.Log("mesh ladder #%s: no paint at a landing%s", tostring(id),
+						b and string.format(" (%.0f %.0f %.0f)", b.x, b.y, b.z) or "")
 				end
-				-- Mount side of the rungs (the cell under the rungs may be the pit floor).
-				local nrm = Nav.LadderNormal and Nav.LadderNormal(ladder) or Vector(0, 0, 0)
-				local bm = Vector(b.x + nrm.x * 24, b.y + nrm.y * 24, b.z)
-				local tm = Vector(t.x - nrm.x * 24, t.y - nrm.y * 24, t.z)
-				local lo = Mesh.NearestOnFloor(bm, snapD, snapZ) or Mesh.NearestOnFloor(b, snapD, snapZ)
-					or Mesh.Nearest(b, snapD, snapZ) or Mesh.Nearest(b, snapD)
-				local hi = Mesh.NearestOnFloor(tm, snapD, snapZ) or Mesh.NearestOnFloor(t, snapD, snapZ)
-					or Mesh.Nearest(t, snapD, snapZ) or Mesh.Nearest(t, snapD)
-				if not lo then
+			elseif #floors == 1 then
+				local botZ = Nav.LadderLandingZ(ladder, false)
+				local topZ = Nav.LadderLandingZ(ladder, true)
+				local z = floors[1].pos.z
+				if math.abs(z - botZ) > 56 then
 					noBottom = noBottom + 1
-					if AI.cv.debug:GetInt() > 0 then
-						AI.Log("mesh ladder #%s: no paint at the bottom (%.0f %.0f %.0f)", tostring(ladder.GetID and ladder:GetID() or "?"), b.x, b.y, b.z)
-					end
-				elseif not hi then
+				elseif math.abs(z - topZ) > 56 then
 					noTop = noTop + 1
-					if AI.cv.debug:GetInt() > 0 then
-						AI.Log("mesh ladder #%s: no paint at the top (%.0f %.0f %.0f)", tostring(ladder.GetID and ladder:GetID() or "?"), t.x, t.y, t.z)
-					end
-				elseif lo.i == hi.i or math.abs(hi.pos.z - lo.pos.z) < 40 then
-					flat = flat + 1
 				else
-					if lo.pos.z > hi.pos.z then
-						lo, hi = hi, lo
+					flat = flat + 1
+				end
+			else
+				local added = false
+				for k = 1, #floors - 1 do
+					local lo, hi = floors[k], floors[k + 1]
+					local dz = hi.pos.z - lo.pos.z
+					if dz >= CLUSTER_Z and AddLadderEdge(lo.i, hi.i, ladder, dz) then
+						added = true
 					end
-					if AddLadderEdge(lo.i, hi.i, ladder, rise) then
-						n = n + 1
-						Mesh.LinkedLadders[ladder.GetID and ladder:GetID() or 0] = true
-					end
+				end
+				if added then
+					n = n + 1
+					Mesh.LinkedLadders[id] = {
+						bot = Vector(floors[1].pos),
+						top = Vector(floors[#floors].pos),
+					}
+				else
+					flat = flat + 1
 				end
 			end
 		end
@@ -388,6 +580,9 @@ function Mesh.LinkLadders()
 	Mesh.LadderCount = n
 	AI.Log("mesh ladders %d shafts of %d climbables (%d stair volumes, %d no paint at bottom, %d no paint at top, %d same floor)",
 		n, #list, stairs, noBottom, noTop, flat)
+	if Mesh.SendLinkedLadders then
+		Mesh.SendLinkedLadders()
+	end
 	if Mesh.Linked then
 		Mesh.ComputeComponents()
 	end
@@ -395,8 +590,12 @@ function Mesh.LinkLadders()
 end
 
 function Mesh.IsLadderLinked(ladder)
-	if not ladder or not ladder.GetID then return false end
-	return Mesh.LinkedLadders[ladder:GetID()] == true
+	if not ladder then return false end
+	local id = Nav.LadderID and Nav.LadderID(ladder)
+	if not id and ladder.GetID then
+		id = ladder:GetID()
+	end
+	return id ~= nil and Mesh.LinkedLadders[id] ~= nil
 end
 
 -- Pair (a, b) seen once (j > i). Walk both ways; else a hop up and the drop
@@ -522,6 +721,9 @@ function Mesh.StartLink()
 	Mesh.Grid = {}
 	Mesh.Blocked = {}
 	Mesh.LinkedLadders = {}
+	if Mesh.SendLinkedLadders then
+		Mesh.SendLinkedLadders()
+	end
 	local size = CellSize()
 	local cells = Mesh.Cells
 	for i = 1, #cells do
@@ -921,6 +1123,21 @@ function Path:MoveCursorToStart()
 	self._cursor = 0
 end
 
+-- Source PathFollower:MoveCursor is a delta; MoveCursorTo is an absolute
+-- distance. After a ladder leave we snap past the shaft chord so ClosestPosition
+-- cannot pull the cursor back onto it.
+function Path:MoveCursor(delta)
+	local d = (self._cursor or 0) + (delta or 0)
+	if d < 0 then d = 0 elseif d > self._length then d = self._length end
+	self._cursor = d
+end
+
+function Path:MoveCursorTo(d)
+	d = d or 0
+	if d < 0 then d = 0 elseif d > self._length then d = self._length end
+	self._cursor = d
+end
+
 function Path:GetCursorPosition()
 	return self._cursor
 end
@@ -963,7 +1180,7 @@ function Path:GetCursorData()
 	return self._cursorData
 end
 
-function Path:MoveCursorToClosestPosition(worldPos, seek)
+function Path:MoveCursorToClosestPosition(worldPos, seek, minCursor)
 	local segs = self._segs
 	local n = #segs
 	if n == 0 then
@@ -977,10 +1194,14 @@ function Path:MoveCursorToClosestPosition(worldPos, seek)
 	-- SEEK_AHEAD looks in a window around the cursor: a path that comes back
 	-- past us (around a building, a switchback) must not pull the cursor onto
 	-- its far leg. Off the window the caller rescans the whole path.
+	-- minCursor: after a ladder leave, do not snap back onto the spent chord.
 	local minD, maxD = 0, math.huge
 	if seek == 1 then
 		minD = math.max(0, self._cursor - 64)
 		maxD = self._cursor + 320
+	end
+	if minCursor and minCursor > minD then
+		minD = minCursor
 	end
 	local bestD, bestDist = minD, math.huge
 	local wx, wy, wz = worldPos.x, worldPos.y, worldPos.z

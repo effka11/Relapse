@@ -7,7 +7,7 @@ SWEP.Melee = true
 SWEP.Primary.Sound = ""
 SWEP.Primary.Ammo = "None"
 SWEP.Primary.ClipSize = -1
-SWEP.Primary.Automatic = false
+SWEP.Primary.Automatic = true
 SWEP.Secondary.Automatic = false
 SWEP.Primary.BurstRounds = 1
 SWEP.Primary.BurstDelay = 0
@@ -150,10 +150,9 @@ SWEP.MeleeSounds = {
 
 function SWEP:PrimaryAttack()
 	local owner = self:GetOwner()
-
-	if IsValid(owner) and (not owner:IsPlayer() or owner:KeyPressed(IN_ATTACK)) then
-		self:TrySetTask("Melee")
-	end
+	if not IsValid(owner) then return end
+	if owner:IsPlayer() and not owner:KeyDown(IN_ATTACK) then return end
+	self:TrySetTask("Melee")
 end
 function SWEP:SecondaryAttack()
 	local owner = self:GetOwner()
@@ -162,6 +161,24 @@ function SWEP:SecondaryAttack()
 		if not self:TrySetTaskAndCheck("Melee_Heavy_In") then
 			self:TrySetTask("Melee")
 		end
+	end
+end
+
+-- Melee viewmodel camera bone is applied 1:1 to the eye. Scale it down so a
+-- slash does not roll the whole view.
+if CLIENT then
+	function SWEP:CalcView(ply, pos, ang, fov)
+		local origPos = Vector(pos)
+		local origAng = Angle(ang)
+		local p, a, f = BaseClass.CalcView(self, ply, pos, ang, fov)
+		if not isvector(p) then
+			return pos, ang, fov
+		end
+		local scale = self.RelapseMeleeCameraScale or 0.10
+		if scale >= 1 then
+			return p, a, f
+		end
+		return LerpVector(scale, origPos, p), LerpAngle(scale, origAng, a), f
 	end
 end
 

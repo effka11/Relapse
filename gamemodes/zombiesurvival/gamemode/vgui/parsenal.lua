@@ -141,6 +141,7 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 		for i = 1, barCount do
 			viewer.ItemStats[i]:SetText("")
 			viewer.ItemStatValues[i]:SetText("")
+			viewer.ItemStatBars[i].RelapseStatId = nil
 			viewer.ItemStatBars[i]:SetVisible(false)
 		end
 		RelapseUI.LayoutViewerStats(viewer)
@@ -157,10 +158,12 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 				viewer.ItemStatBars[i].StatMin = 0
 				viewer.ItemStatBars[i].StatMax = debugRows
 				viewer.ItemStatBars[i].BadHigh = false
+				viewer.ItemStatBars[i].RelapseStatId = nil
 				viewer.ItemStatBars[i]:SetVisible(true)
 			else
 				viewer.ItemStats[i]:SetText("")
 				viewer.ItemStatValues[i]:SetText("")
+				viewer.ItemStatBars[i].RelapseStatId = nil
 				viewer.ItemStatBars[i]:SetVisible(false)
 			end
 		end
@@ -177,6 +180,7 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 			if not spec or val == nil or fill == nil then
 				viewer.ItemStats[i]:SetText("")
 				viewer.ItemStatValues[i]:SetText("")
+				viewer.ItemStatBars[i].RelapseStatId = nil
 				viewer.ItemStatBars[i]:SetVisible(false)
 			else
 				viewer.ItemStats[i]:SetText(RelapseUI.ShopStat(spec[1], spec[2]))
@@ -193,6 +197,7 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 				viewer.ItemStatBars[i].StatMin = 0
 				viewer.ItemStatBars[i].StatMax = 100
 				viewer.ItemStatBars[i].BadHigh = false
+				viewer.ItemStatBars[i].RelapseStatId = spec[1]
 				viewer.ItemStatBars[i]:SetVisible(true)
 			end
 		end
@@ -216,6 +221,7 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 		if statshowbef and statshowbef[1] == statshow[1] then
 			viewer.ItemStats[i]:SetText("")
 			viewer.ItemStatValues[i]:SetText("")
+			viewer.ItemStatBars[i].RelapseStatId = nil
 			viewer.ItemStatBars[i]:SetVisible(false)
 			continue
 		end
@@ -249,6 +255,7 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 		viewer.ItemStatBars[i].StatMin = statshow[3]
 		viewer.ItemStatBars[i].StatMax = statshow[4]
 		viewer.ItemStatBars[i].BadHigh = statshow[5]
+		viewer.ItemStatBars[i].RelapseStatId = statshow[1]
 		viewer.ItemStatBars[i]:SetVisible(true)
 	end
 	RelapseUI.LayoutViewerStats(viewer)
@@ -392,6 +399,7 @@ local function SetupViewerPurchase(self, viewer, shoptbl, sweptable)
 	ppurbl:SizeToContents()
 	ppurbl:SetPos(purb:GetWide() / 2 - ppurbl:GetWide() / 2, purb:GetTall() * 0.75 - ppurbl:GetTall() * 0.5)
 	ppurbl:SetVisible(canammo)
+	RelapseUI.LayoutViewerStats(viewer)
 end
 
 local function ItemPanelDoClick(self)

@@ -8,6 +8,7 @@ if not Mesh then return end
 
 util.AddNetworkString("RelapseAI.MeshCells")
 util.AddNetworkString("RelapseAI.MeshProgress")
+util.AddNetworkString("RelapseAI.MeshLadders")
 
 Mesh.Cells = Mesh.Cells or {}
 Mesh.Streams = Mesh.Streams or {}
@@ -271,6 +272,106 @@ local function SendProgress(pl)
 	end
 end
 
+-- A 10u shaft is invisible as a box; pad XY so the overlay reads as a column.
+local LADDER_PAD_XY = 24
+
+local function PadLadderBox(mins, maxs)
+	local cx = (mins.x + maxs.x) * 0.5
+	local cy = (mins.y + maxs.y) * 0.5
+	if maxs.x - mins.x < LADDER_PAD_XY then
+		mins.x, maxs.x = cx - LADDER_PAD_XY * 0.5, cx + LADDER_PAD_XY * 0.5
+	end
+	if maxs.y - mins.y < LADDER_PAD_XY then
+		mins.y, maxs.y = cy - LADDER_PAD_XY * 0.5, cy + LADDER_PAD_XY * 0.5
+	end
+	if maxs.z < mins.z then
+		mins.z, maxs.z = maxs.z, mins.z
+	end
+	return mins, maxs
+end
+
+local function LadderOverlayBox(ladder, ends)
+	local Nav = AI.Nav
+	local vol = Nav and Nav.LadderVolumeOf and Nav.LadderVolumeOf(ladder)
+	local mins, maxs
+	if vol and vol.mins then
+		mins = Vector(vol.mins.x, vol.mins.y, vol.landingBotZ or vol.mins.z)
+		maxs = Vector(vol.maxs.x, vol.maxs.y, vol.landingTopZ or vol.maxs.z)
+	else
+		local b, t = ladder:GetBottom(), ladder:GetTop()
+		local w = (ladder.GetWidth and ladder:GetWidth() or 32) * 0.5
+		local cx = (b.x + t.x) * 0.5
+		local cy = (b.y + t.y) * 0.5
+		mins = Vector(cx - w, cy - w, math.min(b.z, t.z))
+		maxs = Vector(cx + w, cy + w, math.max(b.z, t.z))
+	end
+	mins, maxs = PadLadderBox(mins, maxs)
+	local bot, top
+	if istable(ends) and ends.bot and ends.top then
+		bot, top = ends.bot, ends.top
+	else
+		local cx = (mins.x + maxs.x) * 0.5
+		local cy = (mins.y + maxs.y) * 0.5
+		bot = Vector(cx, cy, mins.z)
+		top = Vector(cx, cy, maxs.z)
+	end
+	return mins, maxs, bot, top
+end
+
+-- Shafts that A* can actually use (Mesh.LinkedLadders). Overlay only; paint
+-- cells stay the walkable skin.
+function Mesh.SendLinkedLadders(pl)
+	local targets
+	if pl then
+		if not IsValid(pl) then return end
+		targets = {pl}
+	else
+		targets = {}
+		for p in pairs(Mesh.Editors or {}) do
+			if IsValid(p) then
+				targets[#targets + 1] = p
+			end
+		end
+	end
+	if #targets == 0 then return end
+
+	local boxes = {}
+	local Nav = AI.Nav
+	local linked = Mesh.LinkedLadders
+	if linked and Nav then
+		local list = Nav.Climbables
+		if not list or #list == 0 then
+			list = Nav.GetAllLadders and Nav.GetAllLadders() or {}
+		end
+		for i = 1, #list do
+			local ladder = list[i]
+			local id = Nav.LadderID and Nav.LadderID(ladder)
+			if not id and ladder.GetID then
+				id = ladder:GetID()
+			end
+			local ends = id and linked[id]
+			if ends then
+				local mins, maxs, bot, top = LadderOverlayBox(ladder, ends)
+				boxes[#boxes + 1] = {mins, maxs, bot, top}
+				if #boxes >= 255 then break end
+			end
+		end
+	end
+
+	for i = 1, #targets do
+		net.Start("RelapseAI.MeshLadders")
+		net.WriteUInt(#boxes, 8)
+		for j = 1, #boxes do
+			local b = boxes[j]
+			net.WriteVector(b[1])
+			net.WriteVector(b[2])
+			net.WriteVector(b[3])
+			net.WriteVector(b[4])
+		end
+		net.Send(targets[i])
+	end
+end
+
 local function SendBatch(pl, stream)
 	local cells = Mesh.Cells
 	local n = #cells
@@ -311,6 +412,7 @@ function Mesh.OnMode(pl, mode)
 	if mode then
 		Mesh.Streams[pl] = {i = 1, gen = Mesh.GenId}
 		SendProgress(pl)
+		Mesh.SendLinkedLadders(pl)
 		if not Mesh.Building and #Mesh.Cells == 0 then
 			Mesh.StartBuild(pl, false)
 		end
@@ -510,7 +612,9 @@ function Mesh.StartBuild(pl, force)
 	Mesh.Linking = nil
 	Mesh.Linked = false
 	Mesh.LinkCount = 0
+	Mesh.LinkedLadders = {}
 	Mesh.Grid = {}
+	Mesh.SendLinkedLadders()
 	AI.Log("mesh paint bounds (%s): x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f, %dx%d columns at %du",
 		how or "?", mins.x, maxs.x, mins.y, maxs.y, mins.z, maxs.z, nx, ny, cell)
 	Mesh.Build = {

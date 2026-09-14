@@ -14,6 +14,7 @@ local ipairs = ipairs
 Nav.BlockedAreas = Nav.BlockedAreas or {} -- [areaID] = {Expiry = time, Penalty = extra path cost in units}
 Nav.BadLadders = Nav.BadLadders or {} -- [ladderID] = expiry; a bot failed on it, paths avoid it until then
 Nav.LadderDirs = Nav.LadderDirs or {} -- [ladderID] = Vector; facing (away from the wall) of ladders we built
+Nav.LadderVolume = Nav.LadderVolume or {} -- [ladderID] = AABB + landing Z; CNavLadder userdata has no fields
 Nav.Ladders = {} -- CNavLadders created on this map load
 Nav.Climbables = {} -- BSP shafts we can walk to and climb even if CreateNavLadder failed
 
@@ -516,13 +517,90 @@ local function SpecFromBox(box)
 		if math.abs(gz - mins.z) < 48 then botZ = gz end
 	end
 
+	-- Brush often sticks 56u above the floor. Loco leaves at landing Z, not maxs.
+	groundTr.start = Vector(fx + dir.x * 24, fy + dir.y * 24, topZ + 8)
+	groundTr.endpos = Vector(fx + dir.x * 24, fy + dir.y * 24, topZ - 80)
+	local floorTr = util.TraceLine(groundTr)
+	if floorTr.Hit and not floorTr.StartSolid and not floorTr.HitSky
+	and floorTr.HitNormal.z > 0.7 and math.abs(floorTr.HitPos.z - topZ) < 72 then
+		topZ = floorTr.HitPos.z
+	end
+
 	return {
 		cx = cx, cy = cy,
 		bottom = Vector(fx, fy, botZ),
 		top = Vector(fx, fy, topZ),
 		dir = dir,
 		width = width,
+		mins = Vector(mins),
+		maxs = Vector(maxs),
+		landingBotZ = botZ,
+		landingTopZ = topZ,
 	}
+end
+
+local function StoreVolume(id, spec)
+	if not id or not spec then return end
+	Nav.LadderVolume[id] = {
+		mins = spec.mins,
+		maxs = spec.maxs,
+		cx = spec.cx,
+		cy = spec.cy,
+		landingBotZ = spec.landingBotZ or spec.bottom.z,
+		landingTopZ = spec.landingTopZ or spec.top.z,
+	}
+end
+
+-- CNavLadder userdata and the Lua climbable table both have GetID; a missing
+-- method must not throw when the engine already dropped the ladder.
+function Nav.LadderID(ladder)
+	if not Nav.HasLadder(ladder) then return nil end
+	if istable(ladder) and ladder.ID and ladder.ID ~= 0 then
+		return ladder.ID
+	end
+	if ladder.GetID then
+		local ok, id = pcall(ladder.GetID, ladder)
+		if ok then return id end
+	end
+end
+
+function Nav.LadderVolumeOf(ladder)
+	local id = Nav.LadderID(ladder)
+	if id then return Nav.LadderVolume[id] end
+end
+
+-- 2D centre of the func_ladder brush. Wish toward this from the landing until
+-- the engine attaches; the hull does not fit inside a 10u box.
+function Nav.LadderCenter(ladder)
+	local vol = Nav.LadderVolumeOf(ladder)
+	if vol then
+		return vol.cx, vol.cy
+	end
+	local b, t = ladder:GetBottom(), ladder:GetTop()
+	return (b.x + t.x) * 0.5, (b.y + t.y) * 0.5
+end
+
+-- Floor Z of the start (up=false) or far (up=true) landing, not the brush top.
+function Nav.LadderLandingZ(ladder, up)
+	local vol = Nav.LadderVolumeOf(ladder)
+	if vol then
+		return up and vol.landingTopZ or vol.landingBotZ
+	end
+	if up then
+		return ladder:GetTop().z
+	end
+	return ladder:GetBottom().z
+end
+
+-- Point inside the AABB at the far landing. Look-at must offset this in XY
+-- (same XY as the bot on the rungs makes View yaw noise).
+function Nav.LadderInterior(ladder, up)
+	local cx, cy = Nav.LadderCenter(ladder)
+	local z = Nav.LadderLandingZ(ladder, up)
+	if up then
+		return Vector(cx, cy, z - 8)
+	end
+	return Vector(cx, cy, z + 8)
 end
 
 local function ExistingAt(existing, cx, cy, z)
@@ -575,8 +653,9 @@ function Nav.LadderNormal(ladder)
 end
 
 function Nav.BanLadder(ladder, duration)
-	if not Nav.HasLadder(ladder) then return end
-	Nav.BadLadders[ladder:GetID()] = CurTime() + (duration or 30)
+	local id = Nav.LadderID(ladder)
+	if not id then return end
+	Nav.BadLadders[id] = CurTime() + (duration or 30)
 end
 
 function Nav.GetAllLadders()
@@ -755,6 +834,7 @@ function Nav.BuildLadders()
 	if not Nav.CanBuildLadders() then return 0, 0 end
 	Nav.LadderCache = nil
 	Nav.Climbables = {}
+	Nav.LadderVolume = {}
 	local boxes = Nav.CollectLiveLadderBoxes(Nav.LoadMapLadders())
 
 	local existing = Nav.GetAllLadders()
@@ -774,6 +854,7 @@ function Nav.BuildLadders()
 			else
 				id = 10000 + i
 			end
+			StoreVolume(id, spec)
 			Nav.Climbables[#Nav.Climbables + 1] = MakeClimbable(spec.bottom, spec.top, spec.dir, spec.width, ladder, id)
 			climbN = climbN + 1
 		end
