@@ -172,14 +172,51 @@ function Melee:LookDirTo(target)
 	return SurfacePoint(target, eye) - eye
 end
 
+-- Aim points on a human, in order of preference: the usual chest/eye blend,
+-- the head (clears the sigil post a human stands inside of, or the crate lip
+-- he crouches behind), the torso centre (a human ducked under a lintel). The
+-- claw goes where the ray actually reaches him; the blend stays the aim while
+-- nothing reaches. Returns hit, and leaves the choice in `out`.
+local candidate = Vector(0, 0, 0)
+local function PlayerAim(self, target, out)
+	local eye = self.Player:EyePos()
+	local center = target:WorldSpaceCenter()
+	local teye = target:EyePos()
+	local vel = target:GetVelocity()
+	local lead = self.P.LeadTime
+	local lx, ly, lz = vel.x * lead, vel.y * lead, vel.z * lead
+
+	out.x = center.x * 0.5 + teye.x * 0.5 + lx
+	out.y = center.y * 0.5 + teye.y * 0.5 + ly
+	out.z = center.z * 0.5 + teye.z * 0.5 + lz
+	if self:SwingHits(target, out - eye) then return true end
+
+	candidate.x, candidate.y, candidate.z = teye.x + lx, teye.y + ly, teye.z - 3 + lz
+	if self:SwingHits(target, candidate - eye) then
+		out:Set(candidate)
+		return true
+	end
+
+	candidate.x, candidate.y, candidate.z = center.x + lx, center.y + ly, center.z + lz
+	if self:SwingHits(target, candidate - eye) then
+		out:Set(candidate)
+		return true
+	end
+	return false
+end
+
 -- Pure check used by brains before committing to a target.
+local probeAim = Vector(0, 0, 0)
 function Melee:IsInReachOf(target)
 	if not IsValid(target) then return false end
 	local d2 = Measure(self, target)
 	local reach = self:GetReach()
 	if d2 > reach * reach then return false end
-	if target:IsPlayer() and math.abs(target:GetPos().z - self.Player:GetPos().z) > reach then
-		return false
+	if target:IsPlayer() then
+		if math.abs(target:GetPos().z - self.Player:GetPos().z) > reach then
+			return false
+		end
+		return PlayerAim(self, target, probeAim)
 	end
 	return self:SwingHits(target, self:LookDirTo(target))
 end
@@ -200,23 +237,25 @@ function Melee:Think(dt)
 
 	local aim = self.AimPos
 	local d2, lookPoint, torso = Measure(self, target)
+	self.Dist = math.sqrt(d2)
 
 	if target:IsPlayer() then
-		local center = target:WorldSpaceCenter()
-		local teye = target:EyePos()
-		local vel = target:GetVelocity()
-		local lead = self.P.LeadTime
-		aim.x = center.x * 0.5 + teye.x * 0.5 + vel.x * lead
-		aim.y = center.y * 0.5 + teye.y * 0.5 + vel.y * lead
-		aim.z = center.z * 0.5 + teye.z * 0.5 + vel.z * lead
+		local hit = false
+		if d2 <= reach * reach then
+			hit = PlayerAim(self, target, aim)
+		else
+			local center = target:WorldSpaceCenter()
+			local teye = target:EyePos()
+			local vel = target:GetVelocity()
+			local lead = self.P.LeadTime
+			aim.x = center.x * 0.5 + teye.x * 0.5 + vel.x * lead
+			aim.y = center.y * 0.5 + teye.y * 0.5 + vel.y * lead
+			aim.z = center.z * 0.5 + teye.z * 0.5 + vel.z * lead
+		end
+		self.InReach = hit and math.abs(target:GetPos().z - pl:GetPos().z) <= reach
 	else
 		aim:Set(lookPoint)
-	end
-
-	self.Dist = math.sqrt(d2)
-	self.InReach = d2 <= reach * reach and self:SwingHits(target, aim - pl:EyePos())
-	if self.InReach and target:IsPlayer() and math.abs(target:GetPos().z - pl:GetPos().z) > reach then
-		self.InReach = false
+		self.InReach = d2 <= reach * reach and self:SwingHits(target, aim - pl:EyePos())
 	end
 
 	-- Low prop right in front of us: crouch so the torso ray can reach it.

@@ -197,11 +197,6 @@ local function ScoreIntents(bot, bb, senses, now)
 				ignore = nil
 			end
 
-			-- A human above us is not "unreachable" — we just need a ladder.
-			if ignore and math.abs(ent:GetPos().z - bot.Player:GetPos().z) > 36 then
-				ignore = nil
-			end
-
 			if not ignore then
 				-- Distance is a tie-break only: a far human still beats a sigil.
 				local score = 80 - math.min(25, math.sqrt(c.Dist2) / 400)
@@ -237,24 +232,13 @@ local function ScoreIntents(bot, bb, senses, now)
 	return best, data
 end
 
+-- Locomotion gave up on the current goal (no path, a path that ends short and
+-- we stood at its end, or stuck three times): drop that goal for a while so the
+-- next ScoreIntents picks something else. The mesh already carries shafts and
+-- drops, so "he is above us" is not a reason to keep pushing the same request.
 local function HandleHopeless(bot, bb, intent, data, now)
 	local loco = bot.Loco
 	if intent == "hunt" and IsValid(data) then
-		-- Other floor: keep hunting only if we already have a route off this
-		-- pad. Resetting FailedPaths with no path made them repath 16/s and
-		-- stand on spawn forever.
-		if math.abs(data:GetPos().z - bot.Player:GetPos().z) > 36 then
-			if loco.PathValid or AI.Nav.HasLadder(loco.ViaLadder) then
-				loco.StuckEpisodes = 0
-				loco.FailedPaths = 0
-				loco.Exhausted = false
-				return
-			end
-			loco.NeedLadder = true
-			if (loco.FailedPaths or 0) < 4 then
-				return
-			end
-		end
 		bb.IgnoreHumans[data] = now + HOPELESS_HUMAN_COOLDOWN
 		bot.Memory.Targets[data] = nil
 	elseif intent == "sigil" and IsValid(data) then
@@ -292,9 +276,13 @@ local function DoHunt(bot, bb, target)
 	loco:SetHold(false)
 
 	-- Looking at someone on another floor yaws us at their XY (under the slab)
-	-- and we walk into the wall instead of along the path to the ladder.
-	if math.abs(target:GetPos().z - bot.Player:GetPos().z) > 40 then
+	-- and we walk into the wall instead of along the path to the ladder. Close
+	-- in, look where the claw actually reaches him (head over a sigil post).
+	local aim = combat:GetAimPos()
+	if math.abs(target:GetPos().z - bot.Player:GetPos().z) > 40 and not combat.InReach then
 		LookAlongPath(bot)
+	elseif aim and combat.Dist < 200 then
+		view:LookAt(aim, "target")
 	else
 		view:LookAtEntity(target, "target")
 	end

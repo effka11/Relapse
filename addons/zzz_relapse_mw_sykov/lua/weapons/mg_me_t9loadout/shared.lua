@@ -6,24 +6,27 @@ include("mg_melee_shared.lua")
 include("animations.lua")
 
 if CLIENT then
-	killicon.Add("mg_me_t9loadout", "zombiesurvival/killicons/weapon_zs_cwknife.png", Color(255, 255, 255))
-	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwknife.png")
+	killicon.Add("mg_me_t9loadout", "zombiesurvival/killicons/weapon_zs_cwknife2.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwknife2.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwknife.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwknife2.png"
 -- WM already has the knife mesh (hull along +Z). No default attachments.
 SWEP.RelapsePreviewBoneMerge = true
 SWEP.RelapsePreviewHullBounds = true
 SWEP.RelapsePreviewParts = {
 	"models/easy/cw/weapons/wm_me_t9loadout.mdl",
 }
+-- Tip is -Z. Edge faces +X (it was up at -135/0/45). 180 around the handle
+-- (+Z) flips the edge down; the tip stays on the same end.
 SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
-SWEP.RelapsePreviewLocalAng = Angle(0, 0, 90)
+SWEP.RelapsePreviewLocalAng = Angle(45, 0, 135)
 SWEP.RelapsePreviewOffset = Vector(0, 0, -1)
 SWEP.RelapsePreviewLift = 0.7
-SWEP.RelapsePreviewCamScale = 1.65
+SWEP.RelapsePreviewCamScale = 1.0
 
 SWEP.PrintName = "Нож"
+SWEP.Description = "A service knife. Issued with the kit: it reaches the one in the doorway, not the one behind him."
 SWEP.TranslationName = "wep_cwknife"
 SWEP.TranslationDescription = "wep_cwknife_desc"
 SWEP.Category = "Black Ops: Cold War"
@@ -55,9 +58,12 @@ SWEP.Relapse = {
 
 local R = SWEP.Relapse
 
+SWEP.Primary = SWEP.Primary or {}
 SWEP.Primary.RPM = math.floor(60 / R.Delay + 0.5)
 SWEP.Primary.Damage = R.Damage
 SWEP.Primary.Delay = R.Delay
+SWEP.Primary.ClipSize = -1
+SWEP.Primary.Ammo = "none"
 SWEP.MeleeDamage = R.Damage
 SWEP.MeleeRange = R.Range
 SWEP.MeleeKnockBack = R.Stopping

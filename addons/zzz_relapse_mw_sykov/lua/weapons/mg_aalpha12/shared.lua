@@ -12,11 +12,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_aalpha12", "zombiesurvival/killicons/weapon_zs_jak12_side3.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_jak12_side3.png")
+    killicon.Add("mg_aalpha12", "zombiesurvival/killicons/weapon_zs_jak12_side4.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_jak12_side4.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_jak12_side3.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_jak12_side4.png"
 -- WM receiver is bodygroup 0 (hull along +Z — opposite of 680's empty default).
 -- Barrel and mag bone-merge onto tag_*_attach. Default stock/grip slots are att_stock / att_grip.
 -- DrawModel after SetupBones is +Z. Do not copy 680 yaw 90. Do not copy Origin sidegrip/stock.

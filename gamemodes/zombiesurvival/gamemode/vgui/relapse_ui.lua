@@ -920,7 +920,7 @@ function RelapseUI.OrbitShopPreview(pnl, ent)
 		if not isnumber(scale) or scale <= 0 then
 			scale = etalon.CamScale
 		end
-		local dist = math.Clamp(span * etalon.SpanMul * scale, 20, 96)
+		local dist = math.Clamp(span * etalon.SpanMul * scale, 8, 96)
 		local off = pnl.RelapsePreviewOffset
 		if isvector(off) then
 			center = center + off

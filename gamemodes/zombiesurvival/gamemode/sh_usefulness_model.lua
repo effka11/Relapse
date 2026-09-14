@@ -221,7 +221,7 @@ end
 
 function GM:ComputeWeaponUsefulness(swep)
 	local combat = self:ComputeWeaponCombatUsefulness(swep)
-	if not swep or swep.IsMelee or (swep.Relapse and swep.Relapse.Melee) then
+	if not swep or swep.IsMelee then
 		return combat
 	end
 
@@ -330,17 +330,17 @@ GM.RelapseWeapons = {
 		Description = "A service knife. Issued with the kit: it reaches the one in the doorway, not the one behind him.",
 		TranslationName = "wep_cwknife",
 		TranslationDescription = "wep_cwknife_desc",
-		PreviewIcon = "zombiesurvival/killicons/weapon_zs_cwknife.png",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_cwknife2.png",
 		PreviewBoneMerge = true,
 		PreviewHullBounds = true,
 		PreviewParts = {
 			"models/easy/cw/weapons/wm_me_t9loadout.mdl",
 		},
 		PreviewAngle = Angle(0, 0, 0),
-		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewLocalAng = Angle(45, 0, 135),
 		PreviewOffset = Vector(0, 0, -1),
 		PreviewLift = 0.7,
-		PreviewCamScale = 1.65,
+		PreviewCamScale = 1.0,
 		IsMelee = true,
 		Relapse = {
 			Melee = true,
@@ -675,7 +675,7 @@ GM.RelapseWeapons = {
 		Description = "A full-auto 12 gauge. Eight shells: Origin's brass, a trigger that does not let go.",
 		TranslationName = "wep_jak12",
 		TranslationDescription = "wep_jak12_desc",
-		PreviewIcon = "zombiesurvival/killicons/weapon_zs_jak12_side3.png",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_jak12_side4.png",
 		PreviewBoneMerge = true,
 		PreviewHullBounds = true,
 		PreviewParts = {

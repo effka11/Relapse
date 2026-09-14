@@ -387,12 +387,23 @@ local function SideHitsWall(cx, cy, z, dir, dist)
 	return tr.Hit and not tr.StartSolid and tr.Fraction < 0.92
 end
 
+-- Is there floor on this side of the shaft foot? The .nav answers when it is
+-- loaded; on a skin-only map a plain trace does (the mesh grid may still be
+-- linking when ladders are built).
+local groundTr = {mask = MASK_PLAYERSOLID_BRUSHONLY}
 local function HasGroundNear(x, y, z, dir)
-	return IsValid(navmesh.GetNearestNavArea(Vector(x + dir.x * 40, y + dir.y * 40, z + 8), false, 120, false, true))
+	if navmesh.IsLoaded() then
+		return IsValid(navmesh.GetNearestNavArea(Vector(x + dir.x * 40, y + dir.y * 40, z + 8), false, 120, false, true))
+	end
+	groundTr.start = Vector(x + dir.x * 40, y + dir.y * 40, z + 40)
+	groundTr.endpos = Vector(x + dir.x * 40, y + dir.y * 40, z - 72)
+	local tr = util.TraceLine(groundTr)
+	return tr.Hit and not tr.StartSolid and not tr.HitSky and tr.HitNormal.z > 0.7
 end
 
 -- Nav area beside a ladder end, on this side, and actually at this height.
 local function AreaBeside(origin, dir, dist)
+	if not navmesh.IsLoaded() then return nil end
 	local p = Vector(origin.x + dir.x * dist, origin.y + dir.y * dist, origin.z + 8)
 	local area = navmesh.GetNearestNavArea(p, false, 140, false, true)
 	if not IsValid(area) then return nil end
@@ -402,8 +413,11 @@ local function AreaBeside(origin, dir, dist)
 end
 
 -- Height of the landing next to the ladder's upper part. Only look near the
--- brush top: a shaft that passes two floors must not steal the third.
+-- brush top: a shaft that passes two floors must not steal the third. Without
+-- a .nav the brush top stands in (the mesh snaps the shaft end to a cell on
+-- that floor anyway).
 local function FindTopZ(cx, cy, halfWidth, mins, maxs)
+	if not navmesh.IsLoaded() then return nil end
 	local pad = halfWidth + 40
 	local areas = navmesh.FindInBox(
 		Vector(cx - pad, cy - pad, maxs.z - 80),
@@ -530,6 +544,12 @@ local function CreateLadderFromBox(box, existing)
 		return found, spec, "duplicate"
 	end
 
+	-- Skin-only map: the shaft lives as a climbable for the mesh graph and the
+	-- climb SM; there is no .nav to hang a CNavLadder on.
+	if not navmesh.IsLoaded() then
+		return nil, spec, "no .nav"
+	end
+
 	local ladder = navmesh.CreateNavLadder(spec.top, spec.bottom, spec.width, spec.dir, 120)
 	if ladder == nil or (ladder.IsValid and not ladder:IsValid()) then
 		return nil, spec, "engine refused"
@@ -565,6 +585,11 @@ function Nav.GetAllLadders()
 		return Nav.LadderCache
 	end
 	local list = {}
+	if not navmesh.IsLoaded() then
+		Nav.LadderCache = list
+		Nav.LadderCacheTime = now
+		return list
+	end
 	for id = 1, 1024 do
 		local l = navmesh.GetNavLadderByID(id)
 		if l ~= nil and (not l.IsValid or l:IsValid()) then
@@ -716,10 +741,18 @@ function Nav.NearestUsefulLadder(pos, goal, maxDist)
 	return Nav.FindLadderForGoal(pos, goal, maxDist or 90)
 end
 
+-- Something to build shafts on: a .nav for CNavLadders, or a painted skin whose
+-- graph takes climbables.
+function Nav.CanBuildLadders()
+	if navmesh.IsLoaded() then return true end
+	local Mesh = AI.Mesh
+	return Mesh ~= nil and Mesh.Cells ~= nil and #Mesh.Cells > 0
+end
+
 -- Returns climbables created, ladder brushes found.
 function Nav.BuildLadders()
 	if AI.IsSpawnOff and AI.IsSpawnOff() then return 0, 0 end
-	if not navmesh.IsLoaded() then return 0, 0 end
+	if not Nav.CanBuildLadders() then return 0, 0 end
 	Nav.LadderCache = nil
 	Nav.Climbables = {}
 	local boxes = Nav.CollectLiveLadderBoxes(Nav.LoadMapLadders())
@@ -863,12 +896,16 @@ function Nav.Cancel(bot)
 end
 
 function Nav.ComputeNow(bot, goal, opts)
+	opts = opts or {}
 	local pl = bot.Player
-	local path = bot.Path
-	if not path then
+	-- bot.Path may hold a Relapse mesh path (a Lua table) from the last
+	-- request; the engine PathFollower lives in its own slot.
+	local path = bot.SourcePath
+	if not path or not path.SetMinLookAheadDistance then
 		path = Path("Follow")
-		bot.Path = path
+		bot.SourcePath = path
 	end
+	bot.Path = path
 
 	path:SetMinLookAheadDistance(opts.LookAhead or 120)
 	path:SetGoalTolerance(opts.Tolerance or 24)
@@ -912,9 +949,16 @@ function Nav.Process()
 	local queue = Nav.Queue
 	if #queue == 0 then return end
 	if not Nav.IsReady() then
-		-- Drop everything; callers retry on their own schedule.
+		-- Nothing to path on yet (skin still linking, no .nav). Hand the request
+		-- back so the bot asks again in a second; a request left pending forever
+		-- froze every bot that asked during the link.
 		for _, req in ipairs(queue) do
 			Nav.Pending[req.Bot] = nil
+			local loco = req.Bot.Loco
+			if loco and loco.PathPending then
+				loco.PathPending = false
+				loco.NextRepath = now + 1
+			end
 		end
 		Nav.Queue = {}
 		return
@@ -922,6 +966,10 @@ function Nav.Process()
 
 	local budget = math.max(1, AI.cv.path_budget:GetInt())
 	local done = 0
+	-- Requests per tick is the budget; a full-map skin (30k+ cells) can make one
+	-- far or hopeless A* cost several ms in Lua, so stop early on wall time
+	-- too. The rest of the queue waits a tick, nothing is dropped.
+	local deadline = SysTime() + 0.006
 	while done < budget and #queue > 0 do
 		local req = table.remove(queue, 1)
 		if not req.Cancelled and Nav.Pending[req.Bot] == req then
@@ -930,6 +978,7 @@ function Nav.Process()
 			if IsValid(bot.Player) and bot.Player:Alive() then
 				Nav.ComputeNow(bot, req.Goal, req.Opts)
 				done = done + 1
+				if SysTime() >= deadline then break end
 			end
 		end
 	end
@@ -1024,12 +1073,13 @@ end)
 hook.Add("InitPostEntity", "RelapseAI.NavPostProcess", function()
 	timer.Simple(2, function()
 		if AI.IsSpawnOff and AI.IsSpawnOff() then return end
-		if not navmesh.IsLoaded() then return end
+		if not Nav.CanBuildLadders() then return end
 
 		local okLadders, err = pcall(Nav.BuildLadders)
 		if not okLadders then
 			AI.Warn("nav ladder build failed: %s", tostring(err))
 		end
+		if not navmesh.IsLoaded() then return end
 
 		local marked = 0
 		for _, hurt in ipairs(ents.FindByClass("trigger_hurt")) do
@@ -1051,16 +1101,14 @@ hook.Add("InitPostEntity", "RelapseAI.NavPostProcess", function()
 	end)
 end)
 
--- Lua refresh after the map is already up: wire ladders again without waiting for a changelevel.
-if navmesh.IsLoaded() then
-	timer.Simple(1, function()
-		if AI.IsSpawnOff and AI.IsSpawnOff() then return end
-		if Nav.IsReady() then
-			local ok, err = pcall(Nav.BuildLadders)
-			if not ok then AI.Warn("nav ladder rebuild failed: %s", tostring(err)) end
-		end
-	end)
-end
+-- Lua refresh after the map is already up: wire ladders again without waiting
+-- for a changelevel. The mesh files load after this one, so give them a moment.
+timer.Simple(1, function()
+	if AI.IsSpawnOff and AI.IsSpawnOff() then return end
+	if not Nav.CanBuildLadders() or navmesh.IsGenerating() then return end
+	local ok, err = pcall(Nav.BuildLadders)
+	if not ok then AI.Warn("nav ladder rebuild failed: %s", tostring(err)) end
+end)
 
 ---------------------------------------------------------------------------
 -- Console

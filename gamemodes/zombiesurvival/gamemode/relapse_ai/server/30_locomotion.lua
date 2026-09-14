@@ -193,7 +193,9 @@ function Loco:SetGoal(target, tolerance, ignoreEnt)
 	self.GoalTol = tolerance or self.P.Tolerance
 	self.IgnoreEnt = ignoreEnt or ent
 
-	local changed = self.Goal == nil or self.GoalEnt ~= ent or (ent == nil and self.Goal:DistToSqr(pos) > 576)
+	-- A new thing to go to, not the approach point sliding as we walk up to a
+	-- sigil (that used to zero the repath timer on every think).
+	local changed = self.Goal == nil or self.GoalEnt ~= ent or (ent == nil and self.Goal:DistToSqr(pos) > 128 * 128)
 	self.GoalEnt = ent
 	if self.Goal then
 		self.Goal:Set(pos)
@@ -210,8 +212,11 @@ function Loco:SetGoal(target, tolerance, ignoreEnt)
 		self.NextRepath = 0
 		self.Exhausted = false
 		self.ExhaustedSince = nil
+		self.LastPathEnd = nil
 		self.StuckEpisodes = 0
 		self.NeedLadder = false
+		self.ViaLadder = nil
+		self.ViaUp = nil
 	end
 end
 
@@ -235,6 +240,9 @@ function Loco:Stop()
 	self.WalkDest = nil
 	self.NeedLadder = false
 	self.ClearPath = false
+	self.Exhausted = false
+	self.ExhaustedSince = nil
+	self.LastPathEnd = nil
 	self.Path = nil
 	if self.Bot then self.Bot.Path = nil end
 	-- Halfway up a ladder we finish the climb; anything else is dropped.
@@ -275,40 +283,20 @@ function Loco:GetLookPoint()
 	return self.LookPos or self.SteerPos or self.Goal
 end
 
--- The path exists but cannot reach the goal (we stood at its end for a while, or
--- got stuck on it), we are repeatedly stuck, or no path can be found at all.
+-- The path exists but ends short of the goal and we have stood at that end for
+-- a while, we are repeatedly stuck, or no path can be found at all. A target we
+-- can already claw is never hopeless (a human on a crate, feet above our head).
 function Loco:IsHopeless()
 	if self.Ladder then return false end
 	if self.PathPending then return false end
+	local combat = self.Bot and self.Bot.Combat
+	if combat and combat.InReach then return false end
 
 	if self.PathValid then
-		-- Other floor / far hunt: keep the path. Giving up walks off the cliff.
-		if self.NeedLadder or AI.Nav.HasLadder(self.ViaLadder) then
-			if self.Exhausted then
-				if self.StuckEpisodes >= 1 then return true end
-				if self.ExhaustedSince and CurTime() - self.ExhaustedSince > self.P.ExhaustedGiveUp then
-					return true
-				end
-			end
-			return self.StuckEpisodes >= 3
+		if self.Exhausted and self.ExhaustedSince
+		and CurTime() - self.ExhaustedSince > self.P.ExhaustedGiveUp then
+			return true
 		end
-		if self.Goal then
-			local pos = self.Player:GetPos()
-			if math_abs(self.Goal.z - pos.z) > 40 then return false end
-			local dx, dy = self.Goal.x - pos.x, self.Goal.y - pos.y
-			if dx * dx + dy * dy > 160 * 160 then return false end
-		end
-		if self.Exhausted then
-			if self.StuckEpisodes >= 1 then return true end
-			if self.ExhaustedSince and CurTime() - self.ExhaustedSince > self.P.ExhaustedGiveUp then
-				return true
-			end
-		end
-		return self.StuckEpisodes >= 3 or self.FailedPaths >= 3
-	end
-
-	-- No path: standing. Two fails used to never count (NeedLadder / far XY).
-	if AI.Nav.HasLadder(self.ViaLadder) and self.Mode == "direct" then
 		return self.StuckEpisodes >= 3
 	end
 	return self.FailedPaths >= 2 or self.StuckEpisodes >= 3
@@ -328,8 +316,21 @@ function Loco:OnPathResult(path, reached, goal)
 	self.PathReached = reached == true and self.PathValid
 	self.PathTime = CurTime()
 	self.Exhausted = false
-	if self.PathReached then self.ExhaustedSince = nil end
 	self.OffPath = false
+
+	-- The exhausted clock survives a repath that ends where the last one did:
+	-- a moving target that stays unreachable would otherwise reset it every
+	-- 2.5 s and the bot stood under the balcony forever.
+	if self.PathReached then
+		self.ExhaustedSince = nil
+		self.LastPathEnd = nil
+	elseif self.PathValid then
+		local e = path:GetEnd()
+		if not self.LastPathEnd or self.LastPathEnd:DistToSqr(e) > 64 * 64 then
+			self.ExhaustedSince = nil
+		end
+		self.LastPathEnd = Vector(e)
+	end
 
 	if goal then
 		if self.PathGoal then
@@ -351,20 +352,6 @@ function Loco:OnPathResult(path, reached, goal)
 		self.FailedPaths = self.FailedPaths + 1
 		if self.FailedPaths >= 2 then
 			self:Note("path:fail")
-		end
-	end
-
-	-- Mesh path to the hunt goal (not a ladder mount): if it does not reach,
-	-- the next dest is a shaft — including same-Z roofs that need down+up.
-	local hunt = self.Goal
-	if goal and AI.Mesh and AI.Mesh.IsReady and AI.Mesh.IsReady() and hunt then
-		if goal:DistToSqr(hunt) < 80 * 80 then
-			if reached then
-				self.NeedLadder = false
-			else
-				self.NeedLadder = true
-				self.NextRepath = 0
-			end
 		end
 	end
 
@@ -470,14 +457,31 @@ end
 -- Traces
 ---------------------------------------------------------------------------
 
+-- Things a player body passes through are not in the way: the sigil post
+-- (DEBRIS_TRIGGER), dropped weapons, prop_prop_blocker (IgnoreTraces). A probe
+-- that stopped on the sigil made it the "obstacle" and the hunt turned into
+-- corrupting it while the human stood inside.
+local PASSABLE_GROUPS = {
+	[COLLISION_GROUP_DEBRIS] = true,
+	[COLLISION_GROUP_DEBRIS_TRIGGER] = true,
+	[COLLISION_GROUP_WEAPON] = true,
+	[COLLISION_GROUP_IN_VEHICLE] = true,
+	[COLLISION_GROUP_PASSABLE_DOOR] = true,
+	[COLLISION_GROUP_DOOR_BLOCKER] = true,
+	[COLLISION_GROUP_DISSOLVING] = true,
+}
+
 local probeSelf, probeIgnore
 local function ProbeFilter(ent)
-	return ent ~= probeSelf and ent ~= probeIgnore and not ent:IsPlayer()
+	if ent == probeSelf or ent == probeIgnore or ent:IsPlayer() then return false end
+	if ent.IgnoreTraces or PASSABLE_GROUPS[ent:GetCollisionGroup()] then return false end
+	return true
 end
 
 -- Knee/chest/head bands: what is directly ahead. Knee 8..32, chest 34..58 (24 tall), head 60..72.
 local probeTrace = {
 	mask = MASK_PLAYERSOLID,
+	collisiongroup = COLLISION_GROUP_PLAYER,
 	mins = Vector(-10, -10, -6),
 	maxs = Vector(10, 10, 18),
 	filter = ProbeFilter,
@@ -487,6 +491,7 @@ local PROBE_HEAD = 6
 -- Narrow crouched hull, lifted by the step or jump height.
 local ledgeTrace = {
 	mask = MASK_PLAYERSOLID,
+	collisiongroup = COLLISION_GROUP_PLAYER,
 	mins = Vector(-8, -8, 0),
 	maxs = Vector(8, 8, 36),
 	filter = ProbeFilter,
@@ -494,14 +499,16 @@ local ledgeTrace = {
 -- Full crouched player hull.
 local duckTrace = {
 	mask = MASK_PLAYERSOLID,
+	collisiongroup = COLLISION_GROUP_PLAYER,
 	mins = Vector(-16, -16, 0),
 	maxs = Vector(16, 16, 36),
 	filter = ProbeFilter,
 }
-local landingTrace = {mask = MASK_PLAYERSOLID, filter = ProbeFilter}
+local landingTrace = {mask = MASK_PLAYERSOLID, collisiongroup = COLLISION_GROUP_PLAYER, filter = ProbeFilter}
 -- Standing hull for the direct approach.
 local directTrace = {
 	mask = MASK_PLAYERSOLID,
+	collisiongroup = COLLISION_GROUP_PLAYER,
 	mins = Vector(-12, -12, 0),
 	maxs = Vector(12, 12, 60),
 	filter = ProbeFilter,
@@ -644,8 +651,10 @@ function Loco.IsBreakable(ent)
 	if ent.NoRelapseAIBreak or ent.IsCreeperNest then return false end
 
 	local class = ent:GetClass()
+	-- Bodies walk through the sigil post; it never closes a passage. Corrupting
+	-- it is the brain's sigil intent, not an obstacle to punch on the way.
 	if class == "prop_obj_sigil" then
-		return not ent:GetSigilCorrupted(), false
+		return false
 	end
 	if ent.IsNailed and ent:IsNailed() then
 		return true, false
@@ -1030,6 +1039,19 @@ function Loco:IsDirectClear(pos, goal)
 	return util_TraceLine(groundTrace).Hit
 end
 
+-- One blind step toward dest with no path: fine as long as the floor 40u
+-- ahead is not a fall (the paint has cliff lips; walking blind off one is how
+-- a roof bot ends up in the yard).
+function Loco:BlindStepOK(pos, dest)
+	local dx, dy = dest.x - pos.x, dest.y - pos.y
+	local len = math_sqrt(dx * dx + dy * dy)
+	if len < 1 then return false end
+	dx, dy = dx / len * 40, dy / len * 40
+	groundTrace.start = Vector(pos.x + dx, pos.y + dy, pos.z + 18)
+	groundTrace.endpos = Vector(pos.x + dx, pos.y + dy, pos.z - 120)
+	return util_TraceLine(groundTrace).Hit
+end
+
 ---------------------------------------------------------------------------
 -- Stuck handling
 ---------------------------------------------------------------------------
@@ -1101,8 +1123,8 @@ function Loco:Escalate(pos)
 		local Nav = AI.Nav
 		Nav.MarkBlockedAt(pos, 20, Nav.Penalty.Stuck)
 		Nav.MarkBlockedAt(pos + dir * 48, 20, Nav.Penalty.Stuck)
-		self.PathValid = false
-		self.NextRepath = 0
+		-- Ask for a way around; keep walking the old path until it arrives.
+		self.NeedRepath = true
 		self:SideStepFor(0.9, -self.SideStep)
 		self:Note("stuck3:mark")
 	else
@@ -1201,21 +1223,27 @@ function Loco:LadderMountPos(ladder, up)
 	return v
 end
 
--- Goal on another floor: walk to the ladder that leads there, not to the
--- unreachable XY under the player (A* 's closest area).
--- A painted ramp is the way up — do not steal dest to a shaft unless the mesh
--- already failed to reach the hunt goal (NeedLadder). The old |dz|<=76 skip
--- also blocked real one-storey ladders.
+-- Where the path request goes. On the Relapse mesh the graph carries shafts and
+-- drops, so the destination is the goal itself; Mesh.ComputeNow hands us a
+-- ViaLadder only when a BSP shaft the graph does not know is the way, and then
+-- we walk to its mount. Source .nav: pick the shaft here when the goal is on
+-- another floor (A* would stop at the closest area under the player).
 function Loco:DestForGoal(pos, goal)
 	local dz = math_abs(goal.z - pos.z)
-	if AI.Mesh and AI.Mesh.IsReady() and not self.NeedLadder then
+	if AI.Nav.HasLadder(self.ViaLadder) then
+		if dz >= 40 then
+			return self:LadderMountPos(self.ViaLadder, self.ViaUp)
+		end
+		-- The goal came to our floor: the shaft is moot.
 		self.ViaLadder = nil
 		self.ViaUp = nil
+		self.NeedLadder = false
+		self.PathValid = false
+	end
+	if AI.Mesh and AI.Mesh.IsReady() then
 		return goal
 	end
-	if dz < 40 and not self.NeedLadder then
-		self.ViaLadder = nil
-		self.ViaUp = nil
+	if dz < 40 then
 		return goal
 	end
 	local ladder, up = AI.Nav.FindLadderForGoal(pos, goal)
@@ -1317,6 +1345,13 @@ function Loco:EndLadder(reason)
 	self.Bot.View:ClearOverride()
 	self:ResetProgress()
 	self.StuckLevel = 0
+	-- The shaft we were sent to is behind us: the next path goes to the goal.
+	if self.ViaLadder == L.Ent then
+		self.ViaLadder = nil
+		self.ViaUp = nil
+		self.NeedLadder = false
+		self.PathValid = false
+	end
 	self:Note("ladder:" .. reason)
 end
 
@@ -1700,6 +1735,13 @@ function Loco:CheckSegments(pos)
 	self.SegIndex = i
 
 	local P = self.P
+	-- Crouch run (vent, low passage) here or just ahead: duck before the lintel.
+	local here = segs[i]
+	local nxt = segs[i + 1]
+	if (here and here.crouch) or (nxt and nxt.crouch and nxt.distanceFromStart - cursor <= 64) then
+		self:Duck(0.35, "path")
+	end
+
 	for j = i, math_min(i + 5, n) do
 		local seg = segs[j]
 		local ahead = seg.distanceFromStart - cursor
@@ -1736,7 +1778,12 @@ function Loco:CheckSegments(pos)
 				local l = math_sqrt(dx * dx + dy * dy)
 				if l > 1 then
 					if AI.Mesh and AI.Mesh.IsReady() then
-						self:Jump("climb")
+						-- The graph already vetted this hop. The face sits between
+						-- the launch cell and the landing cell; take off close to it,
+						-- or as soon as the probe sees it.
+						if ahead <= 40 or self:ProbeLedge(pos, dx / l, dy / l, 48) == LEDGE_JUMP then
+							self:Jump("climb")
+						end
 					elseif not (top and IsValid(top.area) and top.area:HasAttributes(NAV_STAIRS))
 					and self:ProbeLedge(pos, dx / l, dy / l, 32, nil, AI.cv.max_drop:GetFloat()) == LEDGE_JUMP then
 						self:Jump("climb")
@@ -1749,6 +1796,15 @@ function Loco:CheckSegments(pos)
 				self:Jump("gap")
 				return
 			end
+		elseif seg.type == SEG_DROP then
+			-- A rail or parapet on the lip (graph flagged it): hop it, the
+			-- fall does the rest. Late rather than early: from against the
+			-- rail a standing duck-jump clears it; from 20u out a slow body
+			-- meets it at knee height. A plain drop is just walked off.
+			if seg.hop and ahead <= 12 and ahead >= -28 then
+				self:Jump("rail")
+			end
+			return
 		else
 			-- Walk-classified curb (~32u lip): hop at the face, not after stuck.
 			-- ProbeLedge keeps ramps/stairs (HitNormal.z walkable, or riser < step) walking.
@@ -1813,18 +1869,20 @@ function Loco:Think(dt)
 	if flat2 < P.DirectDist * P.DirectDist and math_abs(dest.z - pos.z) < 28 and self:IsDirectClear(pos, dest) then
 		self.Mode = "direct"
 	elseif self.Mode == "direct" then
+		-- Back on the path. The old one is stale and the checks below ask for a
+		-- new one (rate-limited); walking it meanwhile beats standing still.
 		self.Mode = "path"
-		self.NextRepath = 0
 	end
 
-	-- Keep the path fresh.
+	-- Keep the path fresh. A moving target asks for a new path but keeps the
+	-- old one until it arrives: dropping it left the bot standing for the
+	-- request latency on every 64u the human moved.
 	if self.Mode == "path" then
 		local need = false
 		if not self.PathValid then
 			need = true
 		elseif self.PathGoal:DistToSqr(dest) > P.GoalMoveRepath * P.GoalMoveRepath then
 			need = true
-			self.PathValid = false -- drop a stale path that ended under the player
 		elseif now - self.PathTime > (self.GoalEnt and P.RepathMoving or P.RepathStatic) then
 			need = true
 		elseif self.OffPath then
@@ -1973,19 +2031,20 @@ function Loco:Step(cmd, viewYaw, dt)
 		local look = speed * P.LookAheadSpeedMul
 		if look < P.LookAheadMin then look = P.LookAheadMin elseif look > P.LookAheadMax then look = P.LookAheadMax end
 
-		-- Do not look along the 3D chord into a shaft: that walks us off the
-		-- roof beside the ladder. Stop at the landing and let the climb SM drop.
+		-- Do not look along the 3D chord into a shaft or over a lip early: that
+		-- walks us off the roof beside the ladder or cuts the corner of the
+		-- drop. seg.type sits on the waypoint the move leaves from (the lip, the
+		-- ladder foot): walk up to it, then step off / let the climb SM take it.
 		local segs = self.Segments
 		if segs then
 			for j = math.max(1, self.SegIndex), #segs do
 				local s = segs[j]
 				if IsLadderSeg(s) or s.type == SEG_DROP or s.type == SEG_LADDER_DOWN then
-					local prev = segs[j - 1]
-					local capD = prev and prev.distanceFromStart or 0
+					local capD = s.distanceFromStart
 					if cursor < capD - 4 then
 						look = math.min(look, capD - cursor)
 					else
-						look = math.min(look, 8)
+						look = math.min(look, 12)
 					end
 					break
 				end
@@ -2013,6 +2072,13 @@ function Loco:Step(cmd, viewYaw, dt)
 			target = dest
 			self.SteerPos = dest
 			self:Note("walk:mount")
+		elseif dest and self.FailedPaths > 0 and self:BlindStepOK(pos, dest) then
+			-- Off the paint (spawn closet, prop top, unpainted pocket): walk at
+			-- it rather than stand. Moving puts us under stuck escalation, and
+			-- the first painted cell we cross gives the next request a start.
+			target = dest
+			self.SteerPos = dest
+			self:Note("walk:blind")
 		else
 			self.WishDir:Zero()
 			return buttons

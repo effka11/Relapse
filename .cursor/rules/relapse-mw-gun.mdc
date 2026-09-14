@@ -42,7 +42,7 @@ alwaysApply: true
 
 Одинаковые числа в `SWEP.Relapse` и `GM.RelapseWeapons.<class>.Relapse`. `Primary.Ammo` = id гильзы (`relapse-ammo`). Новый калибр — строка в таблице, не чужой id.
 
-Тир — роль и волна, не дыра в U. Шоп дороже справедливого (`U / 27.607`): T2 30, T3 45, T4 55, T5 70. Веса U и `U_point` не трогать, если не просили. Пример в `documents/usefulness-model.md`.
+Тир — роль и волна, не дыра в U. Цена — правило `relapse-shop-price`: T1 15, T2 45, T3 75, T4 115, T5 175. Не из U. Урон за цену не поднимать. Веса U и `U_point` не трогать, если не просили.
 
 ## Overlay
 

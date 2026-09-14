@@ -14,13 +14,29 @@ Mesh.Streams = Mesh.Streams or {}
 Mesh.GenId = Mesh.GenId or 0
 Mesh.CellSize = Mesh.CellSize or 40
 Mesh.Building = Mesh.Building or false
+-- Bumped when the sampler or its bounds change what gets painted; an older file
+-- still loads (bots walk it meanwhile) and a repaint follows once the map is up.
+-- v2: hull lifted to step height (ramps, stair runs). v3: bounds from the map,
+-- not a +-2048 x -256..512 box (pits and high stairs were cut off).
+Mesh.PaintVersion = 3
 
-local cvCell = CreateConVar("relapse_ai_mesh_cell", "40", FCVAR_NOTIFY, "Relapse mesh sample spacing (units). Smaller = denser paint.")
+-- 32u: a 48u-wide stair still gets a column (the clearance hull needs 12u to each
+-- wall, so a 40u raster could miss it entirely).
+local cvCell = CreateConVar("relapse_ai_mesh_cell", "32", FCVAR_NOTIFY, "Relapse mesh sample spacing (units). Smaller = denser paint.")
 local cvBudget = CreateConVar("relapse_ai_mesh_budget_ms", "4", FCVAR_NOTIFY, "Milliseconds per tick for mesh generation.")
 
-local WALKABLE_Z = 0.7
-local CLEAR_MINS = Vector(-12, -12, 0)
-local CLEAR_MAXS = Vector(12, 12, 62)
+local WALKABLE_Z = 0.7 -- Source walkable limit: slopes up to ~45 degrees
+local STEP_HEIGHT = 18
+-- Standing room above a sample. The hull starts at step height: a flat-bottomed
+-- hull sitting on the surface intersected any slope over ~13 degrees and every
+-- stair riser within its footprint, so ramps and stair runs never painted.
+-- Whatever is below step height is walked over anyway.
+local CLEAR_MINS = Vector(-12, -12, STEP_HEIGHT)
+local CLEAR_MAXS = Vector(12, 12, 64)
+-- Crouched body (36u): vents and low passages paint too, flagged so the graph
+-- links them as crouch runs (a standing body walks around).
+local CROUCH_MAXS = Vector(12, 12, 34)
+local SAMPLE_LIFT = Vector(0, 0, 1.5)
 local BATCH = 180
 local MAX_FLOORS = 12
 local MAX_COLUMNS = 120000
@@ -32,18 +48,27 @@ local downRes, upRes = {}, {}
 local startPos, endPos = Vector(), Vector()
 local probePos = Vector()
 
--- World / func_brush / displacements only. Physics crates and static boxes are
--- not map skin; those get painted later by hand if a bot must stand on them.
-local TRACE_MASK = MASK_PLAYERSOLID_BRUSHONLY
+-- Map skin: world brushes, displacements, brush entities (func_brush, doors at
+-- their start pose) and static props (the crate stair, the container roof, the
+-- pedestal under a sigil). The engine reports static props as the world; the
+-- brush-only mask skipped them, so a prop platform had no floor and no path.
+-- Nothing that moves or breaks: physics props, nailed barricades, players.
+-- 93_mesh_path.lua links with the same filter so ground and walls agree.
+local TRACE_MASK = MASK_PLAYERSOLID
+function Mesh.TraceFilter(ent)
+	return ent:IsWorld() or ent:GetSolid() == SOLID_BSP
+end
 
 local downTr = {
 	mask = TRACE_MASK,
+	filter = Mesh.TraceFilter,
 	output = downRes,
 	start = startPos,
 	endpos = endPos,
 }
 local upTr = {
 	mask = TRACE_MASK,
+	filter = Mesh.TraceFilter,
 	output = upRes,
 	mins = CLEAR_MINS,
 	maxs = CLEAR_MAXS,
@@ -60,11 +85,13 @@ local function Expand(mins, maxs, p)
 	if p.z > maxs.z then maxs.z = p.z end
 end
 
--- Playable AABB only (spawns / sigils / .nav envelope). The envelope is not the mesh.
+-- Raster AABB. XY: the .nav envelope when there is one (it covers every floor
+-- the humans reach); else the whole map, since a spawn/sigil envelope stops 96u
+-- past the last node and cuts the far courtyard. Z: always the whole map.
 local function PlayableBounds()
 	local mins = Vector(math.huge, math.huge, math.huge)
 	local maxs = Vector(-math.huge, -math.huge, -math.huge)
-	local hits = 0
+	local hits, navHits = 0, 0
 
 	local function add(p)
 		if not isvector(p) then return end
@@ -96,32 +123,66 @@ local function PlayableBounds()
 				if IsValid(area) then
 					for c = 0, 3 do
 						add(area:GetCorner(c))
+						navHits = navHits + 1
 					end
 				end
 			end
 		end
 	end
 
-	if hits == 0 then
-		return Vector(-2048, -2048, -256), Vector(2048, 2048, 512)
+	local wmins, wmaxs
+	local world = game.GetWorld()
+	if IsValid(world) and world.GetModelBounds then
+		wmins, wmaxs = world:GetModelBounds()
+		if wmins and wmaxs and (wmaxs.x - wmins.x < 512 or wmaxs.z - wmins.z < 64) then
+			wmins, wmaxs = nil, nil
+		end
 	end
 
-	mins:Add(Vector(-96, -96, -64))
-	maxs:Add(Vector(96, 96, 96))
-	return mins, maxs
+	if wmins and wmaxs then
+		if navHits == 0 then
+			-- No .nav: the whole map in XY (a 3D skybox far out costs columns,
+			-- the cell size grows to fit MAX_COLUMNS; a cut-off yard costs bots).
+			return Vector(wmins.x - 16, wmins.y - 16, wmins.z), Vector(wmaxs.x + 16, wmaxs.y + 16, wmaxs.z), "world"
+		end
+		mins:Add(Vector(-96, -96, 0))
+		maxs:Add(Vector(96, 96, 0))
+		-- Z from the world: the pit under the courtyard and the roof above the
+		-- highest .nav area are floors too; a +-64/96 envelope cut both off.
+		mins.z = wmins.z
+		maxs.z = wmaxs.z
+		return mins, maxs, "nav"
+	end
+
+	if hits == 0 then
+		return Vector(-4096, -4096, -1024), Vector(4096, 4096, 1024), "default"
+	end
+	mins:Add(Vector(-96, -96, -512))
+	maxs:Add(Vector(96, 96, 512))
+	return mins, maxs, "playable"
 end
 
-local function CanStand(pos, normal)
+-- Room over a surface hit: "stand", "crouch" or nil. Vertical only: an offset
+-- along the normal moves the column off its raster on slopes.
+local function CanStand(pos)
 	startPos:Set(pos)
-	startPos:Add(normal)
-	startPos.z = startPos.z + 2
+	startPos.z = startPos.z + 1
 	if bit.band(util.PointContents(startPos), CONTENTS_WATER) ~= 0 then
-		return false
+		return nil
 	end
 	upTr.start = startPos
 	upTr.endpos = startPos
+	upTr.maxs = CLEAR_MAXS
 	util.TraceHull(upTr)
-	return not upRes.StartSolid
+	if not upRes.StartSolid then
+		return "stand"
+	end
+	upTr.maxs = CROUCH_MAXS
+	util.TraceHull(upTr)
+	if not upRes.StartSolid then
+		return "crouch"
+	end
+	return nil
 end
 
 local function LeaveSolid(x, y, z, zmin)
@@ -161,11 +222,12 @@ local function SampleColumn(x, y, zmax, zmin, cells)
 				z = hitz - MIN_FLOOR_GAP
 			else
 				local n = downRes.HitNormal
-				if n.z >= WALKABLE_Z and CanStand(downRes.HitPos, n) then
-					local pn = Vector(n.x, n.y, n.z)
+				local room = n.z >= WALKABLE_Z and CanStand(downRes.HitPos) or nil
+				if room then
 					cells[#cells + 1] = {
-						pos = Vector(downRes.HitPos.x, downRes.HitPos.y, downRes.HitPos.z) + pn * 1.5,
-						n = pn,
+						pos = Vector(downRes.HitPos.x, downRes.HitPos.y, downRes.HitPos.z) + SAMPLE_LIFT,
+						n = Vector(n.x, n.y, n.z),
+						crouch = room == "crouch" or nil,
 					}
 					floors = floors + 1
 					lastZ = hitz
@@ -264,7 +326,7 @@ function Mesh.Save()
 	file.CreateDir("relapse_ai")
 	file.CreateDir("relapse_ai/mesh")
 	local lines = {
-		"RelapseMesh 1",
+		"RelapseMesh " .. tostring(Mesh.PaintVersion),
 		"map " .. game.GetMap(),
 		"cell " .. tostring(Mesh.CellSize or 40),
 		"count " .. tostring(#Mesh.Cells),
@@ -272,7 +334,8 @@ function Mesh.Save()
 	for i = 1, #Mesh.Cells do
 		local c = Mesh.Cells[i]
 		local p, n = c.pos, c.n
-		lines[#lines + 1] = string.format("%.1f %.1f %.1f %.3f %.3f %.3f", p.x, p.y, p.z, n.x, n.y, n.z)
+		lines[#lines + 1] = string.format("%.1f %.1f %.1f %.3f %.3f %.3f%s", p.x, p.y, p.z, n.x, n.y, n.z,
+			c.crouch and " c" or "")
 	end
 	file.Write(Mesh.FilePath(), table.concat(lines, "\n"))
 	if not file.Exists(Mesh.FilePath(), "DATA") then
@@ -294,6 +357,7 @@ function Mesh.Load()
 	if not string.StartWith(lines[1] or "", "RelapseMesh") then
 		return false, "bad header"
 	end
+	local version = tonumber(string.match(lines[1], "RelapseMesh%s+(%d+)")) or 1
 	local map, cell, expect
 	local cells = {}
 	for i = 2, #lines do
@@ -309,11 +373,12 @@ function Mesh.Load()
 			elseif cn then
 				expect = cn
 			else
-				local x, y, z, nx, ny, nz = string.match(line, "([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)")
+				local x, y, z, nx, ny, nz, flag = string.match(line, "([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s*(%a*)")
 				if x then
 					cells[#cells + 1] = {
 						pos = Vector(tonumber(x), tonumber(y), tonumber(z)),
 						n = Vector(tonumber(nx), tonumber(ny), tonumber(nz)),
+						crouch = flag == "c" or nil,
 					}
 				end
 			end
@@ -332,7 +397,16 @@ function Mesh.Load()
 		stream.gen = Mesh.GenId
 		stream.i = 1
 	end
-	AI.Log("mesh loaded %d cells (%su) from data/%s", #cells, Mesh.CellSize, path)
+	AI.Log("mesh loaded %d cells (%su, paint v%d) from data/%s", #cells, Mesh.CellSize, version, path)
+	-- Stale paint (old sampler or old bounds) still links so bots have something
+	-- now; the repaint waits for InitPostEntity, when spawns, sigil nodes and
+	-- the .nav exist to bound it. Painting here, at Lua init, saw no entities
+	-- and rasterised a +-2048 x -256..512 box: pits and high stairs were cut.
+	Mesh.PaintedVersion = version
+	Mesh.NeedRepaint = version < Mesh.PaintVersion
+	if Mesh.NeedRepaint then
+		AI.Warn("mesh data/%s is paint v%d (current v%d): stale, repainting once the map is up", path, version, Mesh.PaintVersion)
+	end
 	if Mesh.StartLink then
 		Mesh.StartLink()
 	end
@@ -341,6 +415,8 @@ end
 
 function Mesh.FinishBuild()
 	Mesh.Building = false
+	Mesh.PaintedVersion = Mesh.PaintVersion
+	Mesh.NeedRepaint = false
 	local elapsed = Mesh.Build and (SysTime() - Mesh.Build.t0) or 0
 	AI.Log("mesh paint %d cells in %.1fs (cell %su) on %s", #Mesh.Cells, elapsed, Mesh.CellSize, game.GetMap())
 	local ok, err = Mesh.Save()
@@ -414,7 +490,7 @@ function Mesh.StartBuild(pl, force)
 		end
 	end
 
-	local mins, maxs = PlayableBounds()
+	local mins, maxs, how = PlayableBounds()
 	local cell = math.Clamp(cvCell:GetFloat(), 16, 128)
 	local spanx, spany = maxs.x - mins.x, maxs.y - mins.y
 	while (spanx / cell) * (spany / cell) > MAX_COLUMNS and cell < 128 do
@@ -428,6 +504,15 @@ function Mesh.StartBuild(pl, force)
 	Mesh.Cells = {}
 	Mesh.CellSize = cell
 	Mesh.Building = true
+	Mesh.NeedRepaint = false
+	-- A link job over the old cells would index into the new, empty table, and
+	-- the old grid would hand out stale indices.
+	Mesh.Linking = nil
+	Mesh.Linked = false
+	Mesh.LinkCount = 0
+	Mesh.Grid = {}
+	AI.Log("mesh paint bounds (%s): x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f, %dx%d columns at %du",
+		how or "?", mins.x, maxs.x, mins.y, maxs.y, mins.z, maxs.z, nx, ny, cell)
 	Mesh.Build = {
 		ix = 0,
 		iy = 0,
@@ -472,6 +557,13 @@ hook.Add("InitPostEntity", "RelapseAI.MeshLoad", function()
 	timer.Simple(1, function()
 		if #Mesh.Cells == 0 then
 			Mesh.Load()
+		end
+		-- Stale file: repaint now that spawns, sigil nodes and the .nav bound
+		-- the raster. Bots fall back to .nav (or retry) for the minute it takes;
+		-- a skin with the pit and the stair tops missing is worse than that.
+		if Mesh.NeedRepaint and not Mesh.Building then
+			AI.Warn("mesh paint is stale (v%d < v%d): repainting %s", Mesh.PaintedVersion or 0, Mesh.PaintVersion, game.GetMap())
+			Mesh.StartBuild(nil, true)
 		end
 	end)
 end)

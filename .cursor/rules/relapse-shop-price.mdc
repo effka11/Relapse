@@ -1,0 +1,37 @@
+---
+description: Relapse point-shop gun prices are a tier tax, not U. Same shelf inside a tier.
+globs: gamemodes/zombiesurvival/gamemode/sh_options.lua,gamemodes/zombiesurvival/gamemode/sh_usefulness_model.lua,documents/usefulness*.md
+alwaysApply: true
+---
+
+# Relapse цена ствола в поинтах
+
+Полка — налог роли и темпа фарма, не `U / 27.607`. Справедливо ~13–16 на любом тире: модель сжимает. Канон `U_point` всегда T1.
+
+Код: `AddPointShopItem` в `sh_options.lua`. Пример — `documents/usefulness-point.md`.
+
+| Тир | Шоп | Шаг | Соло 225 HP |
+|---|---:|---:|---:|
+| T1 | **15** | — | ~2.5 |
+| T2 | **45** | +30 | ~8 |
+| T3 | **75** | +30 | ~13 |
+| T4 | **115** | +40 | ~19 |
+| T5 | **175** | +60 | ~29 |
+
+Worth T1 = те же **15**. `LockItemTiers` выключен: запирает цена.
+
+```lua
+-- ❌ цена из U, разная внутри тира, T5 как чужой «готовый» ствол
+GM:AddPointShopItem("mp5",  ITEMCAT_GUNS, 16, "mg_mpapa5", ...)
+GM:AddPointShopItem("m19",  ITEMCAT_GUNS, 20, "mg_p320", ...)
+GM:AddPointShopItem("scar", ITEMCAT_GUNS, 200, "mg_scharlie", ...)
+
+-- ✅ одна полка на тир
+GM:AddPointShopItem("mp5",  ITEMCAT_GUNS, 45, "mg_mpapa5", ...)
+GM:AddPointShopItem("m19",  ITEMCAT_GUNS, 45, "mg_p320", ...)
+GM:AddPointShopItem("scar", ITEMCAT_GUNS, 175, "mg_scharlie", ...)
+```
+
+Не 200 на T5: это TCO после гильзы и обвеса. 175 — голый ствол. Скип T2→T5 = **175**, не сумма полок.
+
+Не трогать, если не просили: `U_point`, урон за пулю, HP зомби, `HumanoidZombiePointRatio`, цены ящиков, `ScrapVals`. Урон не поднимать «потому что ствол дороже». Патроны и ремантлер — другие кошельки.

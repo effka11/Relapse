@@ -1,8 +1,13 @@
--- Relapse mesh graph: 8-neighbor walk links, A*, path through cell centres.
--- Centres stay inside the paint; a taut string hugged cliff lips. Ladder shafts
--- are extra edges (bottom cell ↔ top cell) so two roofs at the same Z still
--- connect: down, walk, up. Source .nav is fallback until this graph is linked
+-- Relapse mesh graph: 8-neighbour walk links, hops, one-way drops, ladder
+-- shafts; A* through cell centres. Centres stay inside the paint; a taut string
+-- hugged cliff lips. Source .nav is fallback until this graph is linked
 -- (relapse_ai_mesh_path 0 to stay on .nav).
+--
+-- A walk link is what a player can do without pressing jump: the chord between
+-- the two centres, sampled every few units, never steps more than the step
+-- height, and a lifted hull along it meets no wall. Ramps and stair runs pass;
+-- a crate face does not (that pair becomes a hop). Drops are found from the
+-- higher cell and are one-way: A* never climbs a cliff.
 
 local AI = RelapseAI
 local Mesh = AI.Mesh
@@ -22,39 +27,69 @@ local SEG_CLIMB = 2
 local SEG_LADDER_UP = 4
 local SEG_LADDER_DOWN = 5
 
-local WALK_Z = 22
+local STEP_Z = 18 -- player step height: the most one ground sample may rise over the previous
 local JUMP_Z = 68 -- 64u crate + sample lift; loco duck-jump
-local DROP_Z = 200
-local MAX_EXPAND = 14000
+local DROP_DEFAULT = 200 -- relapse_ai_max_drop; zombies take no fall damage below ~430u
+local WALKABLE_Z = 0.7
+local MAX_EXPAND = 8000 -- A* expansions before we settle for the closest approach
+local MAX_EXPAND_CROSS = 12000 -- other floor: the wrong-floor plateau drains first
+local MAX_EXPAND_ISLAND = 1500 -- goal in another component: only find where to stand
 Mesh.JumpZ = JUMP_Z
 
--- Linking is centre-to-centre. A fat hull + side-ground test (meant for string
--- pull) dropped almost every neighbour, A* failed, and IsReady still blocked
--- the .nav fallback — zombies stood still.
-local LINK_HULL = 10
+-- Narrow: the paint already guarantees 12u to each side at every centre. A
+-- wider box leaning 45° up a stair run clips the next riser.
+local LINK_HULL = 8
+-- Hull bottom above the chord. On 16u risers the tread edge can sit 15u above
+-- the chord (raster phase) plus the 8u the box reaches ahead on a 45° run. A
+-- 30u rail or a 48u crate face still ends up inside the box; low curbs and
+-- 32u crates are the ground test's job.
+local WALK_LIFT = 26
+local STAND_TOP = 70
+local CROUCH_LIFT = 20
+local CROUCH_TOP = 34
+local GROUND_STEP = 10 -- chord sampling interval for the step test
+
 local linkRes, groundRes = {}, {}
 local linkStart, linkEnd = Vector(), Vector()
+local groundStart, groundEnd = Vector(), Vector()
+-- Same solids as the paint (92_mesh_build.lua): world, brush entities, static
+-- props. A link that saw the brush floor under a prop crate the paint stood on
+-- would call the crate top a step.
+local LINK_MASK = MASK_PLAYERSOLID
+local function LinkFilter(ent)
+	return ent:IsWorld() or ent:GetSolid() == SOLID_BSP
+end
 local linkTr = {
-	mask = MASK_PLAYERSOLID_BRUSHONLY,
+	mask = LINK_MASK,
+	filter = LinkFilter,
 	output = linkRes,
 	mins = Vector(-LINK_HULL, -LINK_HULL, 0),
-	maxs = Vector(LINK_HULL, LINK_HULL, 28),
+	maxs = Vector(LINK_HULL, LINK_HULL, STAND_TOP - WALK_LIFT),
 	start = linkStart,
 	endpos = linkEnd,
 }
 local groundTr = {
-	mask = MASK_PLAYERSOLID_BRUSHONLY,
+	mask = LINK_MASK,
+	filter = LinkFilter,
 	output = groundRes,
-	start = linkStart,
-	endpos = linkEnd,
+	start = groundStart,
+	endpos = groundEnd,
 }
 
 Mesh.Blocked = Mesh.Blocked or {}
 Mesh.LinkCount = Mesh.LinkCount or 0
 Mesh.Linked = Mesh.Linked or false
+Mesh.LinkedLadders = Mesh.LinkedLadders or {} -- [ladder id] = true once a shaft is a graph edge
 
 local function CellSize()
 	return Mesh.CellSize or 40
+end
+
+local function DropZ()
+	local cv = AI.cv and AI.cv.max_drop
+	local v = cv and cv:GetFloat() or DROP_DEFAULT
+	if v < JUMP_Z then v = JUMP_Z end
+	return v
 end
 
 function Mesh.IsReady()
@@ -83,116 +118,179 @@ local function GridAdd(gx, gy, i)
 	bucket[#bucket + 1] = i
 end
 
-local function BestInBucket(gx, gy, z, skip)
-	local bucket = GridGet(gx, gy)
-	if not bucket then return nil end
-	local best, bestDz
-	for i = 1, #bucket do
-		local j = bucket[i]
-		if j ~= skip then
-			local dz = math.abs(Mesh.Cells[j].pos.z - z)
-			if not best or dz < bestDz then
-				best, bestDz = j, dz
-			end
-		end
-	end
-	return best, bestDz
-end
-
-local function Classify(a, b, cell)
-	local dz = b.pos.z - a.pos.z
-	local adz = math.abs(dz)
-	-- Samples sit on flat treads, so n.z ≈ 1 even on a 35° stair. A 40u cell
-	-- on that run rises ~28u — still a walk, not a crate hop.
-	if adz <= math.max(WALK_Z, cell * 1.05) then
-		return "walk", SEG_GROUND
-	end
-	if dz > WALK_Z and dz <= JUMP_Z then
-		return "jump", SEG_CLIMB
-	end
-	if dz < -WALK_Z and adz <= DROP_Z then
-		return "drop", SEG_DROP
-	end
-	return nil
-end
-
-local function GroundOK(x, y, z)
-	linkStart:SetUnpacked(x, y, z + 24)
-	linkEnd:SetUnpacked(x, y, z - 72)
-	groundTr.start = linkStart
-	groundTr.endpos = linkEnd
+-- Floor height under (x, y) looking down from zTop; nil when there is none within reach.
+local function GroundZ(x, y, zTop, zBottom)
+	groundStart:SetUnpacked(x, y, zTop)
+	groundEnd:SetUnpacked(x, y, zBottom)
 	util.TraceLine(groundTr)
-	if not groundRes.Hit or groundRes.HitSky then
-		return false
+	if groundRes.StartSolid or not groundRes.Hit or groundRes.HitSky then
+		return nil
 	end
-	return math.abs(groundRes.HitPos.z - z) <= 36
+	return groundRes.HitPos.z, groundRes.HitNormal.z
 end
 
--- Neighbour test: walk uses a centreline hull. Jump cannot — that hull hits the
--- face of the crate. Jump: headroom at takeoff, crouched sweep at lip height.
--- Always pass the lower cell as (ax,ay,az).
-local function AdjacentOK(ax, ay, az, bx, by, bz, kind)
-	if kind == "jump" then
-		linkStart:SetUnpacked(ax, ay, az + 8)
-		linkEnd:SetUnpacked(ax, ay, math.max(az + JUMP_Z + 4, bz + 8))
-		linkTr.start = linkStart
-		linkTr.endpos = linkEnd
-		util.TraceHull(linkTr)
-		if linkRes.StartSolid or linkRes.Hit then
-			return false
-		end
-		local lip = bz + 4
-		linkStart:SetUnpacked(ax, ay, lip)
-		linkEnd:SetUnpacked(bx, by, lip)
-		util.TraceHull(linkTr)
-		if linkRes.StartSolid then
-			return false
-		end
-		-- Clipping the pad top is fine; a wall or railing is not.
-		if linkRes.Hit and (not linkRes.HitNormal or linkRes.HitNormal.z < 0.7) then
-			return false
-		end
-		return GroundOK(bx, by, bz)
-	end
-
-	local lift = 24
+-- Hull sweep along the chord a->b with its bottom `lift` above the chord and its
+-- top `top` above it. A ramp or stair tread clipped from above is fine
+-- (walkable normal); anything else in the way is a wall, a rail or a ceiling.
+local function ChordClear(ax, ay, az, bx, by, bz, lift, top)
+	linkTr.mins.z = 0
+	linkTr.maxs.z = top - lift
 	linkStart:SetUnpacked(ax, ay, az + lift)
 	linkEnd:SetUnpacked(bx, by, bz + lift)
-	linkTr.start = linkStart
-	linkTr.endpos = linkEnd
 	util.TraceHull(linkTr)
 	if linkRes.StartSolid then
-		linkStart.z = az + 32
-		linkEnd.z = bz + 32
-		util.TraceHull(linkTr)
+		return false
 	end
+	if linkRes.Hit and (not linkRes.HitNormal or linkRes.HitNormal.z < WALKABLE_Z) then
+		return false
+	end
+	return true
+end
+
+-- Ground under the chord, GROUND_STEP apart: every sample within STEP_Z of the
+-- previous one (stairs, ramps, curbs up to the step height), nothing missing
+-- (a gap), and no steep face unless the whole thing is a curb.
+local function GroundContinuous(ax, ay, az, bx, by, bz, lift)
+	local dx, dy, dz = bx - ax, by - ay, bz - az
+	local flat = math.sqrt(dx * dx + dy * dy)
+	local steps = math.max(2, math.ceil(flat / GROUND_STEP))
+	local prevZ = az
+	local steep = false
+	local low = math.min(az, bz) - STEP_Z - 8
+	for s = 1, steps - 1 do
+		local t = s / steps
+		local cz = az + dz * t
+		local gz, nz = GroundZ(ax + dx * t, ay + dy * t, cz + lift, low)
+		if not gz then
+			return false
+		end
+		if math.abs(gz - prevZ) > STEP_Z then
+			return false
+		end
+		if nz and nz < WALKABLE_Z then
+			steep = true
+		end
+		prevZ = gz
+	end
+	if math.abs(bz - prevZ) > STEP_Z then
+		return false
+	end
+	if steep and math.abs(bz - az) > STEP_Z then
+		return false
+	end
+	return true
+end
+
+-- Walk link test. Returns ok, crouch.
+local function WalkOK(a, b)
+	local ax, ay, az = a.pos.x, a.pos.y, a.pos.z
+	local bx, by, bz = b.pos.x, b.pos.y, b.pos.z
+	-- A cell the paint could only fit a crouched body on is a crouch run.
+	local crouch = (a.crouch or b.crouch) and true or false
+	if not crouch and not ChordClear(ax, ay, az, bx, by, bz, WALK_LIFT, STAND_TOP) then
+		crouch = true
+	end
+	if crouch then
+		-- Vents and low passages: a crouched body still fits.
+		if not ChordClear(ax, ay, az, bx, by, bz, CROUCH_LIFT, CROUCH_TOP) then
+			return false
+		end
+	end
+	if not GroundContinuous(ax, ay, az, bx, by, bz, crouch and CROUCH_LIFT or WALK_LIFT) then
+		return false
+	end
+	return true, crouch
+end
+
+-- Hop from the lower cell onto the higher one: headroom at takeoff, a crouched
+-- sweep at lip height (clipping the pad top is fine, a rail is not), a floor to
+-- land on.
+local function JumpOK(lo, hi)
+	local ax, ay, az = lo.pos.x, lo.pos.y, lo.pos.z
+	local bx, by, bz = hi.pos.x, hi.pos.y, hi.pos.z
+	linkTr.mins.z = 0
+	linkTr.maxs.z = 28
+	linkStart:SetUnpacked(ax, ay, az + 8)
+	linkEnd:SetUnpacked(ax, ay, math.max(az + JUMP_Z + 4, bz + 8))
+	util.TraceHull(linkTr)
+	if linkRes.StartSolid or linkRes.Hit then
+		return false
+	end
+	local lip = bz + 4
+	linkStart:SetUnpacked(ax, ay, lip)
+	linkEnd:SetUnpacked(bx, by, lip)
+	util.TraceHull(linkTr)
 	if linkRes.StartSolid then
 		return false
 	end
-	-- A ramp/stair chord sits in the slope. Hitting the walkable skin is fine.
-	if linkRes.Hit and (not linkRes.HitNormal or linkRes.HitNormal.z < 0.7) then
+	if linkRes.Hit and (not linkRes.HitNormal or linkRes.HitNormal.z < WALKABLE_Z) then
 		return false
 	end
-	if kind == "drop" then
-		return true
-	end
-	return GroundOK((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5)
+	local gz = GroundZ(bx, by, bz + 24, bz - 40)
+	return gz ~= nil and math.abs(gz - bz) <= 24
 end
 
-local function AddEdge(i, j, cost, kind, segType)
-	local a, b = Mesh.Cells[i], Mesh.Cells[j]
-	if kind == "jump" then
-		local lo, hi = i, j
-		if b.pos.z < a.pos.z then
-			lo, hi = j, i
+-- A rail, curb or parapet on the lip that a hop clears (feet over it with a
+-- duck-jump, also from a standstill against it). Its top comes from a line down
+-- just past the face the sweep hit. 36 covers the 32u standard rail; taller
+-- needs a running duck-jump timed on the rail, which a bot does not have.
+local RAIL_MAX = 36
+
+-- Walk off the higher cell and land on the lower one: a standing body clears
+-- the lip, or a crouched one clears it above a low rail (then the lip is a
+-- hop: returns true, true), then falls straight onto that floor with nothing
+-- (a ledge, an awning) in between. Only from the higher cell: one-way.
+local function DropOK(hi, lo)
+	local ax, ay, az = hi.pos.x, hi.pos.y, hi.pos.z
+	local bx, by, bz = lo.pos.x, lo.pos.y, lo.pos.z
+	local lift = WALK_LIFT - 6
+	local hop = false
+	if not ChordClear(ax, ay, az, bx, by, az, lift, STAND_TOP) then
+		if linkRes.StartSolid or not linkRes.Hit then
+			return false
 		end
-		local low, high = Mesh.Cells[lo], Mesh.Cells[hi]
-		low.nbs[#low.nbs + 1] = {j = hi, cost = cost + 55, kind = "jump", seg = SEG_CLIMB}
-		high.nbs[#high.nbs + 1] = {j = lo, cost = cost, kind = "drop", seg = SEG_DROP}
-	else
-		a.nbs[#a.nbs + 1] = {j = j, cost = cost, kind = kind, seg = segType}
-		b.nbs[#b.nbs + 1] = {j = i, cost = cost, kind = kind, seg = segType}
+		local hp = linkRes.HitPos
+		local dx, dy = bx - ax, by - ay
+		local flat = math.sqrt(dx * dx + dy * dy)
+		if flat < 1 then return false end
+		-- The hull stopped LINK_HULL short of the face. Probe just inside it (a
+		-- 2u fence bar) and a little deeper (a coping stone); take the taller.
+		local ux, uy = dx / flat, dy / flat
+		local railZ = GroundZ(hp.x + ux * (LINK_HULL + 1), hp.y + uy * (LINK_HULL + 1), az + RAIL_MAX + 2, az + 1)
+		local deeper = GroundZ(hp.x + ux * (LINK_HULL + 6), hp.y + uy * (LINK_HULL + 6), az + RAIL_MAX + 2, az + 1)
+		if deeper and (not railZ or deeper > railZ) then
+			railZ = deeper
+		end
+		if not railZ or railZ - az > RAIL_MAX then
+			return false
+		end
+		lift = railZ - az + 2
+		if not ChordClear(ax, ay, az, bx, by, az, lift, lift + CROUCH_TOP - CROUCH_LIFT) then
+			return false
+		end
+		hop = true
 	end
+	linkTr.mins.z = 0
+	linkTr.maxs.z = STAND_TOP - WALK_LIFT
+	linkStart:SetUnpacked(bx, by, az + lift)
+	linkEnd:SetUnpacked(bx, by, bz + 2)
+	util.TraceHull(linkTr)
+	if linkRes.StartSolid then
+		return false
+	end
+	if linkRes.Hit and math.abs(linkRes.HitPos.z - bz) > 12 then
+		return false
+	end
+	return true, hop
+end
+
+local function AddDirected(i, j, cost, kind, segType, extra)
+	local a = Mesh.Cells[i]
+	local e = {j = j, cost = cost, kind = kind, seg = segType}
+	if extra then
+		for k, v in pairs(extra) do e[k] = v end
+	end
+	a.nbs[#a.nbs + 1] = e
 	Mesh.LinkCount = Mesh.LinkCount + 1
 end
 
@@ -234,14 +332,20 @@ function Mesh.LinkLadders()
 		return 0
 	end
 	StripLadderNbs()
+	Mesh.LinkedLadders = {}
 	local list = Nav.Climbables
 	if not list or #list == 0 then
 		list = Nav.GetAllLadders and Nav.GetAllLadders() or {}
 	end
 	local n = 0
+	local stairs, noBottom, noTop, flat = 0, 0, 0, 0
 	for i = 1, #list do
 		local ladder = list[i]
-		if Nav.HasLadder(ladder) and (not Nav.IsShaft or Nav.IsShaft(ladder)) then
+		if not Nav.HasLadder(ladder) then
+			-- skip
+		elseif Nav.IsShaft and not Nav.IsShaft(ladder) then
+			stairs = stairs + 1
+		else
 			local b, t = ladder:GetBottom(), ladder:GetTop()
 			if b and t then
 				local rise = math.abs(t.z - b.z)
@@ -249,85 +353,165 @@ function Mesh.LinkLadders()
 				if rise > 120 then
 					snapD, snapZ = 360, 96
 				end
-				local lo = Mesh.NearestOnFloor(b, snapD, snapZ) or Mesh.Nearest(b, snapD, snapZ) or Mesh.Nearest(b, snapD)
-				local hi = Mesh.NearestOnFloor(t, snapD, snapZ) or Mesh.Nearest(t, snapD, snapZ) or Mesh.Nearest(t, snapD)
-				if lo and hi and lo.i ~= hi.i then
+				-- Mount side of the rungs (the cell under the rungs may be the pit floor).
+				local nrm = Nav.LadderNormal and Nav.LadderNormal(ladder) or Vector(0, 0, 0)
+				local bm = Vector(b.x + nrm.x * 24, b.y + nrm.y * 24, b.z)
+				local tm = Vector(t.x - nrm.x * 24, t.y - nrm.y * 24, t.z)
+				local lo = Mesh.NearestOnFloor(bm, snapD, snapZ) or Mesh.NearestOnFloor(b, snapD, snapZ)
+					or Mesh.Nearest(b, snapD, snapZ) or Mesh.Nearest(b, snapD)
+				local hi = Mesh.NearestOnFloor(tm, snapD, snapZ) or Mesh.NearestOnFloor(t, snapD, snapZ)
+					or Mesh.Nearest(t, snapD, snapZ) or Mesh.Nearest(t, snapD)
+				if not lo then
+					noBottom = noBottom + 1
+					if AI.cv.debug:GetInt() > 0 then
+						AI.Log("mesh ladder #%s: no paint at the bottom (%.0f %.0f %.0f)", tostring(ladder.GetID and ladder:GetID() or "?"), b.x, b.y, b.z)
+					end
+				elseif not hi then
+					noTop = noTop + 1
+					if AI.cv.debug:GetInt() > 0 then
+						AI.Log("mesh ladder #%s: no paint at the top (%.0f %.0f %.0f)", tostring(ladder.GetID and ladder:GetID() or "?"), t.x, t.y, t.z)
+					end
+				elseif lo.i == hi.i or math.abs(hi.pos.z - lo.pos.z) < 40 then
+					flat = flat + 1
+				else
 					if lo.pos.z > hi.pos.z then
 						lo, hi = hi, lo
 					end
-					if AddLadderEdge(lo.i, hi.i, ladder, math.abs(t.z - b.z)) then
+					if AddLadderEdge(lo.i, hi.i, ladder, rise) then
 						n = n + 1
+						Mesh.LinkedLadders[ladder.GetID and ladder:GetID() or 0] = true
 					end
 				end
 			end
 		end
 	end
 	Mesh.LadderCount = n
-	AI.Log("mesh ladders %d shafts", n)
+	AI.Log("mesh ladders %d shafts of %d climbables (%d stair volumes, %d no paint at bottom, %d no paint at top, %d same floor)",
+		n, #list, stairs, noBottom, noTop, flat)
+	if Mesh.Linked then
+		Mesh.ComputeComponents()
+	end
 	return n
 end
 
-local function LinkCell(i)
+function Mesh.IsLadderLinked(ladder)
+	if not ladder or not ladder.GetID then return false end
+	return Mesh.LinkedLadders[ladder:GetID()] == true
+end
+
+-- Pair (a, b) seen once (j > i). Walk both ways; else a hop up and the drop
+-- back; else a plain one-way drop from the higher cell.
+local function LinkPair(i, j, a, b, cell, dropZ)
+	local dx, dy, dz = b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z
+	local flat = math.sqrt(dx * dx + dy * dy)
+	if flat < 4 then return end -- same column, another floor
+	local adz = math.abs(dz)
+	local dist = math.sqrt(flat * flat + dz * dz)
+	local near = flat <= cell * 1.6
+
+	if near and adz <= JUMP_Z then
+		local ok, crouch = WalkOK(a, b)
+		if ok then
+			local cost = crouch and dist * 1.6 or dist
+			local extra = crouch and {crouch = true} or nil
+			AddDirected(i, j, cost, "walk", SEG_GROUND, extra)
+			AddDirected(j, i, cost, "walk", SEG_GROUND, extra)
+			return
+		end
+	end
+	if adz <= STEP_Z then return end
+
+	local lo, hi, li, hj = a, b, i, j
+	if dz < 0 then
+		lo, hi, li, hj = b, a, j, i
+	end
+
+	if near and adz <= JUMP_Z and JumpOK(lo, hi) then
+		AddDirected(li, hj, dist + 55, "jump", SEG_CLIMB)
+		AddDirected(hj, li, dist, "drop", SEG_DROP)
+		return
+	end
+
+	if adz > dropZ then return end
+	-- The lip cell sits up to a cell in from the edge and the landing cell up
+	-- to a cell out from the wall base (plus a curb between): three cells of
+	-- reach (and one aside) for every drop height, or low ledges never get a
+	-- landing. Scaling this with the height starved the low ones.
+	if flat > cell * 3.2 then return end
+	local ok, hop = DropOK(hi, lo)
+	if ok then
+		AddDirected(hj, li, dist + adz * 0.5 + 30 + (hop and 60 or 0), "drop", SEG_DROP, hop and {hop = true} or nil)
+	end
+end
+
+local function LinkCell(i, dropZ)
 	local cells = Mesh.Cells
 	local a = cells[i]
 	local cell = CellSize()
-	local maxDz = math.max(JUMP_Z, DROP_Z)
-	local offsets = {
-		{-1, -1}, {-1, 0}, {-1, 1},
-		{0, -1}, {0, 0}, {0, 1},
-		{1, -1}, {1, 0}, {1, 1},
-	}
-	for o = 1, #offsets do
-		local bucket = GridGet(a.gx + offsets[o][1], a.gy + offsets[o][2])
-		if bucket then
-			for bi = 1, #bucket do
-				local j = bucket[bi]
-				if j > i then
-					local b = cells[j]
-					if math.abs(b.pos.z - a.pos.z) <= maxDz then
-						local kind, segType = Classify(a, b, cell)
-						if kind then
-							local dx, dy, dz = b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z
-							local flat = math.sqrt(dx * dx + dy * dy)
-							local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
-							local maxFlat = (kind == "walk") and (cell * 1.8) or (cell * 1.55)
-							if dist > 1 and flat <= maxFlat then
-								local ok
-								if kind == "walk" then
-									ok = AdjacentOK(a.pos.x, a.pos.y, a.pos.z, b.pos.x, b.pos.y, b.pos.z, "walk")
-									-- A 32u curb is "walk" (flat treads / cell*1.05) but the hull
-									-- hits the face. That is a hop, same as a crate.
-									if not ok and math.abs(dz) > 18 and math.abs(dz) <= JUMP_Z then
-										local lo, hi = a, b
-										if a.pos.z > b.pos.z then
-											lo, hi = b, a
-										end
-										ok = AdjacentOK(lo.pos.x, lo.pos.y, lo.pos.z, hi.pos.x, hi.pos.y, hi.pos.z, "jump")
-										kind, segType = "jump", SEG_CLIMB
-									end
-								elseif math.abs(dz) <= JUMP_Z then
-									-- Pair is a hop: test from the lower cell. j>i may be the upper
-									-- one, and Classify then says "drop" — a centreline hull
-									-- still hits the face and the edge never appears.
-									local lo, hi = a, b
-									if a.pos.z > b.pos.z then
-										lo, hi = b, a
-									end
-									ok = AdjacentOK(lo.pos.x, lo.pos.y, lo.pos.z, hi.pos.x, hi.pos.y, hi.pos.z, "jump")
-									kind, segType = "jump", SEG_CLIMB
-								else
-									ok = AdjacentOK(a.pos.x, a.pos.y, a.pos.z, b.pos.x, b.pos.y, b.pos.z, "drop")
-								end
-								if ok then
-									AddEdge(i, j, dist, kind, segType)
-								end
-							end
+	-- Walk/hop partners sit in the 8 neighbouring buckets; a landing may be up
+	-- to three buckets out (the roof cell is inset from the lip, the street cell
+	-- from the wall base).
+	local reach = 3
+	for ox = -reach, reach do
+		for oy = -reach, reach do
+			local bucket = GridGet(a.gx + ox, a.gy + oy)
+			if bucket then
+				local wide = ox < -1 or ox > 1 or oy < -1 or oy > 1
+				for bi = 1, #bucket do
+					local j = bucket[bi]
+					if j > i then
+						local b = cells[j]
+						local adz = math.abs(b.pos.z - a.pos.z)
+						if adz <= dropZ and (not wide or adz > STEP_Z) then
+							LinkPair(i, j, a, b, cell, dropZ)
 						end
 					end
 				end
 			end
 		end
 	end
+end
+
+-- Union-find over all edges (direction ignored): a goal in another component is
+-- unreachable for sure, so A* does not burn its budget draining the island.
+function Mesh.ComputeComponents()
+	local cells = Mesh.Cells
+	local n = #cells
+	local parent = {}
+	for i = 1, n do parent[i] = i end
+	local function find(x)
+		while parent[x] ~= x do
+			parent[x] = parent[parent[x]]
+			x = parent[x]
+		end
+		return x
+	end
+	for i = 1, n do
+		local nbs = cells[i].nbs
+		if nbs then
+			for k = 1, #nbs do
+				local ri, rj = find(i), find(nbs[k].j)
+				if ri ~= rj then parent[ri] = rj end
+			end
+		end
+	end
+	local count, sizes = 0, {}
+	for i = 1, n do
+		local r = find(i)
+		cells[i].comp = r
+		if not sizes[r] then
+			sizes[r] = 0
+			count = count + 1
+		end
+		sizes[r] = sizes[r] + 1
+	end
+	local biggest = 0
+	for _, s in pairs(sizes) do
+		if s > biggest then biggest = s end
+	end
+	Mesh.ComponentCount = count
+	Mesh.BiggestComponent = biggest
+	return count, biggest
 end
 
 function Mesh.StartLink()
@@ -337,17 +521,19 @@ function Mesh.StartLink()
 	Mesh.LinkCount = 0
 	Mesh.Grid = {}
 	Mesh.Blocked = {}
+	Mesh.LinkedLadders = {}
 	local size = CellSize()
 	local cells = Mesh.Cells
 	for i = 1, #cells do
 		local c = cells[i]
 		c.i = i
 		c.nbs = {}
+		c.comp = nil
 		c.gx = math.floor(c.pos.x / size)
 		c.gy = math.floor(c.pos.y / size)
 		GridAdd(c.gx, c.gy, i)
 	end
-	Mesh.Linking = {i = 1, n = #cells, t0 = SysTime(), ping = 0}
+	Mesh.Linking = {i = 1, n = #cells, t0 = SysTime(), ping = 0, dropZ = DropZ()}
 	AI.Log("mesh linking %d cells...", #cells)
 end
 
@@ -357,16 +543,25 @@ function Mesh.LinkStep()
 	local deadline = SysTime() + math.max(0.001, cvBudget:GetFloat() / 1000)
 	local n = job.n
 	while job.i <= n and SysTime() < deadline do
-		LinkCell(job.i)
+		LinkCell(job.i, job.dropZ)
 		job.i = job.i + 1
 	end
 	if job.i > n then
 		local elapsed = SysTime() - job.t0
+		local walks, jumps, drops, crouches = 0, 0, 0, 0
 		for k = 1, n do
 			local c = Mesh.Cells[k]
 			local w = 0
 			for _, e in ipairs(c.nbs) do
-				if e.kind == "walk" then w = w + 1 end
+				if e.kind == "walk" then
+					w = w + 1
+					walks = walks + 1
+					if e.crouch then crouches = crouches + 1 end
+				elseif e.kind == "jump" then
+					jumps = jumps + 1
+				elseif e.kind == "drop" then
+					drops = drops + 1
+				end
 			end
 			-- Outer corners / lips: standable but a fat body snags. Prefer interior.
 			if w <= 2 then
@@ -377,21 +572,12 @@ function Mesh.LinkStep()
 				c.tax = 0
 			end
 		end
-		local jumps, ladders = 0, 0
-		for k = 1, n do
-			for _, e in ipairs(Mesh.Cells[k].nbs) do
-				if e.kind == "jump" then
-					jumps = jumps + 1
-				elseif e.kind == "ladder" then
-					ladders = ladders + 1
-				end
-			end
-		end
 		Mesh.LinkLadders()
-		ladders = (Mesh.LadderCount or 0)
+		local comps, biggest = Mesh.ComputeComponents()
 		Mesh.Linking = nil
 		Mesh.Linked = true
-		AI.Log("mesh linked %d cells, %d edges (%d jump, %d ladders) in %.1fs", n, Mesh.LinkCount, jumps, ladders, elapsed)
+		AI.Log("mesh linked %d cells: %d walk (%d crouch), %d jump, %d drop, %d ladders; %d components (largest %d) in %.1fs",
+			n, walks, crouches, jumps, drops, Mesh.LadderCount or 0, comps, biggest, elapsed)
 		return
 	end
 	if CurTime() >= job.ping then
@@ -469,11 +655,15 @@ function Mesh.Snap(pos, maxDist)
 	return c and Vector(c.pos.x, c.pos.y, c.pos.z) or pos
 end
 
+-- Wander target: a cell in our own component when we know it (no wandering
+-- toward a balcony we cannot reach).
 function Mesh.RandomPointNear(pos, radius)
 	local size = CellSize()
 	local gx, gy = math.floor(pos.x / size), math.floor(pos.y / size)
 	local reach = math.max(1, math.ceil((radius or 600) / size))
-	local pool = {}
+	local here = Mesh.Nearest(pos, 200, 72)
+	local comp = here and here.comp
+	local pool, same = {}, {}
 	local r2 = (radius or 600) * (radius or 600)
 	for dx = -reach, reach do
 		for dy = -reach, reach do
@@ -483,11 +673,15 @@ function Mesh.RandomPointNear(pos, radius)
 					local c = Mesh.Cells[bucket[i]]
 					if pos:DistToSqr(c.pos) <= r2 then
 						pool[#pool + 1] = c
+						if comp and c.comp == comp then
+							same[#same + 1] = c
+						end
 					end
 				end
 			end
 		end
 	end
+	if #same > 0 then pool = same end
 	if #pool == 0 then return nil end
 	local c = pool[math.random(#pool)]
 	return Vector(c.pos.x, c.pos.y, c.pos.z)
@@ -577,61 +771,64 @@ local function Heuristic(a, b)
 	return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
 
-local function AStar(startI, goalI)
+-- Chain of cells from start to `last`, with the edge that entered each cell.
+local function Unwind(last, came, cameEdge)
+	local chain, edgeChain = {}, {}
+	local cur = last
+	while cur do
+		chain[#chain + 1] = cur
+		if came[cur] then
+			edgeChain[#edgeChain + 1] = cameEdge[cur]
+		end
+		cur = came[cur]
+	end
+	local ids, edges = {}, {}
+	for k = #chain, 1, -1 do
+		ids[#ids + 1] = chain[k]
+	end
+	for k = #edgeChain, 1, -1 do
+		edges[#edges + 1] = edgeChain[k]
+	end
+	return ids, edges
+end
+
+-- Returns ids, edges, reached. When the goal cannot be reached (island, one-way
+-- drop, budget) the result is the path to the expanded cell closest to the goal:
+-- the bot walks to the cliff edge under the balcony instead of standing at spawn.
+local function AStar(startI, goalI, expandCap)
+	local cells = Mesh.Cells
 	if startI == goalI then
-		return {startI}, {}, {}, {}
+		return {startI}, {}, true
 	end
 
-	local cells = Mesh.Cells
 	local g = {}
 	local came = {}
-	local cameKind = {}
-	local cameSeg = {}
-	local cameLadder = {}
+	local cameEdge = {}
 	local closed = {}
 	local h = {n = 0, node = {}, f = {}}
+	local goal = cells[goalI]
 	g[startI] = 0
-	HeapPush(h, startI, Heuristic(cells[startI], cells[goalI]))
+	HeapPush(h, startI, Heuristic(cells[startI], goal))
 
 	local expanded = 0
-	local expandCap = MAX_EXPAND
-	if math.abs(cells[startI].pos.z - cells[goalI].pos.z) > 48 then
-		-- Wrong-floor plateau is closer in 3D; A* must drain it before the
-		-- down-then-up chain. Give that search more room.
-		expandCap = MAX_EXPAND * 2
-	end
+	local bestI, bestH = startI, Heuristic(cells[startI], goal)
 	local bad = Nav and Nav.BadLadders
 	local now = CurTime()
 	while h.n > 0 do
 		local i = HeapPop(h)
 		if not closed[i] then
 			if i == goalI then
-				local chain, kindChain, segChain, ladChain = {}, {}, {}, {}
-				local cur = i
-				while cur do
-					chain[#chain + 1] = cur
-					if came[cur] then
-						kindChain[#kindChain + 1] = cameKind[cur]
-						segChain[#segChain + 1] = cameSeg[cur]
-						ladChain[#ladChain + 1] = cameLadder[cur]
-					end
-					cur = came[cur]
-				end
-				local ids, kinds, segs, ladders = {}, {}, {}, {}
-				for k = #chain, 1, -1 do
-					ids[#ids + 1] = chain[k]
-				end
-				for k = #kindChain, 1, -1 do
-					kinds[#kinds + 1] = kindChain[k]
-					segs[#segs + 1] = segChain[k]
-					ladders[#ladders + 1] = ladChain[k]
-				end
-				return ids, kinds, segs, ladders
+				local ids, edges = Unwind(i, came, cameEdge)
+				return ids, edges, true
 			end
 			closed[i] = true
 			expanded = expanded + 1
+			local hi = Heuristic(cells[i], goal)
+			if hi < bestH then
+				bestI, bestH = i, hi
+			end
 			if expanded > expandCap then
-				return nil
+				break
 			end
 			local gi = g[i]
 			local nbs = cells[i].nbs
@@ -650,37 +847,43 @@ local function AStar(startI, goalI)
 						if not g[j] or ng < g[j] then
 							g[j] = ng
 							came[j] = i
-							cameKind[j] = e.kind
-							cameSeg[j] = e.seg
-							cameLadder[j] = e.ladder
-							HeapPush(h, j, ng + Heuristic(cells[j], cells[goalI]))
+							cameEdge[j] = e
+							HeapPush(h, j, ng + Heuristic(cells[j], goal))
 						end
 					end
 				end
 			end
 		end
 	end
-	return nil
+	if bestI == startI then
+		return {startI}, {}, false
+	end
+	local ids, edges = Unwind(bestI, came, cameEdge)
+	return ids, edges, false
 end
 
 -- Stay on cell centres. A taut string hugs the paint boundary (cliff lips,
 -- outer corners). Lookahead on the centre polyline is the smoothing.
--- Only drop a centre that already sits on the line between its neighbours.
--- Waypoints: {pos, freeze, seg, ladder}.
+-- Only drop a centre that already sits on the line between its neighbours and
+-- whose edges match (a crouch run keeps both its ends).
+-- Waypoints: {pos, freeze, crouch, enter, leave}; crouch = the run leaving here.
 local function CollapseWaypoints(pts)
 	if #pts <= 2 then return pts end
 	local out = {pts[1]}
 	for i = 2, #pts - 1 do
-		if pts[i].freeze then
-			out[#out + 1] = pts[i]
+		local cur, nxt = pts[i], pts[i + 1]
+		local prev = out[#out]
+		local cr = cur.crouch or false
+		if cur.freeze or nxt.freeze or cr ~= (nxt.crouch or false) or cr ~= (prev.crouch or false) then
+			out[#out + 1] = cur
 		else
-			local a, b, c = out[#out].pos, pts[i].pos, pts[i + 1].pos
+			local a, b, c = out[#out].pos, cur.pos, nxt.pos
 			local abx, aby = b.x - a.x, b.y - a.y
 			local bcx, bcy = c.x - b.x, c.y - b.y
 			local cross = abx * bcy - aby * bcx
 			local dot = abx * bcx + aby * bcy
 			if math.abs(cross) > 80 or dot <= 0 then
-				out[#out + 1] = pts[i]
+				out[#out + 1] = cur
 			end
 		end
 	end
@@ -771,15 +974,19 @@ function Path:MoveCursorToClosestPosition(worldPos, seek)
 		self._cursor = 0
 		return
 	end
-	local minD = 0
+	-- SEEK_AHEAD looks in a window around the cursor: a path that comes back
+	-- past us (around a building, a switchback) must not pull the cursor onto
+	-- its far leg. Off the window the caller rescans the whole path.
+	local minD, maxD = 0, math.huge
 	if seek == 1 then
 		minD = math.max(0, self._cursor - 64)
+		maxD = self._cursor + 320
 	end
 	local bestD, bestDist = minD, math.huge
 	local wx, wy, wz = worldPos.x, worldPos.y, worldPos.z
 	for i = 1, n - 1 do
 		local a, b = segs[i], segs[i + 1]
-		if b.distanceFromStart >= minD then
+		if b.distanceFromStart >= minD and a.distanceFromStart <= maxD then
 			local span = b.distanceFromStart - a.distanceFromStart
 			local steps = math.max(1, math.ceil(span / 24))
 			for s = 0, steps do
@@ -802,45 +1009,47 @@ function Path:MoveCursorToClosestPosition(worldPos, seek)
 	self._cursor = bestD
 end
 
-local function BuildPath(from, goal, ids, kinds, segsType, ladders)
+-- Segments follow the Source PathFollower convention the locomotion reads:
+-- seg.type is how to move from this waypoint to the next one (the lip carries
+-- DROP, the launch cell CLIMB, the ladder foot LADDER_UP plus seg.ladder). The
+-- type comes from the graph edge, never from the Z of a chord: a long straight
+-- ramp collapses into one steep GROUND segment and stays a walk. Both ends of a
+-- hop, drop or shaft chord are kept; crouch runs keep their boundaries.
+local function BuildPath(from, goal, ids, edges)
 	local cells = Mesh.Cells
-	ladders = ladders or {}
-	local pts = {{pos = Vector(from.x, from.y, from.z), freeze = false, seg = SEG_GROUND}}
+	local pts = {{pos = Vector(from.x, from.y, from.z)}}
 	for k = 1, #ids do
 		local p = cells[ids[k]].pos
-		local kind = kinds[k - 1]
-		pts[#pts + 1] = {
-			pos = Vector(p.x, p.y, p.z),
-			freeze = kind == "jump" or kind == "drop" or kind == "ladder",
-			seg = segsType[k - 1] or SEG_GROUND,
-			ladder = ladders[k - 1],
-		}
+		pts[#pts + 1] = {pos = Vector(p.x, p.y, p.z), enter = edges[k - 1]}
 	end
 	local lastCell = cells[ids[#ids]].pos
-	local onFloor = math.abs(goal.z - lastCell.z) < 48 and goal:DistToSqr(lastCell) <= 96 * 96
+	local onFloor = math.abs(goal.z - lastCell.z) < 48 and goal:DistToSqr(lastCell) <= 128 * 128
 	if onFloor then
-		pts[#pts + 1] = {pos = Vector(goal.x, goal.y, goal.z), freeze = false, seg = SEG_GROUND}
+		pts[#pts + 1] = {pos = Vector(goal.x, goal.y, goal.z)}
+	end
+	for i = 1, #pts do
+		local wp = pts[i]
+		local nxt = pts[i + 1]
+		local leave = nxt and nxt.enter
+		local ek = wp.enter and wp.enter.kind
+		local lk = leave and leave.kind
+		wp.leave = leave
+		wp.freeze = (ek ~= nil and ek ~= "walk") or (lk ~= nil and lk ~= "walk")
+		wp.crouch = (leave and leave.crouch) and true or false
 	end
 
 	local pulled = CollapseWaypoints(pts)
 	local path = NewPath()
 	local dist = 0
 	local prev
-	local walkRise = math.max(WALK_Z, (Mesh.CellSize or 40) * 1.05) + 2
 	for i = 1, #pulled do
 		local wp = pulled[i]
 		local p = wp.pos
 		if prev then
 			dist = dist + prev:Distance(p)
 		end
-		local segType = wp.seg or SEG_GROUND
-		if segType == SEG_GROUND and prev then
-			if (p.z - prev.z) > walkRise then
-				segType = SEG_CLIMB
-			elseif (prev.z - p.z) > walkRise then
-				segType = SEG_DROP
-			end
-		end
+		local leave = wp.leave
+		local segType = leave and leave.seg or SEG_GROUND
 		path._segs[i] = {
 			pos = p,
 			distanceFromStart = dist,
@@ -848,7 +1057,9 @@ local function BuildPath(from, goal, ids, kinds, segsType, ladders)
 			how = segType,
 			length = prev and prev:Distance(p) or 0,
 			area = nil,
-			ladder = wp.ladder,
+			ladder = leave and leave.ladder or nil,
+			crouch = wp.crouch or nil,
+			hop = leave and leave.hop or nil, -- DROP over a rail: jump at the lip
 		}
 		prev = p
 	end
@@ -859,109 +1070,17 @@ local function BuildPath(from, goal, ids, kinds, segsType, ladders)
 	return path
 end
 
--- Walk to a drop / ladder / jump that leaves this floor toward goal.
--- Spawn roofs often cannot A* to a human below (goal cell missing or islands);
--- without this they stand still and HandleHopeless resets the fail counter.
-function Mesh.FindLeaveFloor(from, goal)
-	local startC = Mesh.NearestOnFloor(from, 240, 56) or Mesh.Nearest(from, 240, 72) or Mesh.Nearest(from, 240)
-	if not startC or not goal then
-		return nil, false, startC
-	end
-	local cells = Mesh.Cells
-	local startZ = startC.pos.z
-	local closed = {[startC.i] = true}
-	local came, cameKind, cameSeg, cameLad = {}, {}, {}, {}
-	local q = {startC.i}
-	local bestI, bestJ, bestE, bestScore
-	local head = 1
-	local nq = 1
-	while head <= nq do
-		local i = q[head]
-		head = head + 1
-		local nbs = cells[i].nbs
-		if nbs then
-			for n = 1, #nbs do
-				local e = nbs[n]
-				local j = e.j
-				local kind = e.kind
-				local jz = cells[j].pos.z
-				local leaves = kind == "ladder"
-					or (kind == "drop" and jz < startZ - 40)
-					or (kind == "jump" and jz > startZ + 40 and goal.z > from.z + 24)
-				if leaves then
-					local land = cells[j].pos
-					local dx, dy, dz = land.x - goal.x, land.y - goal.y, land.z - goal.z
-					local score = dx * dx + dy * dy + dz * dz * 0.2
-					if kind == "ladder" then
-						score = score * 0.45
-					end
-					if not bestJ or score < bestScore then
-						bestI, bestJ, bestE, bestScore = i, j, e, score
-					end
-				end
-				if not closed[j] then
-					closed[j] = true
-					came[j] = i
-					cameKind[j] = kind
-					cameSeg[j] = e.seg
-					cameLad[j] = e.ladder
-					nq = nq + 1
-					q[nq] = j
-					if nq > MAX_EXPAND then
-						break
-					end
-				end
-			end
-		end
-		if nq > MAX_EXPAND then
-			break
-		end
-	end
-	if not bestJ then
-		return nil, false, startC
-	end
-
-	local chain, kindChain, segChain, ladChain = {}, {}, {}, {}
-	local cur = bestI
-	while cur do
-		chain[#chain + 1] = cur
-		if came[cur] then
-			kindChain[#kindChain + 1] = cameKind[cur]
-			segChain[#segChain + 1] = cameSeg[cur]
-			ladChain[#ladChain + 1] = cameLad[cur]
-		end
-		cur = came[cur]
-	end
-	local ids, kinds, segsType, ladders = {}, {}, {}, {}
-	for k = #chain, 1, -1 do
-		ids[#ids + 1] = chain[k]
-	end
-	for k = #kindChain, 1, -1 do
-		kinds[#kinds + 1] = kindChain[k]
-		segsType[#segsType + 1] = segChain[k]
-		ladders[#ladders + 1] = ladChain[k]
-	end
-	ids[#ids + 1] = bestJ
-	kinds[#kinds + 1] = bestE.kind
-	segsType[#segsType + 1] = bestE.seg
-	ladders[#ladders + 1] = bestE.ladder
-	local land = cells[bestJ].pos
-	return BuildPath(from, land, ids, kinds, segsType, ladders), false, startC
-end
-
-local function PathLeavesFloor(path)
-	if not path or not path.GetAllSegments then return false end
+local function PathUsesLadder(path)
 	local segs = path:GetAllSegments()
 	for i = 1, #segs do
-		local t = segs[i].type
-		if t == SEG_DROP or t == SEG_LADDER_UP or t == SEG_LADDER_DOWN then
-			return true
-		end
+		if segs[i].ladder ~= nil then return true end
 	end
 	return false
 end
 
-function Mesh.FindPath(from, goal, loose)
+-- Snap start and goal to cells, A*, build. Returns path, reached, startC.
+-- A path that does not reach ends at the closest approach (reached = false).
+function Mesh.FindPath(from, goal)
 	local startC = Mesh.NearestOnFloor(from, 240, 56) or Mesh.Nearest(from, 240, 72) or Mesh.Nearest(from, 240)
 	local cross = math.abs(goal.z - from.z) > 40
 	local goalC = Mesh.NearestOnFloor(goal, 200, 48)
@@ -982,24 +1101,23 @@ function Mesh.FindPath(from, goal, loose)
 	if not goalC then
 		return nil, false, startC
 	end
-	-- Same Z as the sigil but 200u away is the cliff on OUR roof, not the pad.
-	-- loose: ladder mount / same-floor dest — A* to the nearest cell anyway.
-	local gxy = (goal.x - goalC.pos.x) * (goal.x - goalC.pos.x)
-		+ (goal.y - goalC.pos.y) * (goal.y - goalC.pos.y)
-	if gxy > 160 * 160 and not loose then
-		return nil, false, startC
+
+	local cap = MAX_EXPAND
+	if startC.comp and goalC.comp and startC.comp ~= goalC.comp then
+		cap = MAX_EXPAND_ISLAND
+	elseif math.abs(startC.pos.z - goalC.pos.z) > 48 then
+		cap = MAX_EXPAND_CROSS
 	end
-	local ids, kinds, segsType, ladders = AStar(startC.i, goalC.i)
-	if not ids then
-		return nil, false, startC
-	end
-	local path = BuildPath(from, goal, ids, kinds, segsType, ladders)
+	local ids, edges, found = AStar(startC.i, goalC.i, cap)
+	local path = BuildPath(from, goal, ids, edges)
 	local last = Mesh.Cells[ids[#ids]].pos
-	local reached = math.abs(goal.z - last.z) < 48
+	local reached = found and math.abs(goal.z - last.z) < 48
 		and (goal.x - last.x) * (goal.x - last.x) + (goal.y - last.y) * (goal.y - last.y) <= 180 * 180
 	return path, reached, startC
 end
 
+-- Path request on the paint. Returns false only when the bot stands off the
+-- paint (then Source .nav may try); everything else is answered here.
 function Mesh.ComputeNow(bot, goal, opts)
 	opts = opts or {}
 	local pl = bot.Player
@@ -1032,60 +1150,38 @@ function Mesh.ComputeNow(bot, goal, opts)
 		return true
 	end
 
-	local hunt = loco and loco.Goal
-	local toHunt = hunt and goal:DistToSqr(hunt) < 80 * 80
-	local path, reached, startC = Mesh.FindPath(from, goal, not toHunt)
-
+	local path, reached, startC = Mesh.FindPath(from, goal)
 	if not startC then
 		stamp()
 		return false
 	end
-
-	if path and reached then
-		return accept(path, true, goal)
-	end
-	if path and path:IsValid() and PathLeavesFloor(path) then
+	if reached or not loco then
 		return accept(path, reached, goal)
 	end
 
-	-- Hunt on another island: a partial path is the cliff under the sigil.
-	-- Same tick: walk the paint to a shaft or a drop instead of standing.
-	local toward = hunt or goal
-	if toHunt and loco then
-		local dx = toward.x - from.x
-		local dy = toward.y - from.y
-		local close = dx * dx + dy * dy < 100 * 100 and math.abs(toward.z - from.z) < 40
-		if not close then
-			loco.NeedLadder = true
-			loco.NextRepath = 0
-			local ladder, up = Nav.FindLadderForGoal(from, toward)
-			if Nav.HasLadder(ladder) then
+	-- Did not reach and the goal is on another floor: a BSP shaft the graph does
+	-- not carry (no cells at an end, CreateNavLadder refused) may still get us
+	-- there. Linked shafts were already open to A*; asking for them again would
+	-- only send the bot to a mount it cannot use.
+	local hunt = loco.Goal
+	local toHunt = hunt and goal:DistToSqr(hunt) < 80 * 80
+	if toHunt and math.abs(goal.z - from.z) > 40 and Nav and Nav.FindLadderForGoal
+	and not (path and PathUsesLadder(path)) then
+		local ladder, up = Nav.FindLadderForGoal(from, goal)
+		if Nav.HasLadder(ladder) and not Mesh.IsLadderLinked(ladder) and loco.LadderMountPos then
+			local mount = loco:LadderMountPos(ladder, up)
+			local snap = Mesh.Snap(mount, 160)
+			local mpath, mreached = Mesh.FindPath(from, snap)
+			if mpath and mreached then
 				loco.ViaLadder = ladder
 				loco.ViaUp = up
-				local mount = loco.LadderMountPos and loco:LadderMountPos(ladder, up)
-				if mount then
-					local snap = (Nav.SnapToMesh and Nav.SnapToMesh(mount, 160)) or mount
-					local mpath, mreached = Mesh.FindPath(from, snap, true)
-					if mpath and mpath:IsValid() then
-						return accept(mpath, mreached, snap)
-					end
-				end
+				loco.NeedLadder = true
+				return accept(mpath, true, snap)
 			end
 		end
-	elseif path and path:IsValid() then
-		return accept(path, reached, goal)
 	end
 
-	local leave = Mesh.FindLeaveFloor(from, toward)
-	if leave and leave:IsValid() then
-		if loco then
-			loco.NeedLadder = true
-			loco.NextRepath = 0
-		end
-		return accept(leave, false, leave:GetEnd())
-	end
-
-	return accept(nil, false, goal)
+	return accept(path, false, goal)
 end
 
 ---------------------------------------------------------------------------
@@ -1128,6 +1224,10 @@ if Nav then
 	function Nav.Status()
 		if Mesh.IsReady() then
 			return string.format("relapse mesh %d cells / %d links", #Mesh.Cells, Mesh.LinkCount or 0)
+		end
+		if Mesh.Building and Mesh.Build then
+			return string.format("relapse mesh painting %d%% (%d cells so far), bots on %s",
+				math.floor(Mesh.Build.done / math.max(1, Mesh.Build.total) * 100), #Mesh.Cells, Nav.SourceStatus())
 		end
 		if Mesh.Linking then
 			local job = Mesh.Linking
