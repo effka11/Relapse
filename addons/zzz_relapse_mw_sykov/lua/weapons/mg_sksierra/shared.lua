@@ -37,7 +37,7 @@ SWEP.GripPoseParameters2 = {"grip_stockhvy_offset"}
 
 SWEP.Base = "mg_base"
 
-SWEP.PrintName = "Винтовка СКС"
+SWEP.PrintName = "СКС"
 SWEP.TranslationName = "wep_sks"
 SWEP.TranslationDescription = "wep_sks_desc"
 SWEP.Category = "Modern Warfare"

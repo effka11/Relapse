@@ -3,11 +3,24 @@ local PANEL = {}
 -- Scratch buffer for HealthCol. Colours come from sh_relapse_theme.lua.
 local colAmmo = Color(0, 0, 0, 255)
 
+-- Hammer nails: one pool, no magazine. Relapse64 in the spare corner (same as infinite mag).
+local function PoolAmmo(wep)
+	if not wep.RelapsePoolAmmo or GetGlobalBool("classicmode") then return end
+
+	local n = wep.GetPrimaryAmmoCount and wep:GetPrimaryAmmoCount() or 0
+	local maxn = wep.Primary and wep.Primary.DefaultClip or 16
+	if not maxn or maxn < 1 then maxn = 16 end
+	return math.max(n, 0), maxn, 0, true
+end
+
 local function AmmoCounts(lp)
 	if not lp:IsValid() or not lp:Alive() or lp:Team() ~= TEAM_HUMAN then return end
 
 	local wep = lp:GetActiveWeapon()
-	if not wep:IsValid() or wep.IsMelee then return end
+	if not wep:IsValid() then return end
+	if wep.IsMelee then
+		return PoolAmmo(wep)
+	end
 
 	local ammotype = wep.ValidPrimaryAmmo and wep:ValidPrimaryAmmo()
 	local primary = wep.Primary

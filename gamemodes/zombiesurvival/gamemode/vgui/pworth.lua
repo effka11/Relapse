@@ -26,19 +26,7 @@ net.Receive("zs_extrastartingworth", function(len)
 	ExtraStartingWorth = net.ReadUInt(16)
 end)
 
-local cvarDefaultCart = CreateClientConVar("zs_defaultcart", "", true, false)
-
-local function DefaultDoClick(btn)
-	if cvarDefaultCart:GetString() == btn.Name then
-		RunConsoleCommand("zs_defaultcart", "")
-		surface.PlaySound("buttons/button11.wav")
-	else
-		RunConsoleCommand("zs_defaultcart", btn.Name)
-		surface.PlaySound("buttons/button14.wav")
-	end
-
-	timer.Simple(0.1, MakepWorth)
-end
+CreateClientConVar("zs_defaultcart", "", true, false)
 
 local remainingworth = 0
 local WorthButtons = {}
@@ -89,100 +77,6 @@ local function ClearCartDoClick()
 	surface.PlaySound("buttons/button11.wav")
 end
 
-local function ClickWorthButton(id)
-	local result = true
-	for _, btn in pairs(WorthButtons) do
-		if not btn then continue end
-
-		if btn.ID == id or btn.Signature == id then
-			result = btn:DoClick(true, true)
-			break
-		end
-	end
-	return result
-end
-
-local function LoadCart(cartid, silent)
-	if not GAMEMODE.SavedCarts[cartid] then return end
-
-	MakepWorth()
-
-	for _, id in pairs(GAMEMODE.SavedCarts[cartid][2]) do
-		if not ClickWorthButton(id) then
-			surface.PlaySound("buttons/button8.wav")
-			return false
-		end
-	end
-
-	if not silent then
-		surface.PlaySound("buttons/combine_button1.wav")
-	end
-
-	return true
-end
-
-local function LoadDoClick(self)
-	LoadCart(self.ID)
-end
-
-local function SaveCurrentCart(name)
-	local tobuy = {}
-	for _, btn in pairs(WorthButtons) do
-		if btn and btn.On and btn.ID then
-			table.insert(tobuy, FindStartingItem(btn.ID).Signature)
-		end
-	end
-
-	for i, cart in ipairs(GAMEMODE.SavedCarts) do
-		if string.lower(cart[1]) == string.lower(name) then
-			cart[1] = name
-			cart[2] = tobuy
-
-			file.Write(GAMEMODE.CartFile, Serialize(GAMEMODE.SavedCarts))
-			print("Saved cart "..tostring(name))
-
-			LoadCart(i, true)
-			return
-		end
-	end
-
-	GAMEMODE.SavedCarts[#GAMEMODE.SavedCarts + 1] = {name, tobuy}
-
-	file.Write(GAMEMODE.CartFile, Serialize(GAMEMODE.SavedCarts))
-	print("Saved cart "..tostring(name))
-
-	LoadCart(#GAMEMODE.SavedCarts, true)
-end
-
-local function SaveDoClick(self)
-	local frame = Derma_StringRequest(
-		RelapseUI.T("shop_save_cart_title"),
-		RelapseUI.T("shop_save_cart_prompt"),
-		RelapseUI.T("shop_save_cart_default"),
-		function(strTextOut) SaveCurrentCart(strTextOut) end,
-		function(strTextOut) end,
-		RelapseUI.T("shop_ok"),
-		RelapseUI.T("shop_cancel")
-	)
-
-	frame:GetChildren()[5]:GetChildren()[2]:SetTextColor(RelapseUI.Col.Ink)
-end
-
-local function DeleteDoClick(self)
-	if GAMEMODE.SavedCarts[self.ID] then
-		table.remove(GAMEMODE.SavedCarts, self.ID)
-		file.Write(GAMEMODE.CartFile, Serialize(GAMEMODE.SavedCarts))
-		surface.PlaySound("buttons/button19.wav")
-		MakepWorth()
-	end
-end
-
-local function QuickCheckDoClick(self)
-	if GAMEMODE.SavedCarts[self.ID] and LoadCart(self.ID, true) then
-		Checkout(GAMEMODE.SavedCarts[self.ID][2])
-	end
-end
-
 local function WorthThink(self)
 	if not IsValid(MySelf) then return end
 	if MySelf:Team() ~= TEAM_HUMAN then
@@ -207,117 +101,20 @@ function MakepWorth()
 
 	local m = L.m
 	local cardW = L.cardW
-	local sheetW = L.sheetW
 	local tabhei = L.tabhei
 	local tabGap = L.tabGap
 
-	local list = vgui.Create("DPanelList", propertysheet)
-	local favName = RelapseUI.T("shop_favorites")
-	local sheet = propertysheet:AddSheet(favName, list, "icon16/heart.png", false, false)
-	sheet.Panel:SetPos(0, tabhei + tabGap)
-	list:EnableVerticalScrollbar(true)
-	RelapseUI.StyleScroll(list)
-	list:SetWide(sheetW)
-	list:SetSpacing(m.gutter)
-	list:SetPadding(m.cardPad)
+	for catid in ipairs(GAMEMODE.ItemCategories) do
+		if catid == ITEMCAT_OTHER then continue end
 
-	local savebutton = EasyButton(nil, RelapseUI.T("shop_save_loadout"), RelapseUI.sPx(8), RelapseUI.sPx(6))
-	savebutton.DoClick = SaveDoClick
-	savebutton:SetFont("Relapse15")
-	savebutton:SetTextColor(RelapseUI.Col.Text)
-	savebutton.Paint = RelapseUI.PaintGhostButton
-	list:AddItem(savebutton)
-
-	local panfont = "Relapse15"
-	local panhei = m.btnH
-
-	local defaultcart = cvarDefaultCart:GetString()
-
-	for i, savetab in ipairs(GAMEMODE.SavedCarts) do
-		local cartpan = vgui.Create("DPanel")
-		cartpan:SetCursor("pointer")
-		cartpan:SetSize(list:GetWide(), panhei)
-		cartpan.Paint = function(self, w, h)
-			RelapseUI.PaintCard(self, w, h, false, false, false)
-		end
-
-		local cartname = savetab[1]
-
-		local x = m.cardPad
-		local limitedscale = 1
-
-		if defaultcart == cartname then
-			local defimage = vgui.Create("DImage", cartpan)
-			defimage:SetImage("icon16/heart.png")
-			defimage:SizeToContents()
-			defimage:SetSize(16 * limitedscale, 16 * limitedscale)
-			defimage:SetMouseInputEnabled(true)
-			defimage:SetTooltip(RelapseUI.T("shop_cart_default"))
-			defimage:SetPos(x, cartpan:GetTall() * 0.5 - defimage:GetTall() * 0.5)
-			x = x + defimage:GetWide() + 8
-		end
-
-		local cartnamelabel = EasyLabel(cartpan, cartname, panfont, RelapseUI.Col.Text)
-		cartnamelabel:SetPos(x, cartpan:GetTall() * 0.5 - cartnamelabel:GetTall() * 0.5)
-
-		x = cartpan:GetWide()
-
-		local checkbutton = vgui.Create("DImageButton", cartpan)
-		checkbutton:SetImage("icon16/accept.png")
-		checkbutton:SizeToContents()
-		checkbutton:SetSize(16 * limitedscale, 16 * limitedscale)
-		checkbutton:SetTooltip(RelapseUI.T("shop_cart_purchase"))
-		x = x - checkbutton:GetWide() - 12
-		checkbutton:SetPos(x, cartpan:GetTall() * 0.5 - checkbutton:GetTall() * 0.5)
-		checkbutton.ID = i
-		checkbutton.DoClick = QuickCheckDoClick
-
-		local loadbutton = vgui.Create("DImageButton", cartpan)
-		loadbutton:SetImage("icon16/folder_go.png")
-		loadbutton:SizeToContents()
-		loadbutton:SetSize(16 * limitedscale, 16 * limitedscale)
-		loadbutton:SetTooltip(RelapseUI.T("shop_cart_load"))
-		x = x - loadbutton:GetWide() - 8
-		loadbutton:SetPos(x, cartpan:GetTall() * 0.5 - loadbutton:GetTall() * 0.5)
-		loadbutton.ID = i
-		loadbutton.DoClick = LoadDoClick
-
-		local defaultbutton = vgui.Create("DImageButton", cartpan)
-		defaultbutton:SetImage("icon16/heart.png")
-		defaultbutton:SizeToContents()
-		defaultbutton:SetSize(16 * limitedscale, 16 * limitedscale)
-		if cartname == defaultcart then
-			defaultbutton:SetTooltip(RelapseUI.T("shop_cart_unset_default"))
-		else
-			defaultbutton:SetTooltip(RelapseUI.T("shop_cart_set_default"))
-		end
-		x = x - defaultbutton:GetWide() - 8
-		defaultbutton:SetPos(x, cartpan:GetTall() * 0.5 - defaultbutton:GetTall() * 0.5)
-		defaultbutton.Name = cartname
-		defaultbutton.DoClick = DefaultDoClick
-
-		local deletebutton = vgui.Create("DImageButton", cartpan)
-		deletebutton:SetImage("icon16/bin.png")
-		deletebutton:SizeToContents()
-		deletebutton:SetSize(16 * limitedscale, 16 * limitedscale)
-		deletebutton:SetTooltip(RelapseUI.T("shop_cart_delete"))
-		x = x - deletebutton:GetWide() - 8
-		deletebutton:SetPos(x, cartpan:GetTall() * 0.5 - loadbutton:GetTall() * 0.5)
-		deletebutton.ID = i
-		deletebutton.DoClick = DeleteDoClick
-
-		list:AddItem(cartpan)
-	end
-
-	for catid, catname in ipairs(GAMEMODE.ItemCategories) do
 		local itemframe = vgui.Create("DScrollPanel", propertysheet)
 		itemframe.Paint = function() return true end
 		RelapseUI.StyleScroll(itemframe)
 		local trinkets = catid == ITEMCAT_TRINKETS
 
-		list = RelapseUI.MakeShopGrid(itemframe, L, trinkets)
+		local list = RelapseUI.MakeShopGrid(itemframe, L, trinkets)
 
-		sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), itemframe, GAMEMODE.ItemCategoryIcons[catid], false, false)
+		local sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), itemframe, GAMEMODE.ItemCategoryIcons[catid], false, false)
 		sheet.Panel:SetPos(0, tabhei + tabGap)
 
 		for i, tab in ipairs(GAMEMODE.Items) do
@@ -361,15 +158,7 @@ function MakepWorth()
 	end
 
 	GAMEMODE:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, MENU_WORTH)
-	GAMEMODE:ConfigureMenuTabs(tabs, tabhei, function(tabpanel)
-		pWorth.Viewer:SetVisible(tabpanel ~= tabs[1])
-	end)
-
-	if #GAMEMODE.SavedCarts == 0 then
-		propertysheet:SetActiveTab(propertysheet.Items[math.min(2, #propertysheet.Items)].Tab)
-	else
-		propertysheet:SwitchToName(favName)
-	end
+	GAMEMODE:ConfigureMenuTabs(tabs, tabhei)
 
 	GAMEMODE:PrecacheKillicons()
 	RelapseUI.FinishShopFrame(frame, propertysheet)

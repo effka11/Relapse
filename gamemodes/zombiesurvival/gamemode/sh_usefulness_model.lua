@@ -160,8 +160,19 @@ end
 function GM:ExtractMeleeUsefulnessValues(swep)
 	if not swep then return nil end
 
+	local r = swep.Relapse
+	if r and r.Melee then
+		return {
+			Type = r.Type or "slash",
+			Damage = r.Damage or 0,
+			SwingDelay = r.Swing or 0,
+			Stopping = r.Stopping or 0,
+			AttackSpeed = 1 / math.max(r.Delay or 0.7, 0.1),
+		}
+	end
+
 	local delay = math.max(swep.Primary and swep.Primary.Delay or 1, 0.1)
-	local hold = swep.HoldType
+	local hold = string.lower(swep.HoldType or "")
 	local class = "blunt"
 	if swep.Unarmed or hold == "fist" then
 		class = "unarmed"
@@ -200,7 +211,8 @@ end
 
 function GM:ComputeWeaponCombatUsefulness(swep)
 	if not swep then return 0 end
-	if swep.IsMelee then
+	local r = swep.Relapse
+	if swep.IsMelee or (r and r.Melee) then
 		return self:ComputeUsefulness("melee", self:ExtractMeleeUsefulnessValues(swep))
 	end
 
@@ -209,7 +221,7 @@ end
 
 function GM:ComputeWeaponUsefulness(swep)
 	local combat = self:ComputeWeaponCombatUsefulness(swep)
-	if not swep or swep.IsMelee then
+	if not swep or swep.IsMelee or (swep.Relapse and swep.Relapse.Melee) then
 		return combat
 	end
 
@@ -313,8 +325,36 @@ GM.RelapseWeapons = {
 			Clip = 8,
 		}
 	},
+	mg_me_t9loadout = {
+		PrintName = "Нож",
+		Description = "A service knife. Issued with the kit: it reaches the one in the doorway, not the one behind him.",
+		TranslationName = "wep_cwknife",
+		TranslationDescription = "wep_cwknife_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_cwknife.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/easy/cw/weapons/wm_me_t9loadout.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(0, 0, -1),
+		PreviewLift = 0.7,
+		PreviewCamScale = 1.65,
+		IsMelee = true,
+		Relapse = {
+			Melee = true,
+			Type = "slash",
+			Damage = 24,
+			Delay = 0.55,
+			Swing = 0.20,
+			Stopping = 40,
+			Range = 48,
+			Weight = 0.32,
+		}
+	},
 	mg_m1911 = {
-		PrintName = "Пистолет 1911",
+		PrintName = "Кольт 1911",
 		Description = "An officer's Colt. Seven fat .45s: heavy in a room\194\160\194\160–\194\160\194\160just loud past it.",
 		TranslationName = "wep_1911",
 		TranslationDescription = "wep_1911_desc",
@@ -340,6 +380,37 @@ GM.RelapseWeapons = {
 			Accuracy = 1.25,
 			Weight = 1.10,
 			Clip = 7,
+		}
+	},
+	mg_p320 = {
+		PrintName = "M19",
+		Description = "A duty pistol. Seventeen 9×19s: the mag lasts, the trigger does not wait.",
+		TranslationName = "wep_m19",
+		TranslationDescription = "wep_m19_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_m19_side.png",
+		PreviewBoneMerge = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_p320.mdl",
+			"models/viper/mw/attachments/attachment_vm_pi_papa320_slide.mdl",
+			"models/viper/mw/attachments/attachment_vm_pi_papa320_mag.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(-0.8, 0, 0.5),
+		PreviewLift = 0.7,
+		PreviewCamScale = 1.4,
+		Ammo = "9x19",
+		Tier = 2,
+		Relapse = {
+			Damage = 23,
+			Delay = 0.15,
+			Reload = 1.5,
+			Kinetic = 0.36,
+			Recoil = 0.65,
+			Accuracy = 1.30,
+			Weight = 0.83,
+			Clip = 17,
+			Automatic = false,
 		}
 	},
 	mg_357 = {
@@ -398,7 +469,7 @@ GM.RelapseWeapons = {
 		}
 	},
 	mg_sksierra = {
-		PrintName = "Винтовка СКС",
+		PrintName = "СКС",
 		Description = "A warehouse carbine. The army is gone, ten 7.62s remain: it reaches past the pistols, the mag does not hurry.",
 		TranslationName = "wep_sks",
 		TranslationDescription = "wep_sks_desc",
@@ -432,7 +503,7 @@ GM.RelapseWeapons = {
 		}
 	},
 	mg_akilo47 = {
-		PrintName = "Автомат АК-47",
+		PrintName = "АК-47",
 		Description = "A warehouse automatic. Thirty 7.62×39s: the SKS's brass, a mag that empties.",
 		TranslationName = "wep_ak47",
 		TranslationDescription = "wep_ak47_desc",
@@ -464,12 +535,46 @@ GM.RelapseWeapons = {
 			Automatic = true,
 		}
 	},
+	mg_mike4 = {
+		PrintName = "M4A1",
+		Description = "A duty carbine. Thirty 5.56×45s: lighter than the AK, the mag still ends.",
+		TranslationName = "wep_m4a1",
+		TranslationDescription = "wep_m4a1_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_m4a1_side3.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_mike4.mdl",
+			"models/viper/mw/attachments/mike4/attachment_vm_ar_mike4_receiver.mdl",
+			"models/viper/mw/attachments/mike4/attachment_vm_ar_mike4_barrel.mdl",
+			"models/viper/mw/attachments/mike4/attachment_vm_ar_mike4_mag.mdl",
+			"models/viper/mw/attachments/mike4/attachment_vm_ar_mike4_stock.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(0, 0, -3),
+		PreviewLift = 2.8,
+		PreviewCamScale = 1.4,
+		Ammo = "556x45",
+		Tier = 3,
+		Relapse = {
+			Damage = 20,
+			Delay = 0.075,
+			Reload = 2.2,
+			Kinetic = 0.28,
+			Recoil = 0.85,
+			Accuracy = 1.10,
+			Weight = 2.88,
+			Clip = 30,
+			Automatic = true,
+		}
+	},
 	mg_oscar12 = {
-		PrintName = "Дробовик Origin-12",
+		PrintName = "Origin-12",
 		Description = "A mag-fed 12 gauge. Eight shells: the pump's brass, a trigger that does not wait.",
 		TranslationName = "wep_origin12",
 		TranslationDescription = "wep_origin12_desc",
-		PreviewIcon = "zombiesurvival/killicons/weapon_zs_origin12_side.png",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_origin12_side3.png",
 		PreviewBoneMerge = true,
 		PreviewHullBounds = true,
 		PreviewParts = {
@@ -500,7 +605,7 @@ GM.RelapseWeapons = {
 		}
 	},
 	mg_valpha = {
-		PrintName = "Автомат АС «Вал»",
+		PrintName = "АС «Вал»",
 		Description = "An integrally suppressed carbine. Twenty 9×39s: it stays quiet, the mag does not last.",
 		TranslationName = "wep_asval",
 		TranslationDescription = "wep_asval_desc",
@@ -532,8 +637,74 @@ GM.RelapseWeapons = {
 			Automatic = true,
 		}
 	},
+	mg_sierrax = {
+		PrintName = "FiNN LMG",
+		Description = "A box-fed LMG. Seventy-five 5.56×45: the box lasts, the recoil stays flat.",
+		TranslationName = "wep_finn",
+		TranslationDescription = "wep_finn_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_finn_side2.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_sierrax.mdl",
+			"models/viper/mw/attachments/sierrax/attachment_vm_lm_sierrax_barrel.mdl",
+			"models/viper/mw/attachments/sierrax/attachment_vm_lm_sierrax_mag.mdl",
+			"models/viper/mw/attachments/sierrax/attachment_vm_lm_sierrax_stock.mdl",
+		},
+		PreviewAngle = Angle(0, 90, 0),
+		PreviewLocalAng = Angle(0, 0, 0),
+		PreviewOffset = Vector(-6, 0, -3),
+		PreviewLift = 2.8,
+		PreviewCamScale = 1.4,
+		Ammo = "556x45",
+		Tier = 4,
+		Relapse = {
+			Damage = 23,
+			Delay = 0.095,
+			Reload = 5.5,
+			Kinetic = 0.22,
+			Recoil = 0.90,
+			Accuracy = 1.15,
+			Weight = 5.10,
+			Clip = 75,
+			Automatic = true,
+		}
+	},
+	mg_aalpha12 = {
+		PrintName = "JAK-12",
+		Description = "A full-auto 12 gauge. Eight shells: Origin's brass, a trigger that does not let go.",
+		TranslationName = "wep_jak12",
+		TranslationDescription = "wep_jak12_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_jak12_side3.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_aalpha12.mdl",
+			"models/viper/mw/attachments/aalpha12/attachment_vm_sh_aalpha12_barrel.mdl",
+			"models/viper/mw/attachments/aalpha12/attachment_vm_sh_aalpha12_mag.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(0, 0, -3),
+		PreviewLift = 2.8,
+		PreviewCamScale = 1.0,
+		Ammo = "12ga",
+		Tier = 4,
+		Relapse = {
+			Damage = 8,
+			Pellets = 9,
+			Delay = 0.20,
+			Reload = 2.5,
+			Kinetic = 0.62,
+			Recoil = 1.50,
+			Accuracy = 4.80,
+			Weight = 4.76,
+			Clip = 8,
+			Automatic = true,
+		}
+	},
 	mg_scharlie = {
-		PrintName = "Винтовка SCAR-H",
+		PrintName = "SCAR-H",
 		Description = "A battle rifle. Twenty 7.62×51: it reaches past the carbines, the mag still ends.",
 		TranslationName = "wep_scar",
 		TranslationDescription = "wep_scar_desc",
@@ -565,8 +736,41 @@ GM.RelapseWeapons = {
 			Automatic = true,
 		}
 	},
+	mg_pkilo = {
+		PrintName = "ПКМ",
+		Description = "A belt-fed GPMG. A hundred 7.62×54R: the belt lasts, the reload does not hurry.",
+		TranslationName = "wep_pkm",
+		TranslationDescription = "wep_pkm_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_pkm_side.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_pkilo.mdl",
+			"models/viper/mw/attachments/pkilo/attachment_vm_lm_pkilo_barrel.mdl",
+			"models/viper/mw/attachments/pkilo/attachment_vm_lm_pkilo_mag.mdl",
+			"models/viper/mw/attachments/pkilo/attachment_vm_lm_pkilo_stock.mdl",
+		},
+		PreviewAngle = Angle(0, 90, 0),
+		PreviewLocalAng = Angle(0, 0, 0),
+		PreviewOffset = Vector(-6, 0, -3),
+		PreviewLift = 2.8,
+		PreviewCamScale = 1.4,
+		Ammo = "762x54r",
+		Tier = 5,
+		Relapse = {
+			Damage = 26,
+			Delay = 0.092,
+			Reload = 8.65,
+			Kinetic = 0.17,
+			Recoil = 1.35,
+			Accuracy = 1.20,
+			Weight = 7.50,
+			Clip = 100,
+			Automatic = true,
+		}
+	},
 	mg_smgolf45 = {
-		PrintName = "Пистолет-пулемёт UMP-45",
+		PrintName = "UMP-45",
 		Description = "A duty .45 SMG. Twenty-five rounds: heavier than the nines, the mag is shorter.",
 		TranslationName = "wep_ump45",
 		TranslationDescription = "wep_ump45_desc",
@@ -601,7 +805,7 @@ GM.RelapseWeapons = {
 		}
 	},
 	mg_mpapa5 = {
-		PrintName = "Пистолет-пулемёт MP5",
+		PrintName = "MP5",
 		Description = "A duty SMG. Thirty 9×19s, closed bolt: it hits where you point, then the mag is empty.",
 		TranslationName = "wep_mp5",
 		TranslationDescription = "wep_mp5_desc",
@@ -637,7 +841,7 @@ GM.RelapseWeapons = {
 		}
 	},
 	mg_uzulu = {
-		PrintName = "Пистолет-пулемёт Uzi",
+		PrintName = "Uzi",
 		Description = "An open-bolt spray. Thirty-two 9×19s: it does not aim, it empties.",
 		TranslationName = "wep_uzi",
 		TranslationDescription = "wep_uzi_desc",
@@ -667,7 +871,25 @@ GM.RelapseWeapons = {
 			Clip = 32,
 			Automatic = true,
 		}
-	}
+	},
+	weapon_zs_hammer = {
+		PreviewParts = {
+			"models/weapons/w_hammer.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(45, 0, 45),
+		PreviewLift = 0.7,
+		PreviewCamScale = 1.6,
+	},
+	weapon_zs_wrench = {
+		PreviewParts = {
+			"models/props_c17/tools_wrench01a.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(45, 0, 45),
+		PreviewLift = 0.7,
+		PreviewCamScale = 1.6,
+	},
 }
 
 function GM:GetWeaponRelapse(src)
@@ -713,8 +935,14 @@ function GM:BindRelapseWeapon(src)
 		src.RelapsePreviewOffset = def.PreviewOffset or src.RelapsePreviewOffset
 		src.RelapsePreviewLift = def.PreviewLift or src.RelapsePreviewLift
 		src.RelapsePreviewCamScale = def.PreviewCamScale or src.RelapsePreviewCamScale
+		if def.IsMelee then
+			src.IsMelee = true
+		end
 		src.Primary = src.Primary or {}
-		if def.Ammo then
+		local melee = (src.Relapse and src.Relapse.Melee) or def.IsMelee
+		if melee then
+			src.Primary.Ammo = "none"
+		elseif def.Ammo then
 			src.Primary.Ammo = def.Ammo
 		elseif isstring(src.Primary.Ammo) then
 			src.Primary.Ammo = string.lower(src.Primary.Ammo)
@@ -769,6 +997,10 @@ function GM:RelapseStatValue(sweptable, id)
 	if not sweptable then return nil end
 	local r = self:GetWeaponRelapse(sweptable)
 	if not r then return nil end
+
+	if r.Melee and (id == "Stability" or id == "Payback" or id == "Clip" or id == "Reload" or id == "Kinetic") then
+		return nil
+	end
 
 	if id == "Payback" then
 		return self:ComputeWeaponPayback(sweptable)

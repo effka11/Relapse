@@ -583,16 +583,10 @@ function GM:ConfigureMenuTabs(tabs, tabhei, callback)
 				me.Image:SetVisible(false)
 				me.Image:SetSize(0, 0)
 			end
-			surface.SetFont(me.m_FontName or "Relapse20")
-			local tw = surface.GetTextSize(me:GetText() or "")
-			local w = tw + RelapseUI.Grid15(3)
-			local h = me:GetTabHeight()
-			if me:GetWide() ~= w or me:GetTall() ~= h then
-				me:SetSize(w, h)
-			end
 			if labelApply then
 				labelApply(me)
 			end
+			RelapseUI.SizeTabButton(me)
 		end
 		tab.PerformLayout = function(me)
 			if IsValid(me.Image) then
@@ -1105,6 +1099,8 @@ function GM:OpenArsenalMenu()
 	local tierPanes = {}
 
 	for catid in ipairs(GAMEMODE.ItemCategories) do
+		if catid == ITEMCAT_OTHER then continue end
+
 		local trinkets = catid == ITEMCAT_TRINKETS
 		local usecats = catid == ITEMCAT_GUNS or catid == ITEMCAT_MELEE
 		local host, grids

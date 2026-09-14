@@ -34,7 +34,7 @@ SWEP.RelapsePreviewCamScale = 1.6
 SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_vert_offset", "grip_vertpro_offset", "grip_killtheclamp_offset"}
 
-SWEP.PrintName = "Пистолет-пулемёт UMP-45"
+SWEP.PrintName = "UMP-45"
 SWEP.TranslationName = "wep_ump45"
 SWEP.TranslationDescription = "wep_ump45_desc"
 SWEP.Category = "Modern Warfare"

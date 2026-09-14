@@ -2067,7 +2067,7 @@ function GM:ScalePlayerDamage(pl, hitgroup, dmginfo)
 		elseif hitgroup == HITGROUP_LEFTLEG or hitgroup == HITGROUP_RIGHTLEG then
 			--if not crouchpunish then
 			if not pl:ShouldCrouchJumpPunish() then
-				dmginfo:SetDamage(dmginfo:GetDamage() / 4)
+				dmginfo:SetDamage(dmginfo:GetDamage() * 0.5)
 			end
 		end
 	end
@@ -3859,10 +3859,32 @@ function GM:DoPlayerDeath(pl, attacker, dmginfo)
 	end
 end
 
-function GM:WeaponEquip(wep)
+function GM:WeaponEquip(wep, owner)
+	owner = owner or (IsValid(wep) and wep:GetOwner())
+
 	if wep.m_WeaponDeploySpeed then
-		timer.Simple(0, function() GAMEMODE:DoChangeDeploySpeed(wep) end)
+		timer.Simple(0, function()
+			if IsValid(wep) then GAMEMODE:DoChangeDeploySpeed(wep) end
+		end)
 	end
+
+	if IsValid(owner) and owner:IsPlayer() then
+		timer.Simple(0, function()
+			if owner:IsValid() and owner:Team() == TEAM_HUMAN then
+				owner:ResetSpeed()
+			end
+		end)
+	end
+end
+
+function GM:PlayerDroppedWeapon(pl, wep)
+	if not IsValid(pl) or pl:Team() ~= TEAM_HUMAN then return end
+
+	timer.Simple(0, function()
+		if pl:IsValid() and pl:Team() == TEAM_HUMAN then
+			pl:ResetSpeed()
+		end
+	end)
 end
 
 function GM:PlayerKilledByPlayer(pl, attacker, inflictor, headshot, dmginfo, is_assistant)
@@ -4080,6 +4102,7 @@ function GM:PlayerSpawn(pl)
 	elseif pl:Team() == TEAM_HUMAN then
 		pl.PointQueue = 0
 		pl.PackedItems = {}
+		pl:SetDTFloat(DT_PLAYER_FLOAT_EXTRAWEIGHT, 0)
 		pl:ClearUselessDamage()
 
 		local desiredname = pl:GetInfo("cl_playermodel")

@@ -10,11 +10,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_oscar12", "zombiesurvival/killicons/weapon_zs_origin12_side.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_origin12_side.png")
+    killicon.Add("mg_oscar12", "zombiesurvival/killicons/weapon_zs_origin12_side3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_origin12_side3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_origin12_side.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_origin12_side3.png"
 -- WM receiver is bodygroup 0 (27k verts — opposite of 680's empty default).
 -- Barrel, mag, stock, and the default sidegrip bone-merge onto tag_*_attach.
 -- DrawModel after SetupBones is +Z. Do not copy 680 yaw 90 (that gun is -X atts).
@@ -36,7 +36,7 @@ SWEP.RelapsePreviewCamScale = 1.4
 SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_vert_offset", "grip_queer_offset"}
 
-SWEP.PrintName = "Дробовик Origin-12"
+SWEP.PrintName = "Origin-12"
 SWEP.TranslationName = "wep_origin12"
 SWEP.TranslationDescription = "wep_origin12_desc"
 SWEP.Category = "Modern Warfare"

@@ -141,6 +141,7 @@ GM:AddStartingItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357")
 GM:AddStartingItem("uzi",				ITEMCAT_GUNS,			15,				"mg_uzulu")
 GM:AddStartingItem("m680",				ITEMCAT_GUNS,			15,				"mg_romeo870")
 GM:AddStartingItem("sks",				ITEMCAT_GUNS,			15,				"mg_sksierra")
+GM:AddStartingItem("cwknife",			ITEMCAT_MELEE,			15,				"mg_me_t9loadout")
 
 GM:RegisterRelapseAmmoShopItems()
 
@@ -181,12 +182,16 @@ GM:AddPointShopItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357", nil, nil, n
 GM:AddPointShopItem("uzi",				ITEMCAT_GUNS,			15,				"mg_uzulu", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_uzulu") end)
 GM:AddPointShopItem("m680",				ITEMCAT_GUNS,			15,				"mg_romeo870", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_romeo870") end)
 GM:AddPointShopItem("sks",				ITEMCAT_GUNS,			15,				"mg_sksierra", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sksierra") end)
+GM:AddPointShopItem("cwknife",			ITEMCAT_MELEE,			15,				"mg_me_t9loadout", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9loadout") end)
 -- Tier 2
 item =
 GM:AddPointShopItem("mp5",				ITEMCAT_GUNS,			30,				"mg_mpapa5", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mpapa5") end)
 item.Tier = 2
 item =
 GM:AddPointShopItem("ump45",			ITEMCAT_GUNS,			30,				"mg_smgolf45", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_smgolf45") end)
+item.Tier = 2
+item =
+GM:AddPointShopItem("m19",				ITEMCAT_GUNS,			30,				"mg_p320", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_p320") end)
 item.Tier = 2
 -- Tier 3
 item =
@@ -195,13 +200,25 @@ item.Tier = 3
 item =
 GM:AddPointShopItem("origin12",			ITEMCAT_GUNS,			45,				"mg_oscar12", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_oscar12") end)
 item.Tier = 3
+item =
+GM:AddPointShopItem("m4a1",				ITEMCAT_GUNS,			45,				"mg_mike4", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mike4") end)
+item.Tier = 3
 -- Tier 4
 item =
 GM:AddPointShopItem("asval",			ITEMCAT_GUNS,			55,				"mg_valpha", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_valpha") end)
 item.Tier = 4
+item =
+GM:AddPointShopItem("finn",				ITEMCAT_GUNS,			55,				"mg_sierrax", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sierrax") end)
+item.Tier = 4
+item =
+GM:AddPointShopItem("jak12",			ITEMCAT_GUNS,			55,				"mg_aalpha12", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_aalpha12") end)
+item.Tier = 4
 -- Tier 5
 item =
 GM:AddPointShopItem("scar",				ITEMCAT_GUNS,			70,				"mg_scharlie", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_scharlie") end)
+item.Tier = 5
+item =
+GM:AddPointShopItem("pkm",				ITEMCAT_GUNS,			70,				"mg_pkilo", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_pkilo") end)
 item.Tier = 5
 
 GM:AddPointShopItem("smgammo",			ITEMCAT_AMMO,			9,				nil,							"36 SMG ammo",					nil,									"ammo_smg",							function(pl) pl:GiveAmmo(36, "smg1", true) end)

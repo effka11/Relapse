@@ -1,8 +1,12 @@
 EFFECT.LifeTime = 0.25
 
+local colGlow = Color(255, 255, 255)
+
 function EFFECT:Init(data)
 	local pos = data:GetOrigin()
 	local ent = data:GetEntity()
+	local c = RelapseUI.Col.Text
+	colGlow.r, colGlow.g, colGlow.b = c.r, c.g, c.b
 
 	self.DieTime = RealTime() + self.LifeTime
 
@@ -20,7 +24,7 @@ function EFFECT:Init(data)
 		particle:SetEndSize(0)
 		particle:SetRoll(math.Rand(0, 360))
 		particle:SetRollDelta(math.Rand(-14, 14))
-		particle:SetColor(0, 120, 255)
+		particle:SetColor(c.r, c.g, c.b)
 		particle:SetVelocity(heading * math.Rand(128, 256))
 		particle:SetAirResistance(256)
 	end
@@ -37,7 +41,6 @@ function EFFECT:Think()
 end
 
 local matGlow = Material("sprites/glow04_noz")
-local colGlow = Color(0, 120, 255)
 function EFFECT:Render()
 	local pos = self.Entity:GetPos()
 	local delta = math.Clamp((self.DieTime - RealTime()) / self.LifeTime, 0, 1)

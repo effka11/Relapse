@@ -1,7 +1,7 @@
 -- Relapse AI zombie brain.
 -- Utility-based intent selection with hysteresis: Hunt (visible or remembered humans),
 -- Sigil (nearest uncorrupted sigil, balanced across bots), Break (something blocks
--- the way), Wander (horde instinct) and Crow (intermission). Perception, locomotion,
+-- the way), Wander (horde instinct) and Crow (crow class only). Perception, locomotion,
 -- view and combat are shared services; this file only decides.
 
 local AI = RelapseAI
@@ -87,7 +87,8 @@ function Brain.OnSpawn(brain, bot)
 	bot.Memory.Targets = {}
 	bot.Debug.State = "spawned"
 
-	if GAMEMODE:GetWaveActive() then
+	-- Idle with god only during wave-0 prep. Intermission is live play.
+	if GAMEMODE:GetWaveActive() or GAMEMODE:GetWave() > 0 then
 		pl:GodDisable()
 	else
 		pl:GodEnable()
@@ -146,7 +147,10 @@ local function PickSigil(bot, bb, now)
 
 	local cur = bb.Sigil
 	if IsValid(cur) and not cur:GetSigilCorrupted() and now < (bb.SigilReeval or 0) then
-		return cur
+		local gave = bb.SigilGaveUp[cur]
+		if not (gave and gave > now) then
+			return cur
+		end
 	end
 	bb.SigilReeval = now + SIGIL_REEVAL
 
@@ -157,20 +161,21 @@ local function PickSigil(bot, bb, now)
 			local load = W.SigilLoad[sigil] or 0
 			if sigil == cur then load = load - 1 end
 
-			local score = pos:Distance(sigil:GetPos()) + load * 350
-			if sigil == cur then score = score * 0.8 end
-
 			local gaveUp = bb.SigilGaveUp[sigil]
 			if gaveUp then
 				if gaveUp > now then
-					score = score + 5000
+					-- Unreachable from here (stood at spawn with no path).
 				else
 					bb.SigilGaveUp[sigil] = nil
+					gaveUp = nil
 				end
 			end
-
-			if not best or score < bestScore then
-				best, bestScore = sigil, score
+			if not gaveUp then
+				local score = pos:Distance(sigil:GetPos()) + load * 350
+				if sigil == cur then score = score * 0.8 end
+				if not best or score < bestScore then
+					best, bestScore = sigil, score
+				end
 			end
 		end
 	end
@@ -235,15 +240,20 @@ end
 local function HandleHopeless(bot, bb, intent, data, now)
 	local loco = bot.Loco
 	if intent == "hunt" and IsValid(data) then
-		-- Still on another floor than the human: keep hunting. Stop() would
-		-- drop the ladder route and ScoreIntents would send us to a sigil.
+		-- Other floor: keep hunting only if we already have a route off this
+		-- pad. Resetting FailedPaths with no path made them repath 16/s and
+		-- stand on spawn forever.
 		if math.abs(data:GetPos().z - bot.Player:GetPos().z) > 36 then
-			loco.StuckEpisodes = 0
-			loco.FailedPaths = 0
-			loco.Exhausted = false
-			loco.PathValid = false
-			loco.NextRepath = 0
-			return
+			if loco.PathValid or AI.Nav.HasLadder(loco.ViaLadder) then
+				loco.StuckEpisodes = 0
+				loco.FailedPaths = 0
+				loco.Exhausted = false
+				return
+			end
+			loco.NeedLadder = true
+			if (loco.FailedPaths or 0) < 4 then
+				return
+			end
 		end
 		bb.IgnoreHumans[data] = now + HOPELESS_HUMAN_COOLDOWN
 		bot.Memory.Targets[data] = nil
@@ -272,8 +282,14 @@ local function DoHunt(bot, bb, target)
 	combat:Think()
 	loco.SpeedFrac = 1
 	loco.ClearPath = true
-	loco:SetGoal(target, combat:GetStandoff())
-	loco:SetHold(combat.InReach)
+	local standoff = combat:GetStandoff()
+	if combat:IsSwinging() then
+		standoff = math.max(16, combat.Reach * 0.45)
+	end
+	loco:SetGoal(target, standoff)
+	-- MeleeDelay is ~0.74s. Holding at first "in reach" freezes short of the
+	-- claw; walk in through the windup the way a player does.
+	loco:SetHold(false)
 
 	-- Looking at someone on another floor yaws us at their XY (under the slab)
 	-- and we walk into the wall instead of along the path to the ladder.
@@ -329,7 +345,11 @@ local function DoSigil(bot, bb, sigil, profile)
 	end
 
 	local aim = combat:GetAimPos()
-	if aim and combat.Dist < 350 then
+	-- Looking at a sigil on another floor yaws us at the XY under it and we
+	-- walk into the gap instead of along the path down and up a ladder.
+	if math.abs(sigil:GetPos().z - pos.z) > 40 then
+		LookAlongPath(bot)
+	elseif aim and combat.Dist < 350 then
 		view:LookAt(aim, "target")
 	else
 		LookAlongPath(bot)
@@ -340,6 +360,13 @@ local function DoBreak(bot, bb, obstacle)
 	local loco, combat, view = bot.Loco, bot.Combat, bot.View
 	combat:SetTarget(obstacle)
 	combat:Think()
+	-- Stay on the rungs. SetGoal would drop the ladder route and walk off.
+	if loco.Ladder then
+		if combat.InReach then
+			loco:TouchObstacle()
+		end
+		return
+	end
 	loco.SpeedFrac = 1
 	loco:SetGoal(combat:GetApproachPos(bot.Player:GetPos()), combat:GetStandoff(), obstacle)
 	loco:SetHold(combat.InReach)
@@ -432,8 +459,8 @@ function Brain.Think(brain, bot, dt)
 		return
 	end
 
-	-- Prep / intermission: stand as a real zombie so TAB matches the bodies in the world.
-	if not GAMEMODE:GetWaveActive() then
+	-- Wave 0: stand so TAB still matches bodies. Between waves they keep hunting.
+	if not GAMEMODE:GetWaveActive() and GAMEMODE:GetWave() == 0 then
 		if not pl:HasGodMode() then pl:GodEnable() end
 		CrowThink(bot, bb)
 		bb.State = "wait"

@@ -11,6 +11,7 @@ local IsValid = IsValid
 local ipairs = ipairs
 
 util.AddNetworkString("RelapseAI.Debug")
+util.AddNetworkString("RelapseAI.DebugCmd")
 
 Debug.Interval = 0.2
 Debug.MaxPathPoints = 24
@@ -26,10 +27,18 @@ local function WriteOptionalVector(vec)
 	end
 end
 
+local function CanWatch(pl, level)
+	if not IsValid(pl) then return false end
+	if level >= 2 then return true end
+	if pl:IsSuperAdmin() then return true end
+	local Mesh = AI.Mesh
+	return Mesh and Mesh.IsOwner and Mesh.IsOwner(pl)
+end
+
 local function Recipients(level)
 	local out = {}
 	for _, pl in ipairs(player.GetHumans()) do
-		if level >= 2 or pl:IsSuperAdmin() then
+		if CanWatch(pl, level) then
 			out[#out + 1] = pl
 		end
 	end
@@ -111,4 +120,28 @@ hook.Add("Think", "RelapseAI.Debug", function()
 	net.WriteFloat(AI.Nav.Stats.AvgMs or 0)
 	net.WriteUInt(math.min(table.Count(AI.Nav.BlockedAreas), 65535), 16)
 	net.Send(recipients)
+end)
+
+local function CanToggle(pl)
+	if not IsValid(pl) then return true end
+	if pl:IsSuperAdmin() then return true end
+	local Mesh = AI.Mesh
+	return Mesh and Mesh.IsOwner and Mesh.IsOwner(pl)
+end
+
+net.Receive("RelapseAI.DebugCmd", function(_, pl)
+	if not CanToggle(pl) then return end
+	local n = net.ReadInt(3)
+	if n < 0 then
+		n = AI.cv.debug:GetInt() > 0 and 0 or 1
+	end
+	n = math.Clamp(n, 0, 2)
+	AI.cv.debug:SetInt(n)
+	local msg = n == 0 and "[Relapse AI] debug overlay off"
+		or (n >= 2 and "[Relapse AI] debug overlay on (everyone)" or "[Relapse AI] debug overlay on")
+	print(msg)
+	if IsValid(pl) then
+		pl:PrintMessage(HUD_PRINTCONSOLE, msg)
+		pl:ChatPrint(msg)
+	end
 end)

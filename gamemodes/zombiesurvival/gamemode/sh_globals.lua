@@ -44,6 +44,7 @@ DT_PLAYER_BOOL_NECRO = 7
 DT_PLAYER_BOOL_FRAIL = 8
 DT_PLAYER_FLOAT_WIDELOAD = 5
 DT_PLAYER_FLOAT_PHANTOMHEALTH = 6
+DT_PLAYER_FLOAT_EXTRAWEIGHT = 7
 
 VOICESET_MALE = 0
 VOICESET_FEMALE = 1
@@ -141,6 +142,8 @@ GM.SkeletonPointRatio = GM.HumanoidZombiePointRatio/3
 
 -- IRL human movement. 1 Source unit = 1 inch (player is ~6 ft), so 1 km/h ≈ 10.94 u/s.
 -- Walk ~8.7 km/h (95). Run ~22 km/h (240).
+-- Unladen adult. Extra kg (guns now; ammo/armor later) scales speed as body/(body+load).
+GM.HumanBodyMass = 75
 SPEED_NORMAL = 95
 SPEED_SLOWEST = SPEED_NORMAL - 20
 SPEED_SLOWER = SPEED_NORMAL - 14

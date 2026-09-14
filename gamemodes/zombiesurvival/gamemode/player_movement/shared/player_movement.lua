@@ -37,6 +37,14 @@ local M_KeyDown = M_CMoveData.KeyDown
 -- Shift is IN_SPEED. Run anim / MW sprint follow the button; engine speed
 -- follows a sticky SprintEnable flag that can stay off after SprintDisable
 -- (round restart used to disable it after human spawn). Apply walk/run here.
+-- Ghosting (Z) already caps speed in Move; drop IN_SPEED so anims do not sprint.
+function GM:StartCommand(pl, cmd)
+	if P_Team(pl) ~= TEAM_HUMAN then return end
+	if not P_GetBarricadeGhosting(pl) then return end
+
+	cmd:RemoveKey(IN_SPEED)
+end
+
 function GM:SetupMove(pl, move, cmd)
 	if P_Team(pl) ~= TEAM_HUMAN then return end
 	if E_GetMoveType(pl) == MOVETYPE_NOCLIP then return end

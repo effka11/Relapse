@@ -625,3 +625,93 @@ concommand.Add("zs_shitmap_tomover", function(sender, command, arguments)
 		sender:SetPos(ent:WorldSpaceCenter())
 	end
 end)
+
+local function RelapseAddPointsReply(pl, msg)
+	print(msg)
+	if IsValid(pl) then
+		pl:PrintMessage(HUD_PRINTCONSOLE, msg)
+		pl:ChatPrint(msg)
+	end
+end
+
+local function RelapseAddPointsAllowed(pl)
+	if not IsValid(pl) then return true end
+	if pl:IsSuperAdmin() then return true end
+	local Mesh = RelapseAI and RelapseAI.Mesh
+	return Mesh and Mesh.IsOwner and Mesh.IsOwner(pl)
+end
+
+local function RelapseFindPlayerByNick(nick)
+	nick = string.Trim(nick or "")
+	if nick == "" then return nil, "empty name" end
+
+	local needle = string.lower(nick)
+	local exact, partial = {}, {}
+	for _, ply in ipairs(player.GetAll()) do
+		local name = string.lower(ply:Nick())
+		if name == needle then
+			exact[#exact + 1] = ply
+		elseif string.find(name, needle, 1, true) then
+			partial[#partial + 1] = ply
+		end
+	end
+
+	local pool = #exact > 0 and exact or partial
+	if #pool == 0 then
+		return nil, "no player named '" .. nick .. "' on the server"
+	end
+	if #pool > 1 then
+		local names = {}
+		for i, ply in ipairs(pool) do
+			names[i] = ply:Nick()
+		end
+		return nil, "ambiguous name '" .. nick .. "': " .. table.concat(names, ", ")
+	end
+
+	return pool[1]
+end
+
+concommand.Add("relapse_addpoints", function(pl, _, args)
+	if not RelapseAddPointsAllowed(pl) then return end
+
+	local usage = "[Relapse] usage: relapse_addpoints <n>  or  relapse_addpoints <nick> <n>"
+	if #args == 0 then
+		RelapseAddPointsReply(pl, usage)
+		return
+	end
+
+	local target, n
+	if #args == 1 then
+		n = tonumber(args[1])
+		target = pl
+		if not IsValid(target) then
+			RelapseAddPointsReply(pl, usage)
+			return
+		end
+	else
+		n = tonumber(args[#args])
+		local err
+		target, err = RelapseFindPlayerByNick(table.concat(args, " ", 1, #args - 1))
+		if not target then
+			RelapseAddPointsReply(pl, "[Relapse] " .. err)
+			return
+		end
+	end
+
+	n = n and math.floor(n) or nil
+	if not n or n == 0 then
+		RelapseAddPointsReply(pl, "[Relapse] n must be a non-zero number")
+		return
+	end
+
+	if not target:IsValidHuman() then
+		RelapseAddPointsReply(pl, "[Relapse] " .. target:Nick() .. " is not playing as a human")
+		return
+	end
+
+	target:SetPoints(math.max(0, target:GetPoints() + n))
+	RelapseAddPointsReply(pl, string.format("[Relapse] gave %d points to %s (now %d)", n, target:Nick(), target:GetPoints()))
+	if target ~= pl then
+		target:ChatPrint(string.format("[Relapse] you received %d points (now %d)", n, target:GetPoints()))
+	end
+end)

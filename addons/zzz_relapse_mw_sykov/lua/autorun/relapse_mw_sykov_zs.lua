@@ -1,4 +1,4 @@
--- Overlay Relapse identity onto MW guns after weapons register.
+-- Overlay Relapse identity onto MW guns and melee after weapons register.
 -- Workshop SWEPs can win the file; the shop still needs Relapse on GetStored.
 
 local function ApplyOne(class, def)
@@ -38,6 +38,43 @@ local function ApplyOne(class, def)
 	end
 	wep.WalkSpeed = SPEED_NORMAL or 95
 	wep.NoDeploySpeedChange = true
+
+	if R.Melee then
+		wep.IsMelee = true
+		wep.Melee = true
+		wep.MeleeDamage = R.Damage
+		wep.MeleeRange = R.Range
+		wep.MeleeKnockBack = R.Stopping
+		wep.SwingTime = R.Swing
+		wep.MeleeDamageType = DMG_SLASH
+		wep.Primary = wep.Primary or {}
+		wep.Primary.Damage = R.Damage
+		wep.Primary.Delay = R.Delay
+		wep.Primary.ClipSize = -1
+		wep.Primary.Ammo = "none"
+		wep.Primary.RPM = math.floor(60 / math.max(R.Delay or 0.5, 0.05) + 0.5)
+		if wep.Bullet then
+			wep.Bullet.Damage = {R.Damage, R.Damage}
+		end
+		local melee = wep.Animations and wep.Animations.Melee
+		if melee then
+			if R.Range then melee.Range = R.Range end
+			if R.Swing then melee.Delay = R.Swing end
+			if R.Delay then melee.Length = R.Delay end
+		end
+		local hit = wep.Animations and wep.Animations.Melee_Hit
+		if hit then
+			hit.Damage = R.Damage
+			if R.Delay then
+				hit.Length = R.Delay * (11 / 15)
+			end
+			hit.DamageType = DMG_SLASH
+			if R.Stopping then
+				hit.DamageForce = R.Stopping * 20
+			end
+		end
+		return
+	end
 
 	wep.Primary = wep.Primary or {}
 	wep.Primary.Damage = R.Damage
@@ -135,7 +172,40 @@ local function ApplyOne(class, def)
 	WrapEmptyGate("CanPrimaryAttack")
 end
 
+-- MW BulletCallbackInternal pre-scales for sandbox: head *0.5 (undo *2), arms/legs *4 (undo *0.25).
+-- Relapse hitgroups are 0.5 legs / 1 body+arms / 2 head, so that *4 on arms is real 4x damage.
+local function WrapMWCallback(wep)
+	if not istable(wep) or not isfunction(wep.BulletCallbackInternal) then return end
+	if wep.RelapseHitgroupsWrapped then return end
+	wep.RelapseHitgroupsWrapped = true
+
+	local old = wep.BulletCallbackInternal
+	wep.BulletCallbackInternal = function(self, tbl, attacker, tr, dmgInfo)
+		local trTorso = setmetatable({HitGroup = HITGROUP_CHEST}, {
+			__index = tr,
+			__newindex = function(_, key, value)
+				tr[key] = value
+			end
+		})
+		return old(self, tbl, attacker, trTorso, dmgInfo)
+	end
+end
+
+local function WrapMWHitgroups()
+	WrapMWCallback(weapons.GetStored("mg_base"))
+	local list = weapons.GetList()
+	if not list then return end
+	for i = 1, #list do
+		local class = list[i].ClassName
+		if class then
+			WrapMWCallback(weapons.GetStored(class))
+		end
+	end
+end
+
 local function ApplyRelapseMWGuns()
+	WrapMWHitgroups()
+
 	local gm = GAMEMODE or GM
 	local defs = gm and gm.RelapseWeapons
 	if not defs then return end

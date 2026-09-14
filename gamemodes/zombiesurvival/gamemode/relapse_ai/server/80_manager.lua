@@ -1,5 +1,5 @@
 -- Relapse AI manager: keeps relapse_ai_zombies AI zombies on the server while a
--- real player is connected (idle until wave 1, hunting from wave 1), wires the
+-- real player is connected (idle until wave 1, hunting from wave 1 and between waves), wires the
 -- engine hooks (StartCommand/Think/spawn/death) to the bots, and exposes admin commands.
 --
 -- Never create a NextBot player on a server without a real client: it breaks the
@@ -142,7 +142,7 @@ function Mgr.Maintain(reason)
 		if not AI.Nav or not AI.Nav.IsReady() then
 			if not Mgr.WarnedNav then
 				Mgr.WarnedNav = true
-				AI.Log("no AI zombies: temporary Source nav %s. Walking still uses .nav until Relapse mesh exists.", AI.Nav and AI.Nav.Status() or "module missing")
+				AI.Log("no AI zombies: %s", AI.Nav and AI.Nav.Status() or "nav module missing")
 			end
 			return
 		end
@@ -379,8 +379,38 @@ concommand.Add("relapse_ai_status", function(pl)
 end)
 
 concommand.Add("relapse_ai_debug_toggle", function(pl)
-	if not IsAllowed(pl) then return end
+	local Mesh = AI.Mesh
+	if IsValid(pl) and not pl:IsSuperAdmin() and not (Mesh and Mesh.IsOwner and Mesh.IsOwner(pl)) then
+		return
+	end
 	local cur = AI.cv.debug:GetInt()
 	AI.cv.debug:SetInt(cur > 0 and 0 or 1)
-	Reply(pl, "[Relapse AI] debug overlay " .. (cur > 0 and "off" or "on (superadmins)"))
+	Reply(pl, "[Relapse AI] debug overlay " .. (cur > 0 and "off" or "on"))
+end)
+
+concommand.Add("relapse_startwave", function(pl)
+	local Mesh = AI.Mesh
+	if IsValid(pl) and not pl:IsSuperAdmin() and not (Mesh and Mesh.IsOwner and Mesh.IsOwner(pl)) then
+		return
+	end
+
+	local gm = GAMEMODE
+	if not gm then return end
+
+	local function say(msg)
+		Reply(pl, msg)
+		if IsValid(pl) then pl:ChatPrint(msg) end
+	end
+
+	if gm.RoundEnded then
+		say("[Relapse] round is over")
+		return
+	end
+	if gm:GetWaveActive() then
+		say("[Relapse] wave " .. gm:GetWave() .. " is already running")
+		return
+	end
+
+	gm:SetWaveStart(CurTime())
+	say("[Relapse] skipped prep/intermission — wave starts now")
 end)

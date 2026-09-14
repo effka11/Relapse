@@ -1,6 +1,6 @@
 SWEP.Base = "weapon_zs_basemelee"
 
-SWEP.PrintName = "Плотницкий молоток"
+SWEP.PrintName = "Молоток"
 SWEP.TranslationName = "wep_hammer"
 SWEP.TranslationDescription = "wep_hammer_desc"
 SWEP.Description = "A carpenter's hammer. It drives nails, pulls them, and mends the ones that hold. The board lasts as long as the nail."
@@ -11,11 +11,22 @@ SWEP.ViewModel = "models/weapons/v_hammer/c_hammer.mdl"
 SWEP.WorldModel = "models/weapons/w_hammer.mdl"
 SWEP.UseHands = true
 
+-- WM handle is +Z (same as 1911). Pitch 45 tips the top toward the camera
+-- (+X); roll 45 leans the head to the right (same sign as gun LocalAng 90).
+SWEP.RelapsePreviewParts = {
+	"models/weapons/w_hammer.mdl",
+}
+SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
+SWEP.RelapsePreviewLocalAng = Angle(45, 0, 45)
+SWEP.RelapsePreviewLift = 0.7
+SWEP.RelapsePreviewCamScale = 1.6
+
 SWEP.Primary.ClipSize = 1
 SWEP.Primary.Automatic = true
 SWEP.Primary.Ammo = "GaussEnergy"
 SWEP.Primary.Delay = 1
 SWEP.Primary.DefaultClip = 16
+SWEP.RelapsePoolAmmo = true
 
 SWEP.Secondary.ClipSize = 1
 SWEP.Secondary.DefaultClip = 1

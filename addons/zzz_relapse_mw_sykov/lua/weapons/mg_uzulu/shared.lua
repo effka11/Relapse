@@ -31,7 +31,7 @@ SWEP.RelapsePreviewCamScale = 1.4
 SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_vert_offset"}
 
-SWEP.PrintName = "Пистолет-пулемёт Uzi"
+SWEP.PrintName = "Uzi"
 SWEP.TranslationName = "wep_uzi"
 SWEP.TranslationDescription = "wep_uzi_desc"
 SWEP.Category = "Modern Warfare"

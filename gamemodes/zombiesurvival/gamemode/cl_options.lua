@@ -271,7 +271,7 @@ cvars.AddChangeCallback("zs_drawpainflash", function(cvar, oldvalue, newvalue)
 	GAMEMODE.DrawPainFlash = tonumber(newvalue) == 1
 end)
 
-GM.DisplayXPHUD = CreateClientConVar("zs_drawxp", "1", true, false):GetBool()
+GM.DisplayXPHUD = CreateClientConVar("zs_drawxp", "0", true, false):GetBool()
 cvars.AddChangeCallback("zs_drawxp", function(cvar, oldvalue, newvalue)
 	GAMEMODE.DisplayXPHUD = tonumber(newvalue) == 1
 	gamemode.Call("EvaluateFilmMode")

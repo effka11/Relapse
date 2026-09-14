@@ -1,7 +1,7 @@
--- Relapse AI locomotion: follows a PathFollower with a moving cursor and a
--- speed-scaled lookahead, converts the wish direction into forward/side moves
--- relative to the current view yaw, handles jumps/ducks, stuck escalation,
--- obstacle probing (barricades) and crowd spreading.
+-- Relapse AI locomotion: follows a path (Relapse mesh cell centres, else PathFollower)
+-- with a moving cursor and a speed-scaled lookahead, converts the wish direction
+-- into forward/side moves relative to the current view yaw, handles jumps/ducks,
+-- stuck escalation, obstacle probing (barricades) and crowd spreading.
 --
 -- Jumping is evidence-based: a jump needs a real ledge in front (higher than the
 -- step, lower than the jump height, room above). Path segment types and nav
@@ -72,7 +72,7 @@ Loco.Defaults = {
 	StuckTime = 0.9,
 	ProgressDist = 20,
 	StepHeight = 18,
-	JumpHeight = 60, -- duck-jump ledge (185 jump power, 600 gravity)
+	JumpHeight = 68, -- 64u crate + duck-jump (185 jump power, 600 gravity)
 	LedgeProbe = 20, -- ledge hull sweep (+8 of hull); short, so stairs stay below step height inside it
 	ProbeDist = 56,
 	ObstacleAccept = 40, -- a breakable further than this from our centre is not "in the way" yet
@@ -129,6 +129,7 @@ function Loco.New(pl, bot)
 	self.ViaLadder = nil -- CNavLadder we are walking to because the goal is on another floor
 	self.ViaUp = nil
 	self.ViaMount = nil
+	self.NeedLadder = false -- mesh path to the hunt goal did not reach this floor
 
 	self.SteerPos = nil
 	self.LookPos = nil
@@ -210,6 +211,7 @@ function Loco:SetGoal(target, tolerance, ignoreEnt)
 		self.Exhausted = false
 		self.ExhaustedSince = nil
 		self.StuckEpisodes = 0
+		self.NeedLadder = false
 	end
 end
 
@@ -230,7 +232,11 @@ function Loco:Stop()
 	self.NeedRepath = false
 	self.ViaLadder = nil
 	self.ViaUp = nil
+	self.WalkDest = nil
+	self.NeedLadder = false
 	self.ClearPath = false
+	self.Path = nil
+	if self.Bot then self.Bot.Path = nil end
 	-- Halfway up a ladder we finish the climb; anything else is dropped.
 	if self.Ladder and self.Player:GetMoveType() ~= MOVETYPE_LADDER then
 		self:EndLadder("stop")
@@ -273,17 +279,39 @@ end
 -- got stuck on it), we are repeatedly stuck, or no path can be found at all.
 function Loco:IsHopeless()
 	if self.Ladder then return false end
-	if AI.Nav.HasLadder(self.ViaLadder) then return false end
-	-- Under a player on another floor is not failure: DestForGoal should send
-	-- us to a ladder. Giving up here makes the brain walk off to a sigil.
-	if self.Goal and math_abs(self.Goal.z - self.Player:GetPos().z) > 40 then
-		return false
+	if self.PathPending then return false end
+
+	if self.PathValid then
+		-- Other floor / far hunt: keep the path. Giving up walks off the cliff.
+		if self.NeedLadder or AI.Nav.HasLadder(self.ViaLadder) then
+			if self.Exhausted then
+				if self.StuckEpisodes >= 1 then return true end
+				if self.ExhaustedSince and CurTime() - self.ExhaustedSince > self.P.ExhaustedGiveUp then
+					return true
+				end
+			end
+			return self.StuckEpisodes >= 3
+		end
+		if self.Goal then
+			local pos = self.Player:GetPos()
+			if math_abs(self.Goal.z - pos.z) > 40 then return false end
+			local dx, dy = self.Goal.x - pos.x, self.Goal.y - pos.y
+			if dx * dx + dy * dy > 160 * 160 then return false end
+		end
+		if self.Exhausted then
+			if self.StuckEpisodes >= 1 then return true end
+			if self.ExhaustedSince and CurTime() - self.ExhaustedSince > self.P.ExhaustedGiveUp then
+				return true
+			end
+		end
+		return self.StuckEpisodes >= 3 or self.FailedPaths >= 3
 	end
-	if self.Exhausted then
-		if self.StuckEpisodes >= 1 then return true end
-		if self.ExhaustedSince and CurTime() - self.ExhaustedSince > self.P.ExhaustedGiveUp then return true end
+
+	-- No path: standing. Two fails used to never count (NeedLadder / far XY).
+	if AI.Nav.HasLadder(self.ViaLadder) and self.Mode == "direct" then
+		return self.StuckEpisodes >= 3
 	end
-	return self.StuckEpisodes >= 3 or self.FailedPaths >= 3
+	return self.FailedPaths >= 2 or self.StuckEpisodes >= 3
 end
 
 ---------------------------------------------------------------------------
@@ -295,29 +323,49 @@ function Loco:OnPathResult(path, reached, goal)
 
 	self.PathPending = false
 	self.Path = path
-	self.PathValid = path:IsValid()
-	self.PathReached = reached
+	if self.Bot then self.Bot.Path = path end
+	self.PathValid = path ~= nil and path.IsValid ~= nil and path:IsValid() == true
+	self.PathReached = reached == true and self.PathValid
 	self.PathTime = CurTime()
 	self.Exhausted = false
-	if reached then self.ExhaustedSince = nil end -- a partial path again keeps the clock running
+	if self.PathReached then self.ExhaustedSince = nil end
 	self.OffPath = false
 
-	if self.PathGoal then
-		self.PathGoal:Set(goal)
-	else
-		self.PathGoal = Vector(goal)
+	if goal then
+		if self.PathGoal then
+			self.PathGoal:Set(goal)
+		else
+			self.PathGoal = Vector(goal)
+		end
 	end
 
 	if self.PathValid then
 		self.PathLength = path:GetLength()
 		self.Segments = path:GetAllSegments()
 		self.SegIndex = 1
-		path:MoveCursorToStart()
+		if path.MoveCursorToStart then path:MoveCursorToStart() end
 		self.FailedPaths = 0
 	else
 		self.PathLength = 0
 		self.Segments = nil
 		self.FailedPaths = self.FailedPaths + 1
+		if self.FailedPaths >= 2 then
+			self:Note("path:fail")
+		end
+	end
+
+	-- Mesh path to the hunt goal (not a ladder mount): if it does not reach,
+	-- the next dest is a shaft — including same-Z roofs that need down+up.
+	local hunt = self.Goal
+	if goal and AI.Mesh and AI.Mesh.IsReady and AI.Mesh.IsReady() and hunt then
+		if goal:DistToSqr(hunt) < 80 * 80 then
+			if reached then
+				self.NeedLadder = false
+			else
+				self.NeedLadder = true
+				self.NextRepath = 0
+			end
+		end
 	end
 
 	-- Asked for a way around a barricade: did we get one?
@@ -397,14 +445,16 @@ function Loco:GetNote(maxAge)
 	return nil
 end
 
-function Loco:Jump(reason)
+function Loco:Jump(reason, noduck)
 	local now = CurTime()
 	if now < self.NextJump or not self.Player:IsOnGround() then return false end
 	self.NextJump = now + 0.9
 	self.JumpUntil = now + 0.06
-	-- Duck-jump: tuck the legs shortly after leaving the ground for extra ledge height.
-	self.DuckFrom = now + 0.12
-	self.DuckUntil = now + 0.65
+	if not noduck then
+		-- Duck-jump: tuck the legs shortly after leaving the ground for extra ledge height.
+		self.DuckFrom = now + 0.12
+		self.DuckUntil = now + 0.65
+	end
 	if reason then self:Note("jump:" .. reason) end
 	return true
 end
@@ -478,14 +528,16 @@ function Loco:ProbeLedge(pos, dx, dy, dist, maxHeight, maxDrop)
 
 	local ex, ey = pos.x + dx * dist, pos.y + dy * dist
 
-	-- Stairs (and no-jump areas) are walked, whatever the geometry looks like.
-	local here = navmesh_GetNavArea(pos, 32)
-	if IsValid(here) and (here:HasAttributes(NAV_STAIRS) or here:HasAttributes(NAV_NO_JUMP)) then
-		return LEDGE_CLEAR
-	end
-	local there = navmesh_GetNavArea(Vector(ex, ey, pos.z + maxHeight), maxHeight + 32)
-	if IsValid(there) and there:HasAttributes(NAV_STAIRS) then
-		return LEDGE_CLEAR
+	-- Source STAIRS / NO_JUMP lie on curbs. The Relapse skin is the authority.
+	if not (AI.Mesh and AI.Mesh.IsReady and AI.Mesh.IsReady()) then
+		local here = navmesh_GetNavArea(pos, 32)
+		if IsValid(here) and (here:HasAttributes(NAV_STAIRS) or here:HasAttributes(NAV_NO_JUMP)) then
+			return LEDGE_CLEAR
+		end
+		local there = navmesh_GetNavArea(Vector(ex, ey, pos.z + maxHeight), maxHeight + 32)
+		if IsValid(there) and there:HasAttributes(NAV_STAIRS) then
+			return LEDGE_CLEAR
+		end
 	end
 
 	-- A hull lifted by the step height only hits what a step cannot take.
@@ -493,7 +545,24 @@ function Loco:ProbeLedge(pos, dx, dy, dist, maxHeight, maxDrop)
 	ledgeTrace.start = Vector(pos.x, pos.y, z)
 	ledgeTrace.endpos = Vector(ex, ey, z)
 	local tr = util_TraceHull(ledgeTrace)
-	if tr.StartSolid then return LEDGE_WALL end
+	if tr.StartSolid then
+		-- Overlapping a crate we walked into: back up and try again.
+		ledgeTrace.start = Vector(pos.x - dx * 16, pos.y - dy * 16, z)
+		tr = util_TraceHull(ledgeTrace)
+		if tr.StartSolid then
+			-- Pressed into a curb: is there a standable top within jump height?
+			landingTrace.start = Vector(pos.x + dx * 28, pos.y + dy * 28, pos.z + maxHeight + 1)
+			landingTrace.endpos = Vector(pos.x + dx * 28, pos.y + dy * 28, pos.z + 2)
+			local down = util_TraceLine(landingTrace)
+			if down.Hit and (not down.HitNormal or down.HitNormal.z > WALKABLE_Z) then
+				local h = down.HitPos.z - pos.z
+				if h > P.StepHeight and h <= maxHeight then
+					return LEDGE_JUMP
+				end
+			end
+			return LEDGE_WALL
+		end
+	end
 	if not tr.Hit or tr.HitNormal.z > WALKABLE_Z then return LEDGE_CLEAR end
 
 	-- How high is it? Look down just inside its face, from the highest top we could take.
@@ -506,7 +575,14 @@ function Loco:ProbeLedge(pos, dx, dy, dist, maxHeight, maxDrop)
 	if down.StartSolid then return LEDGE_WALL end -- taller than we can jump
 	local h = down.Hit and (down.HitPos.z - pos.z) or 0
 	if h > maxHeight then return LEDGE_WALL end
-	if h < P.StepHeight then h = maxHeight end -- too thin to look down on (railing, wire): assume the worst
+	if h < P.StepHeight then
+		-- Stair riser: a short down-hit. Treating it as a railing made every
+		-- stair a hop once we stopped trusting Source NAV_STAIRS on the mesh.
+		if AI.Mesh and AI.Mesh.IsReady and AI.Mesh.IsReady() then
+			return LEDGE_CLEAR
+		end
+		h = maxHeight -- too thin to look down on (railing, wire): assume the worst
+	end
 
 	-- Something to land on beyond it (not a railing over a pit).
 	landingTrace.start = Vector(ex, ey, topZ)
@@ -545,6 +621,19 @@ end
 
 local function IsPhysicsPropClass(class)
 	return string.sub(class, 1, 12) == "prop_physics"
+		or class == "func_physbox" or class == "func_physbox_multiplayer"
+end
+
+-- Unnailed physics we are standing on: hop off, never punch the floor.
+function Loco:OnLooseProp()
+	local g = self.Player:GetGroundEntity()
+	if not IsValid(g) or g:IsWorld() then return nil end
+	local brk, loose = Loco.IsBreakable(g)
+	if brk and loose then return g end
+	if IsPhysicsPropClass(g:GetClass()) and g:GetMoveType() == MOVETYPE_VPHYSICS then
+		return g
+	end
+	return nil
 end
 
 -- Things a zombie should punch through instead of pathing around forever.
@@ -576,6 +665,14 @@ function Loco.IsBreakable(ent)
 	return false
 end
 
+-- Frozen map furniture still blocks a shaft. Punch it; IsBreakable would skip it.
+local function LadderBlockable(ent)
+	local brk, loose = Loco.IsBreakable(ent)
+	if brk then return true, loose end
+	if not IsValid(ent) then return false, false end
+	return IsPhysicsPropClass(ent:GetClass()), true
+end
+
 -- Walk destination for "is this prop in the way": the ladder mount when the
 -- human is upstairs, otherwise the path end / goal.
 function Loco:ClearDest()
@@ -591,6 +688,8 @@ end
 -- Unnailed junk beside the path or under a ledge is not worth a swing.
 function Loco:LooseWorthBreaking(ent, hitPos, generous)
 	if self.Obstacle == ent then return true end
+	-- A shelf in the shaft is the way up, not courtyard clutter.
+	if self.Ladder then return true end
 	if not self.ClearPath then return false end
 	local dest = self:ClearDest()
 	if not dest then return false end
@@ -621,15 +720,16 @@ local function IsBarricade(ent, loose)
 end
 
 -- Put a price on the barricade's area(s) so paths prefer a way around it.
-function Loco:MarkObstacle(ent, now)
+function Loco:MarkObstacle(ent, now, duration, penalty)
 	local Nav = AI.Nav
 	local P = self.P
-	local penalty = Nav.Penalty.Barricade
+	penalty = penalty or Nav.Penalty.Barricade
+	duration = duration or P.BarricadeMark
 	local ids = {}
 
-	local a = Nav.MarkBlockedAt(self.ObstacleHit or ent:WorldSpaceCenter(), P.BarricadeMark, penalty)
+	local a = Nav.MarkBlockedAt(self.ObstacleHit or ent:WorldSpaceCenter(), duration, penalty)
 	if a then ids[#ids + 1] = a:GetID() end
-	local b = Nav.MarkBlockedAt(ent:WorldSpaceCenter(), P.BarricadeMark, penalty)
+	local b = Nav.MarkBlockedAt(ent:WorldSpaceCenter(), duration, penalty)
 	if b and b ~= a then ids[#ids + 1] = b:GetID() end
 
 	self.ObstacleAreas = ids
@@ -654,7 +754,12 @@ function Loco:GetObstacle()
 	if not ent then return nil end
 
 	local now = CurTime()
-	if not IsValid(ent) or not Loco.IsBreakable(ent) then
+	if not IsValid(ent) then
+		self:ClearObstacle(true)
+		return nil
+	end
+	local ok = self.Ladder and LadderBlockable(ent) or Loco.IsBreakable(ent)
+	if not ok then
 		self:ClearObstacle(true) -- gone: the way is open again
 		return nil
 	end
@@ -672,6 +777,11 @@ function Loco:GetObstacle()
 
 	-- Lost contact with it (detoured, pushed back, door swung open) or it is too far.
 	local mypos = self.Player:GetPos()
+	-- On the rungs GroundEntity is often the shelf we are punching.
+	if not self.Ladder and self.Player:GetGroundEntity() == ent then
+		self:ClearObstacle(true)
+		return nil
+	end
 	if now - self.ObstacleSeen > 1.5 or ent:NearestPoint(mypos):DistToSqr(mypos) > 160 * 160 then
 		self:ClearObstacle(IsDoor(ent)) -- a barricade is still there for the mesh; a door may just be open
 		return nil
@@ -701,7 +811,11 @@ function Loco:GetObstacle()
 	if self.DetourUntil > now then return nil end
 
 	if self.ObstacleAreas and now >= self.NextMark then
-		self:MarkObstacle(ent, now)
+		if self.ObstacleLoose then
+			self:MarkObstacle(ent, now, 15, AI.Nav.Penalty.Prop or 450)
+		else
+			self:MarkObstacle(ent, now)
+		end
 	end
 	return ent
 end
@@ -711,7 +825,7 @@ function Loco:SetObstacle(ent, loose, hitPos)
 	local now = CurTime()
 	local ignore = self.IgnoredObstacles[ent]
 	if ignore then
-		if ignore > now then return false end
+		if ignore > now and not self.Ladder then return false end
 		self.IgnoredObstacles[ent] = nil
 	end
 
@@ -726,16 +840,21 @@ function Loco:SetObstacle(ent, loose, hitPos)
 		self.ObstacleAreas = nil
 		self.DetourUntil = 0
 
-		if IsBarricade(ent, loose) then
+		if IsBarricade(ent, loose) or loose then
 			local Nav = AI.Nav
-			local known = Nav.BlockedSince(self.ObstacleHit, Nav.Penalty.Barricade)
-			self:MarkObstacle(ent, now)
-			-- Following a path that does not already pay for this barricade: see whether
-			-- the penalty buys us a way around before swinging.
-			if self.Mode == "path" and not self.Hold and not (known and self.PathTime > known) then
+			local penalty = loose and (Nav.Penalty.Prop or 450) or Nav.Penalty.Barricade
+			local duration = loose and 15 or self.P.BarricadeMark
+			local known = Nav.BlockedSince(self.ObstacleHit, penalty)
+			self:MarkObstacle(ent, now, duration, penalty)
+			-- On a ladder there is no "around": punch or we stall and abort.
+			if self.Ladder then
+				self:Note("break:ladder:" .. ent:GetClass())
+			elseif self.Mode == "path" and not self.Hold and not (known and self.PathTime > known) then
+				-- Following a path that does not already pay for this: see whether
+				-- the penalty buys us a way around before swinging.
 				self.DetourUntil = now + self.P.DetourWait
 				self.NeedRepath = true
-				self:Note("obstacle:" .. ent:GetClass())
+				self:Note((loose and "prop:" or "obstacle:") .. ent:GetClass())
 			else
 				self:Note("break:" .. ent:GetClass())
 			end
@@ -779,9 +898,44 @@ local function ConsiderHit(self, tr, includeLoose, dist)
 end
 
 -- Look at what is in the way along the path. Crawl under it or hop over it when
--- possible; otherwise, if it is breakable, make it the obstacle and return it.
+-- possible; walk around a loose prop; only then, if it is breakable, make it
+-- the obstacle and return it.
 -- includeLoose: stuck — accept a slightly wider corridor for unnailed props.
+function Loco:TrySidestepAround(pos, dx, dy)
+	if CurTime() < self.SideStepUntil then return false end
+	SetProbeContext(self)
+	local rx, ry = -dy, dx
+	local dist = 48
+	for _, s in ipairs({1, -1}) do
+		local sx, sy = pos.x + rx * s * 36, pos.y + ry * s * 36
+		probeTrace.maxs.z = PROBE_BAND
+		probeTrace.start = Vector(sx, sy, pos.z + 24)
+		probeTrace.endpos = Vector(sx + dx * dist, sy + dy * dist, pos.z + 24)
+		local tr = util_TraceHull(probeTrace)
+		if not tr.Hit and not tr.StartSolid then
+			groundTrace.start = Vector(sx, sy, pos.z + 24)
+			groundTrace.endpos = Vector(sx, sy, pos.z - 64)
+			local g = util.TraceLine(groundTrace)
+			if g.Hit and math.abs(g.HitPos.z - pos.z) < 40 then
+				self:SideStepFor(0.55, s)
+				self:Note("prop:around")
+				return true
+			end
+		end
+	end
+	return false
+end
+
 function Loco:ProbeObstacle(pos, includeLoose)
+	local on = self:OnLooseProp()
+	if on then
+		if self.Obstacle == on then
+			self:ClearObstacle(true)
+		end
+		self:Jump("prop:off")
+		return nil
+	end
+
 	local dir = self.PathDir
 	if dir.x == 0 and dir.y == 0 then dir = self.WishDir end
 	local dx, dy = dir.x, dir.y
@@ -799,15 +953,19 @@ function Loco:ProbeObstacle(pos, includeLoose)
 	probeTrace.endpos = Vector(ex, ey, pos.z + 14)
 	local knee = util_TraceHull(probeTrace)
 
-	-- The thing we already decided to break: no second thoughts.
+	-- Still try to hop a loose crate we had started hitting.
 	local cur = self.Obstacle
 	if cur and (chest.Entity == cur or knee.Entity == cur) then
+		if self:ProbeLedge(pos, dx, dy, dist) == LEDGE_JUMP then
+			self:ClearObstacle(true)
+			self:Jump("over")
+			return nil
+		end
 		self.ObstacleSeen = CurTime()
 		return cur
 	end
 
 	if not chest.Hit and not knee.Hit then
-		-- Only the head would hit (low doorway, board across the top): crawl under.
 		probeTrace.maxs.z = PROBE_HEAD
 		probeTrace.start = Vector(pos.x, pos.y, pos.z + 66)
 		probeTrace.endpos = Vector(ex, ey, pos.z + 66)
@@ -817,19 +975,18 @@ function Loco:ProbeObstacle(pos, includeLoose)
 		return nil
 	end
 
+	-- Probe the crate we actually hit (ProbeDist), not the short stair probe.
 	if chest.Hit and not knee.Hit then
-		-- Gap underneath: crawl through, whatever it is. Otherwise maybe over it (railing, crate).
 		if self:CanDuckThrough(pos, dx, dy) then
 			self:Duck(0.5, "under")
 			return nil
 		end
-		if self:ProbeLedge(pos, dx, dy) == LEDGE_JUMP then
+		if self:ProbeLedge(pos, dx, dy, dist) == LEDGE_JUMP then
 			self:Jump("over")
 			return nil
 		end
 	elseif knee.Hit and not chest.Hit then
-		-- Low thing: a step takes it, or a hop does, or it is a real obstacle.
-		local kind = self:ProbeLedge(pos, dx, dy)
+		local kind = self:ProbeLedge(pos, dx, dy, dist)
 		if kind == LEDGE_CLEAR then
 			return nil
 		elseif kind == LEDGE_JUMP then
@@ -837,14 +994,18 @@ function Loco:ProbeObstacle(pos, includeLoose)
 			return nil
 		end
 	else
-		-- Both bands: a window sill, a waist-high wall or a low barricade in the open is still a hop.
-		if self:ProbeLedge(pos, dx, dy) == LEDGE_JUMP then
+		if self:ProbeLedge(pos, dx, dy, dist) == LEDGE_JUMP then
 			self:Jump("sill")
 			return nil
 		end
 	end
 
-	-- Neither under nor over: break it if we can.
+	local hitEnt = (chest.Hit and chest.Entity) or (knee.Hit and knee.Entity)
+	local _, loose = Loco.IsBreakable(hitEnt)
+	if loose and self:TrySidestepAround(pos, dx, dy) then
+		return nil
+	end
+
 	return ConsiderHit(self, chest, includeLoose, dist) or ConsiderHit(self, knee, includeLoose, dist)
 end
 
@@ -988,8 +1149,34 @@ function Loco:LadderSegIsUp(seg, ladder)
 	return self.Player:GetPos().z < (b.z + t.z) * 0.5
 end
 
-function Loco:LadderMountPos(ladder, up)
+-- Which way is the pit? n points away from the wall. The rim is the side
+-- that still has a floor at the top; the pit does not. A flipped GetNormal
+-- used to put the down-mount in the void, so bots spun on the lip.
+local rimRes = {}
+local rimTr = {mask = MASK_PLAYERSOLID_BRUSHONLY, output = rimRes}
+local function FloorZ(x, y, z)
+	rimTr.start = Vector(x, y, z + 24)
+	rimTr.endpos = Vector(x, y, z - 72)
+	util.TraceLine(rimTr)
+	if rimRes.Hit and not rimRes.HitSky then
+		return rimRes.HitPos.z
+	end
+end
+
+function Loco:LadderDownNormal(ladder)
 	local n = AI.Nav.LadderNormal(ladder)
+	local t = ladder:GetTop()
+	local zBack = FloorZ(t.x - n.x * 24, t.y - n.y * 24, t.z)
+	local zFwd = FloorZ(t.x + n.x * 24, t.y + n.y * 24, t.z)
+	local backOk = zBack and math.abs(zBack - t.z) < 48
+	local fwdOk = zFwd and math.abs(zFwd - t.z) < 48
+	if fwdOk and not backOk then
+		return Vector(-n.x, -n.y, 0)
+	end
+	return n
+end
+
+function Loco:LadderMountPos(ladder, up)
 	local P = self.P
 	local v = self.ViaMount
 	if not v then
@@ -997,23 +1184,36 @@ function Loco:LadderMountPos(ladder, up)
 		self.ViaMount = v
 	end
 	if up then
+		local n = AI.Nav.LadderNormal(ladder)
 		local b = ladder:GetBottom()
 		v.x = b.x + n.x * P.LadderMount
 		v.y = b.y + n.y * P.LadderMount
 		v.z = b.z
 	else
+		local n = self:LadderDownNormal(ladder)
 		local t = ladder:GetTop()
-		v.x = t.x - n.x * 20
-		v.y = t.y - n.y * 20
+		v.x = t.x - n.x * 22
+		v.y = t.y - n.y * 22
 		v.z = t.z
+		local z = FloorZ(v.x, v.y, t.z)
+		if z then v.z = z end
 	end
 	return v
 end
 
 -- Goal on another floor: walk to the ladder that leads there, not to the
 -- unreachable XY under the player (A* 's closest area).
+-- A painted ramp is the way up — do not steal dest to a shaft unless the mesh
+-- already failed to reach the hunt goal (NeedLadder). The old |dz|<=76 skip
+-- also blocked real one-storey ladders.
 function Loco:DestForGoal(pos, goal)
-	if math_abs(goal.z - pos.z) < 40 then
+	local dz = math_abs(goal.z - pos.z)
+	if AI.Mesh and AI.Mesh.IsReady() and not self.NeedLadder then
+		self.ViaLadder = nil
+		self.ViaUp = nil
+		return goal
+	end
+	if dz < 40 and not self.NeedLadder then
 		self.ViaLadder = nil
 		self.ViaUp = nil
 		return goal
@@ -1056,7 +1256,7 @@ function Loco:BeginLadder(seg, up)
 	if up == nil then
 		up = self:LadderSegIsUp(seg, ladder)
 	end
-	local n = AI.Nav.LadderNormal(ladder)
+	local n = up and AI.Nav.LadderNormal(ladder) or self:LadderDownNormal(ladder)
 	local bottom, top = ladder:GetBottom(), ladder:GetTop()
 	local P = self.P
 
@@ -1064,8 +1264,9 @@ function Loco:BeginLadder(seg, up)
 	if up then
 		mount = Vector(bottom.x + n.x * P.LadderMount, bottom.y + n.y * P.LadderMount, bottom.z)
 	else
-		-- On the ledge just behind the top edge, facing the drop.
-		mount = Vector(top.x - n.x * 20, top.y - n.y * 20, top.z)
+		mount = Vector(top.x - n.x * 22, top.y - n.y * 22, top.z)
+		local z = FloorZ(mount.x, mount.y, top.z)
+		if z then mount.z = z end
 	end
 
 	self.Ladder = {
@@ -1086,6 +1287,16 @@ function Loco:BeginLadder(seg, up)
 	}
 	self.SideStepUntil = 0
 	self.WishDir:Zero()
+	if not up then
+		local pos = self.Player:GetPos()
+		local rx, ry = pos.x - top.x, pos.y - top.y
+		local front = rx * n.x + ry * n.y
+		local side = math_abs(rx * -n.y + ry * n.x)
+		if front >= -40 and front <= 16 and side <= self.Ladder.HalfWidth + 16
+		and math_abs(pos.z - top.z) < 48 then
+			self.Ladder.Phase = "mount"
+		end
+	end
 	self:Note(up and "ladder:up" or "ladder:down")
 	return true
 end
@@ -1109,6 +1320,45 @@ function Loco:EndLadder(reason)
 	self:Note("ladder:" .. reason)
 end
 
+-- A crate/shelf in the shaft: ProbeObstacle never runs while Ladder is set,
+-- and jumping would let go of the rungs. Trace up and into the wall.
+function Loco:ProbeLadderBlock(pos)
+	local L = self.Ladder
+	if not L or not L.Up then return nil end
+	if L.Phase ~= "climb" and L.Phase ~= "dismount" and L.Phase ~= "mount" then
+		return nil
+	end
+
+	SetProbeContext(self)
+	local n = L.Normal
+	local dist = 52
+	probeTrace.maxs.z = PROBE_BAND
+
+	local sx, sy = pos.x - n.x * 6, pos.y - n.y * 6
+	probeTrace.start = Vector(sx, sy, pos.z + 28)
+	probeTrace.endpos = Vector(sx, sy, pos.z + 28 + dist)
+	local up = util_TraceHull(probeTrace)
+
+	probeTrace.start = Vector(pos.x, pos.y, pos.z + 44)
+	probeTrace.endpos = Vector(pos.x - n.x * dist, pos.y - n.y * dist, pos.z + 44)
+	local wall = util_TraceHull(probeTrace)
+
+	probeTrace.start = Vector(pos.x, pos.y, pos.z + 36)
+	probeTrace.endpos = Vector(pos.x - n.x * 40, pos.y - n.y * 40, pos.z + 72)
+	local diag = util_TraceHull(probeTrace)
+
+	for _, tr in ipairs({up, wall, diag}) do
+		if tr.Hit and not tr.HitWorld and IsValid(tr.Entity) then
+			local brk, loose = LadderBlockable(tr.Entity)
+			if brk then
+				self:SetObstacle(tr.Entity, loose, tr.HitPos)
+				return tr.Entity
+			end
+		end
+	end
+	return nil
+end
+
 -- Could not use it: let go, keep paths off it for a while and find another way.
 function Loco:AbortLadder(reason)
 	local L = self.Ladder
@@ -1125,6 +1375,9 @@ end
 -- Point the head along (fx, fy) tilted by pitch degrees (negative = up).
 local ladderLook = Vector(0, 0, 0)
 function Loco:LadderLook(fx, fy, pitch)
+	local len = math_sqrt(fx * fx + fy * fy)
+	if len < 0.001 then return end
+	fx, fy = fx / len, fy / len
 	local eye = self.Player:EyePos()
 	local r = math_rad(pitch)
 	local flat = 100 * math_cos(r)
@@ -1144,7 +1397,7 @@ local function AtLadderBase(L, pos)
 	if L.Up then
 		return front >= -6 and front <= 30 and side <= L.HalfWidth + 8
 	end
-	return front >= -28 and front <= 8 and side <= L.HalfWidth + 8 and math_abs(pos.z - L.Top.z) < 40
+	return front >= -40 and front <= 16 and side <= L.HalfWidth + 16 and math_abs(pos.z - L.Top.z) < 48
 end
 
 -- Height bookkeeping for stall detection: when did we last gain in the right direction.
@@ -1169,11 +1422,29 @@ function Loco:ThinkLadder(now)
 	local phase = L.Phase
 	local onLadder = pl:GetMoveType() == MOVETYPE_LADDER
 	local pos = pl:GetPos()
+	self:ProbeLadderBlock(pos)
 
-	if phase == "approach" and pos:DistToSqr(L.Mount) > 96 * 96 then
+	local block = self.Obstacle
+	if IsValid(block) and (phase == "climb" or phase == "dismount" or phase == "mount") then
+		-- Look at the shelf so the claw hits; yaw still faces the rungs.
+		local eye = pl:EyePos()
+		local p = block:NearestPoint(eye)
+		if p == block:GetPos() then
+			p = block:WorldSpaceCenter()
+		end
+		self.Bot.View:SetOverride(p)
+	elseif phase == "approach" and pos:DistToSqr(L.Mount) > 96 * 96 then
 		self.Bot.View:ClearOverride() -- far away: the brain's own look is fine
+	elseif phase == "approach" and not L.Up then
+		-- Look where we walk. Facing the pit while backing to the rim is the spin.
+		local dx, dy = L.Mount.x - pos.x, L.Mount.y - pos.y
+		if dx * dx + dy * dy > 36 then
+			self:LadderLook(dx, dy, 8)
+		else
+			self:LadderLook(n.x, n.y, 20)
+		end
 	elseif not L.Up and not onLadder and phase ~= "dismount" then
-		self:LadderLook(n.x, n.y, P.LadderPitchDown * 0.8) -- facing the drop we are about to step into
+		self:LadderLook(n.x, n.y, 25) -- stepping off: face the shaft, not 65° into the hole
 	elseif L.Up and phase == "dismount" then
 		self:LadderLook(-n.x, -n.y, -10)
 	else
@@ -1199,7 +1470,9 @@ function Loco:ThinkLadder(now)
 		end
 	elseif phase == "climb" then
 		if onLadder and L.BestZ and now - L.BestZTime > P.LadderStallTime then
-			if not L.Up and pos.z < L.Bottom.z + 60 then
+			if IsValid(self.Obstacle) then
+				-- Punching a shelf in the shaft: height will not change until it is gone.
+			elseif not L.Up and pos.z < L.Bottom.z + 60 then
 				self:SetLadderPhase("dismount") -- the floor is higher than the rungs end
 			else
 				self:AbortLadder("stall")
@@ -1239,8 +1512,11 @@ function Loco:StepLadder(cmd, viewYaw, buttons, now)
 			self:SetLadderPhase("climb")
 		elseif L.Up then
 			wx, wy = -n.x, -n.y
-		elseif onGround and pos.z > L.Top.z - 30 then
-			wx, wy = n.x, n.y -- walk off the ledge
+		elseif onGround and pos.z > L.Top.z - 36 then
+			wx, wy = n.x, n.y -- walk off the ledge into the shaft
+			if not L.Hopped and self:Jump("ladder:drop", true) then
+				L.Hopped = true
+			end
 		elseif onGround then
 			self:EndLadder("fell") -- landed below without catching the rungs; the path goes on from here
 		else
@@ -1331,26 +1607,17 @@ function Loco:HandleUnplannedLadder(pos, now)
 		end
 	end
 
-	local goal = self.Goal
-	if goal then
-		local helps = math_abs(goal.z - pos.z) > 24
-		if helps then
-			local ladder, up = AI.Nav.NearestUsefulLadder(pos, goal, 96)
-			if not ladder then
-				-- Already on the rungs: ignore the ban and take whatever we are on.
-				for _, l in ipairs((AI.Nav.Climbables and #AI.Nav.Climbables > 0) and AI.Nav.Climbables or AI.Nav.GetAllLadders()) do
-					if AI.Nav.HasLadder(l) then
-						local b = l:GetBottom()
-						local dx, dy = b.x - pos.x, b.y - pos.y
-						if dx * dx + dy * dy < 96 * 96 then
-							ladder = l
-							up = goal.z > (l:GetBottom().z + l:GetTop().z) * 0.5
-							break
-						end
-					end
-				end
-			end
-			if ladder then
+	-- Mesh could not reach: we walked to a real shaft. Stair func_ladder is not that.
+	if self.NeedLadder or AI.Nav.HasLadder(self.ViaLadder) then
+		local ladder, up = self.ViaLadder, self.ViaUp
+		if not AI.Nav.HasLadder(ladder) then
+			ladder, up = AI.Nav.NearestUsefulLadder(pos, self.Goal, 96)
+		end
+		if AI.Nav.HasLadder(ladder) then
+			local b, t = ladder:GetBottom(), ladder:GetTop()
+			local bx, by = b.x - pos.x, b.y - pos.y
+			local tx, ty = t.x - pos.x, t.y - pos.y
+			if bx * bx + by * by < 96 * 96 or tx * tx + ty * ty < 96 * 96 then
 				local fakeType = up and SEG_LADDER_UP or SEG_LADDER_DOWN
 				if self:BeginLadder({ladder = ladder, type = fakeType, how = fakeType}, up) then
 					self:SetLadderPhase("climb")
@@ -1368,7 +1635,12 @@ end
 -- is already sending us to the mount.
 function Loco:ConsiderNearbyLadder(pos)
 	if self.Ladder or not self.Goal then return end
-	if math_abs(self.Goal.z - pos.z) < 40 then return end
+	local via = AI.Nav.HasLadder(self.ViaLadder)
+	if math_abs(self.Goal.z - pos.z) < 40 and not self.NeedLadder and not via then return end
+	-- Walking a connected ramp/stairs: a nearby func_ladder must not grab us.
+	if AI.Mesh and AI.Mesh.IsReady() and not self.NeedLadder and not via then
+		return
+	end
 	local ladder, up = self.ViaLadder, self.ViaUp
 	if not AI.Nav.HasLadder(ladder) then
 		ladder, up = AI.Nav.FindLadderForGoal(pos, self.Goal)
@@ -1437,11 +1709,14 @@ function Loco:CheckSegments(pos)
 				local up = self:LadderSegIsUp(seg, ladder)
 				local mount = up and ladder:GetBottom() or ladder:GetTop()
 				local dx, dy = mount.x - pos.x, mount.y - pos.y
-				-- Segment pos is often the FAR end of the climb, so "ahead" is the
-				-- ladder's length. Start when we are at the rungs, not when the
-				-- cursor has already travelled that length.
 				local flat = dx * dx + dy * dy
+				local prev = j > 1 and segs[j - 1] or nil
+				local startD = prev and prev.distanceFromStart or 0
+				local atLanding = cursor + 32 >= startD
 				local near = flat <= 88 * 88 and math_abs(pos.z - mount.z) < 72
+				if not up then
+					near = (flat <= 140 * 140 and math_abs(pos.z - mount.z) < 56) or atLanding
+				end
 				if near or (ahead <= 72 and flat <= 160 * 160) then
 					local belowTop = pos.z < ladder:GetTop().z - 40
 					if (up and belowTop) or (not up and not belowTop) then
@@ -1451,19 +1726,21 @@ function Loco:CheckSegments(pos)
 			end
 			return
 		elseif seg.type == SEG_CLIMB then
-			if ahead > 28 then return end
+			if ahead > 56 then return end
 			-- seg.pos is the launch point at the bottom, the next segment sits on top.
 			local top = segs[j + 1]
 			local landing = top and top.pos or seg.pos
 			local rise = landing.z - pos.z
-			if ahead >= -(seg.length + 8) and rise > P.StepHeight + 2 and rise <= P.JumpHeight + 12
-			and not (top and IsValid(top.area) and top.area:HasAttributes(NAV_STAIRS)) then
-				-- The path vouches for a ledge here, so look a little further than the blind probes do
-				-- and accept whatever drop the path accepted.
+			if ahead >= -(seg.length + 8) and rise > P.StepHeight + 2 and rise <= P.JumpHeight + 12 then
 				local dx, dy = landing.x - pos.x, landing.y - pos.y
 				local l = math_sqrt(dx * dx + dy * dy)
-				if l > 1 and self:ProbeLedge(pos, dx / l, dy / l, 32, nil, AI.cv.max_drop:GetFloat()) == LEDGE_JUMP then
-					self:Jump("climb")
+				if l > 1 then
+					if AI.Mesh and AI.Mesh.IsReady() then
+						self:Jump("climb")
+					elseif not (top and IsValid(top.area) and top.area:HasAttributes(NAV_STAIRS))
+					and self:ProbeLedge(pos, dx / l, dy / l, 32, nil, AI.cv.max_drop:GetFloat()) == LEDGE_JUMP then
+						self:Jump("climb")
+					end
 				end
 				return
 			end
@@ -1471,6 +1748,24 @@ function Loco:CheckSegments(pos)
 			if ahead <= 12 and ahead >= -8 then
 				self:Jump("gap")
 				return
+			end
+		else
+			-- Walk-classified curb (~32u lip): hop at the face, not after stuck.
+			-- ProbeLedge keeps ramps/stairs (HitNormal.z walkable, or riser < step) walking.
+			local nxt = segs[j + 1]
+			if nxt then
+				local rise = nxt.pos.z - pos.z
+				local aheadN = nxt.distanceFromStart - cursor
+				if aheadN <= 48 and rise > P.StepHeight + 2 and rise <= P.JumpHeight + 12 then
+					local dx, dy = nxt.pos.x - pos.x, nxt.pos.y - pos.y
+					local l = math_sqrt(dx * dx + dy * dy)
+					if l > 8 and l < 64 then
+						if self:ProbeLedge(pos, dx / l, dy / l, 32) == LEDGE_JUMP then
+							self:Jump("curb")
+							return
+						end
+					end
+				end
 			end
 		end
 	end
@@ -1487,7 +1782,8 @@ function Loco:Think(dt)
 	end
 	if pl:GetMoveType() == MOVETYPE_LADDER then
 		self:HandleUnplannedLadder(pl:GetPos(), now)
-		return
+		if self.Ladder then return end
+		-- Stair brush sets MOVETYPE_LADDER. Let go and keep walking the ramp.
 	end
 
 	if self.Mode == "stop" or not self.Goal then
@@ -1508,12 +1804,13 @@ function Loco:Think(dt)
 	end
 
 	local dest = self:DestForGoal(pos, goal)
+	self.WalkDest = dest
 
-	-- Direct hop when the goal is close, on this floor, and the way is clear.
-	-- A ladder shaft looks "clear" vertically, so Z must stay a same-floor check.
-	local dx, dy = goal.x - pos.x, goal.y - pos.y
+	-- Direct toward dest (hunt, or ladder mount). Using the hunt XY while
+	-- ViaLadder walks us off the roof toward the sigil.
+	local dx, dy = dest.x - pos.x, dest.y - pos.y
 	local flat2 = dx * dx + dy * dy
-	if not self.ViaLadder and flat2 < P.DirectDist * P.DirectDist and math_abs(goal.z - pos.z) < 28 and self:IsDirectClear(pos, goal) then
+	if flat2 < P.DirectDist * P.DirectDist and math_abs(dest.z - pos.z) < 28 and self:IsDirectClear(pos, dest) then
 		self.Mode = "direct"
 	elseif self.Mode == "direct" then
 		self.Mode = "path"
@@ -1581,6 +1878,17 @@ function Loco:Think(dt)
 		if self.Ladder then return end
 	end
 
+	-- Unnailed physics: hop off even if the path died (WishDir would be zero).
+	if self:OnLooseProp() then
+		if self.Obstacle then
+			self:ClearObstacle(true)
+		end
+		self:Jump("prop:off")
+		if not self.PathValid then
+			self.NextRepath = 0
+		end
+	end
+
 	-- Stuck detection only while we actually try to move.
 	if (self.Hold and not AI.Nav.HasLadder(self.ViaLadder)) or self:IsGoalReached() or not moving then
 		self:ResetProgress(pos)
@@ -1641,8 +1949,8 @@ function Loco:Step(cmd, viewYaw, dt)
 	local target
 
 	if self.Mode == "direct" then
-		target = goal
-		self.SteerPos = goal
+		target = self.WalkDest or goal
+		self.SteerPos = target
 		self.LookPos = nil
 	elseif self.PathValid and self.Path then
 		local path = self.Path
@@ -1665,6 +1973,25 @@ function Loco:Step(cmd, viewYaw, dt)
 		local look = speed * P.LookAheadSpeedMul
 		if look < P.LookAheadMin then look = P.LookAheadMin elseif look > P.LookAheadMax then look = P.LookAheadMax end
 
+		-- Do not look along the 3D chord into a shaft: that walks us off the
+		-- roof beside the ladder. Stop at the landing and let the climb SM drop.
+		local segs = self.Segments
+		if segs then
+			for j = math.max(1, self.SegIndex), #segs do
+				local s = segs[j]
+				if IsLadderSeg(s) or s.type == SEG_DROP or s.type == SEG_LADDER_DOWN then
+					local prev = segs[j - 1]
+					local capD = prev and prev.distanceFromStart or 0
+					if cursor < capD - 4 then
+						look = math.min(look, capD - cursor)
+					else
+						look = math.min(look, 8)
+					end
+					break
+				end
+			end
+		end
+
 		local length = self.PathLength
 		if cursor + look >= length then
 			target = path:GetEnd()
@@ -1677,9 +2004,19 @@ function Loco:Step(cmd, viewYaw, dt)
 
 		self.LookPos = path:GetPositionOnPath(math_min(cursor + look + 140, length))
 	else
-		-- No path yet.
-		self.WishDir:Zero()
-		return buttons
+		-- No path yet. Walk to a same-floor mount instead of idling at spawn.
+		local dest = self.WalkDest
+		if self:OnLooseProp() then
+			target = goal
+			self.SteerPos = goal
+		elseif dest and AI.Nav.HasLadder(self.ViaLadder) and math_abs(dest.z - pos.z) < 48 then
+			target = dest
+			self.SteerPos = dest
+			self:Note("walk:mount")
+		else
+			self.WishDir:Zero()
+			return buttons
+		end
 	end
 
 	-- Pure path direction (before lane offset and sidesteps): what the probes look along.
@@ -1690,7 +2027,11 @@ function Loco:Step(cmd, viewYaw, dt)
 	end
 
 	-- Lane offset perpendicular to the direction of travel.
+	-- Relapse mesh already insets from cliffs; extra lateral throw walks us off lips.
 	local lane = self.LaneOffset
+	if AI.Mesh and AI.Mesh.IsReady and AI.Mesh.IsReady() then
+		lane = 0
+	end
 	if lane ~= 0 and self.Mode ~= "direct" and plen > 1 then
 		local k = lane * math_min(1, plen / 64) / plen
 		target = Vector(target.x - pdy * k, target.y + pdx * k, target.z)
@@ -1719,6 +2060,18 @@ function Loco:Step(cmd, viewYaw, dt)
 		return buttons
 	end
 	wx, wy = wx / len, wy / len
+
+	-- Curb in the lookahead: hop this tick, do not wait for Think / stuck.
+	local P = self.P
+	local rise = target.z - pos.z
+	if pl:IsOnGround() and len < 56 and rise > P.StepHeight + 2 and rise <= P.JumpHeight + 12 then
+		if self:ProbeLedge(pos, wx, wy, 32) == LEDGE_JUMP then
+			self:Jump("step")
+			if now < self.JumpUntil then
+				buttons = bit_bor(buttons, IN_JUMP)
+			end
+		end
+	end
 
 	if now < self.SideStepUntil then
 		local s = self.SideStep

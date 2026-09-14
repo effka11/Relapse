@@ -33,7 +33,7 @@ SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_vert_offset", "grip_barheavy_offset", "grip_barlight_offset",
 "grip_barshort_offset", "grip_magwell_offset"}
 
-SWEP.PrintName = "Автомат АС «Вал»"
+SWEP.PrintName = "АС «Вал»"
 SWEP.TranslationName = "wep_asval"
 SWEP.TranslationDescription = "wep_asval_desc"
 SWEP.Category = "Modern Warfare"

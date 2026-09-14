@@ -185,7 +185,7 @@ function RelapseUI.MakeSilhouetteIcon(parent, path)
 end
 
 function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
-	if not IsValid(mdlframe) or not tab or tab.Category ~= ITEMCAT_GUNS then
+	if not IsValid(mdlframe) or not tab or (tab.Category ~= ITEMCAT_GUNS and tab.Category ~= ITEMCAT_MELEE) then
 		return false
 	end
 
@@ -482,6 +482,18 @@ function RelapseUI.ShopPreviewModel(sweptable)
 	return nil
 end
 
+function RelapseUI.ShopPreviewAngle(sweptable)
+	if not sweptable then return Angle(8, 90, 0) end
+	if sweptable.RelapsePreviewAngle then
+		return sweptable.RelapsePreviewAngle
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	return (def and def.PreviewAngle) or Angle(8, 90, 0)
+end
+
 function RelapseUI.ShopPreviewLocalAng(sweptable)
 	if not sweptable then return angle_zero end
 	if sweptable.RelapsePreviewLocalAng then
@@ -678,6 +690,7 @@ function RelapseUI.DrawShopPreviewGun(pnl, ent)
 
 	local pos = ent:GetPos()
 	local ang = ent:GetAngles()
+	local drew = false
 	if istable(extras) then
 		for i = 1, #extras do
 			local part = extras[i]
@@ -685,8 +698,12 @@ function RelapseUI.DrawShopPreviewGun(pnl, ent)
 				part:SetPos(pos)
 				part:SetAngles(ang)
 				part:DrawModel()
+				drew = true
 			end
 		end
+	end
+	if not drew then
+		ent:DrawModel()
 	end
 end
 
@@ -983,7 +1000,7 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 		return
 	end
 
-	pnl.RelapsePreviewBaseAng = sweptable.RelapsePreviewAngle or Angle(8, 90, 0)
+	pnl.RelapsePreviewBaseAng = RelapseUI.ShopPreviewAngle(sweptable)
 	pnl.RelapsePreviewLocalAng = RelapseUI.ShopPreviewLocalAng(sweptable)
 	pnl.RelapsePreviewOffset = RelapseUI.ShopPreviewOffset(sweptable)
 	pnl.RelapsePreviewLift = RelapseUI.ShopPreviewLift(sweptable)
@@ -1092,7 +1109,7 @@ end
 
 function RelapseUI.CreateFonts()
 	local s = RelapseUI.S()
-	local rev = 11
+	local rev = 12
 	if RelapseUI._FontS == s and RelapseUI._FontRev == rev then return end
 	RelapseUI._FontS = s
 	RelapseUI._FontRev = rev
@@ -1122,7 +1139,6 @@ function RelapseUI.CreateFonts()
 	mk("Relapse40", 40, 400)
 	mk("Relapse45", 45, 400)
 	mk("Relapse64", 64, 500)
-	mk("RelapseClose", 56, 200)
 end
 
 -- CreateFont size maps to the Windows cell (winAscent 2132 + winDescent 600).
@@ -1163,6 +1179,41 @@ function RelapseUI.ManropeDigitEdges(text, fontH, medium)
 	return first[1] * k, last[2] * k, (MANROPE_DESCENT + yMin) * k
 end
 
+-- lsb, rsb. Shop titles + switch glyphs. Fallback is a typical letter.
+local MANROPE_PAD = {
+	[60] = {280, 386}, -- <
+	[62] = {386, 280}, -- >
+	[108] = {160, 160}, -- l
+	[112] = {139, 80}, -- p
+	[1083] = {40, 140}, -- л
+}
+
+local function LastCodepoint(s)
+	if not isstring(s) or s == "" then return 0 end
+	local i = #s
+	while i > 1 and bit.band(string.byte(s, i), 0xC0) == 0x80 do
+		i = i - 1
+	end
+	local b1 = string.byte(s, i)
+	if not b1 or b1 < 128 then return b1 or 0 end
+	local b2 = (string.byte(s, i + 1) or 128) - 128
+	if b1 < 224 then
+		return (b1 - 192) * 64 + b2
+	end
+	local b3 = (string.byte(s, i + 2) or 128) - 128
+	if b1 < 240 then
+		return (b1 - 224) * 4096 + b2 * 64 + b3
+	end
+	local b4 = (string.byte(s, i + 3) or 128) - 128
+	return (b1 - 240) * 262144 + b2 * 4096 + b3 * 64 + b4
+end
+
+function RelapseUI.ManropeCharPad(code, fontH)
+	local m = MANROPE_PAD[code] or {120, 140}
+	local k = (fontH or 0) / RelapseUI.MANROPE_CELL
+	return m[1] * k, m[2] * k
+end
+
 function RelapseUI.RadPx(key)
 	return RelapseUI.sPx(RelapseUI.Rad[key] or 12)
 end
@@ -1191,6 +1242,19 @@ function RelapseUI.RoundFill(r, x, y, w, h, col)
 	arc(x + w - r, y + h - r, 0, 90)
 	arc(x + r, y + h - r, 90, 180)
 	arc(x + r, y + r, 180, 270)
+	surface.DrawPoly(pts)
+end
+
+function RelapseUI.FillCircle(cx, cy, rad, col)
+	if not col or not rad or rad < 0.75 then return end
+	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
+	draw.NoTexture()
+	local segs = math.max(16, math.floor(rad * 6 + 0.5))
+	local pts = {}
+	for i = 0, segs - 1 do
+		local a = (i / segs) * math.pi * 2
+		pts[#pts + 1] = {x = cx + math.cos(a) * rad, y = cy + math.sin(a) * rad}
+	end
 	surface.DrawPoly(pts)
 end
 
@@ -1386,6 +1450,48 @@ function RelapseUI.PlayFade(panel, target, duration, easeFn, onDone)
 		local e = f.ease(math.Clamp(u, 0, 1))
 		me:SetAlpha(math.floor(f.from + (f.to - f.from) * e + 0.5))
 	end
+end
+
+local function ReleasePopupInput(panel)
+	local focus = vgui.GetKeyboardFocus()
+	if IsValid(focus) then
+		focus:KillFocus()
+	end
+	panel:KillFocus()
+	panel:MouseCapture(false)
+	panel:SetMouseInputEnabled(false)
+	panel:SetKeyboardInputEnabled(false)
+end
+
+function RelapseUI.FadeOpen(panel)
+	if not IsValid(panel) then return end
+	panel._RelapseClosing = nil
+	panel:SetMouseInputEnabled(true)
+	panel:SetAlpha(0)
+	RelapseUI.PlayFade(panel, 255, RelapseUI.Duration(3), RelapseUI.EaseOut)
+end
+
+function RelapseUI.FadeClose(panel, instant, onGone)
+	if not IsValid(panel) then return end
+	if not panel:IsVisible() and not panel._RelapseClosing then return end
+	local finish = function(pnl)
+		if not IsValid(pnl) then return end
+		pnl._RelapseClosing = nil
+		if onGone then
+			onGone(pnl)
+		else
+			pnl:Remove()
+		end
+	end
+	if instant then
+		panel._RelapseFade = nil
+		finish(panel)
+		return
+	end
+	if panel._RelapseClosing then return end
+	panel._RelapseClosing = true
+	ReleasePopupInput(panel)
+	RelapseUI.PlayFade(panel, 0, RelapseUI.Duration(2), RelapseUI.EaseIn, finish)
 end
 
 function RelapseUI.TabStrip(sheet)
@@ -1618,19 +1724,56 @@ function RelapseUI.PaintHudHairBar(x, y, w, h, frac, col, extrafrac, extracol, s
 	end
 end
 
+function RelapseUI.CreateWorldFonts()
+	if RelapseUI._WorldFonts then return end
+	RelapseUI._WorldFonts = true
+	surface.CreateFont("Relapse3D", {
+		font = "Manrope",
+		size = 128,
+		weight = 500,
+		antialias = true,
+		extended = true,
+		shadow = false,
+		outline = false
+	})
+end
+
+local colWorldText = Color(0, 0, 0, 255)
+local matWorldSigil
+
+-- Through-wall sigil: grayscale photo of the post, Fog/Wine multiply, 120° shadow.
+function RelapseUI.PaintWorldSigil(letter, frac, col, alpha)
+	RelapseUI.CreateWorldFonts()
+	if not matWorldSigil then
+		matWorldSigil = Material("zombiesurvival/relapse_sigil.png")
+	end
+	frac = math.Clamp(frac or 0, 0, 1)
+	alpha = math.Clamp(alpha or 255, 0, 255)
+	local c = RelapseUI.Col
+	local shadow = 8
+	local x, y, w, h = -64, -128, 128, 256
+
+	surface.SetMaterial(matWorldSigil)
+	RelapseUI.EachShadow(function(ox, oy)
+		surface.SetDrawColor(c.Shadow.r, c.Shadow.g, c.Shadow.b, alpha)
+		surface.DrawTexturedRect(x + ox, y + oy, w, h)
+	end, shadow)
+	surface.SetDrawColor(col.r, col.g, col.b, alpha)
+	surface.DrawTexturedRect(x, y, w, h)
+	if frac < 0.995 then
+		local missing = 1 - frac
+		surface.SetDrawColor(c.Ink.r, c.Ink.g, c.Ink.b, alpha)
+		surface.DrawTexturedRectUV(x, y, w, h * missing, 0, 0, 1, missing)
+	end
+
+	colWorldText.r, colWorldText.g, colWorldText.b, colWorldText.a = col.r, col.g, col.b, alpha
+	RelapseUI.HudText(letter, "Relapse3D", 0, y + h + 8, colWorldText, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, shadow)
+end
+
 -- Scratch buffers only. Values are always overwritten from RelapseUI.Col.
+-- LerpCol lives next to the token table in sh_relapse_theme.lua.
 local colHealthA = Color(0, 0, 0, 255)
 local colUrgent = Color(0, 0, 0, 255)
-
-function RelapseUI.LerpCol(a, b, t, out)
-	t = math.Clamp(t or 0, 0, 1)
-	out = out or Color(0, 0, 0, 255)
-	out.r = a.r + (b.r - a.r) * t
-	out.g = a.g + (b.g - a.g) * t
-	out.b = a.b + (b.b - a.b) * t
-	out.a = (a.a or 255) + ((b.a or 255) - (a.a or 255)) * t
-	return out
-end
 
 function RelapseUI.HealthCol(frac, out)
 	local c = RelapseUI.Col
@@ -1969,10 +2112,9 @@ end
 function RelapseUI.ShowShopFrame(frame)
 	if not IsValid(frame) then return end
 	frame:SetVisible(true)
-	frame:SetAlpha(0)
-	frame:AlphaTo(255, 0.12, 0)
 	frame:MakePopup()
 	frame:MoveToFront()
+	RelapseUI.FadeOpen(frame)
 end
 
 function RelapseUI.OpenShop(kind)
@@ -1991,6 +2133,21 @@ function RelapseUI.OpenShop(kind)
 	end
 end
 
+local function ShopSwitchFont()
+	return "Relapse30"
+end
+
+local function ShopSwitchGlyph(dir)
+	return (dir or 1) < 0 and "<" or ">"
+end
+
+local function SizeShopSwitch(btn)
+	if not IsValid(btn) then return end
+	surface.SetFont(ShopSwitchFont())
+	local tw, th = surface.GetTextSize(ShopSwitchGlyph(btn.RelapseDir))
+	btn:SetSize(math.max(1, tw), math.max(1, th))
+end
+
 function RelapseUI.PlaceShopSwitch(frame)
 	if not IsValid(frame) then return end
 	local title = frame.RelapseTitle
@@ -1998,35 +2155,49 @@ function RelapseUI.PlaceShopSwitch(frame)
 	local nxt = frame.RelapseShopNext
 	if not IsValid(title) or not IsValid(prev) or not IsValid(nxt) then return end
 
-	local gap = RelapseUI.Grid5(2)
+	SizeShopSwitch(prev)
+	SizeShopSwitch(nxt)
+
+	surface.SetFont(title:GetFont() or "Relapse30")
+	local textW, fontH = surface.GetTextSize(title:GetText() or "")
+	if textW < 1 then
+		textW = title:GetWide()
+		fontH = title:GetTall()
+	end
+	local _, lastRsb = RelapseUI.ManropeCharPad(LastCodepoint(title:GetText() or ""), fontH)
+	lastRsb = math.ceil(lastRsb - 1e-6)
+
+	local gap = RelapseUI.sPx(30)
+	local pair = RelapseUI.Grid15()
 	local tx, ty = title:GetPos()
-	local tw, th = title:GetSize()
+	local th = title:GetTall()
 	local bh = prev:GetTall()
 	local by = ty + math.floor((th - bh) * 0.5)
-	prev:SetPos(tx + tw + gap, by)
-	nxt:SetPos(tx + tw + gap + prev:GetWide(), by)
+	prev:SetPos(tx + textW - lastRsb + gap, by)
+	nxt:SetPos(tx + textW - lastRsb + gap + prev:GetWide() + pair, by)
 end
 
 local function PaintShopSwitch(self, w, h)
 	local c = RelapseUI.Col
 	local on = not self.RelapseCurrent
-	if self.Hovered then
-		RelapseUI.RoundFill(RelapseUI.RadPx("Button"), 0, 0, w, h, c.CardHover)
-	end
-	DrawCentered(self, w, h, (on or self.Hovered) and c.Text or c.Muted)
+	local col = on and c.Text or c.Muted
+	local lsb = math.ceil(RelapseUI.ManropeCharPad(60, h) - 1e-6)
+	draw.SimpleText(ShopSwitchGlyph(self.RelapseDir), ShopSwitchFont(), -lsb, h * 0.5, col, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 	return true
 end
 
 local function MakeShopSwitch(frame, dir, target, current)
 	local btn = vgui.Create("DButton", frame)
-	btn:SetText(dir < 0 and "<" or ">")
-	btn:SetFont("Relapse32")
+	btn:SetText("")
+	btn:SetFont(ShopSwitchFont())
 	btn:SetPaintBackground(false)
-	btn:SetSize(RelapseUI.Grid15(2), RelapseUI.Grid15(2))
+	btn:SetPaintBackgroundEnabled(false)
+	btn.ApplySchemeSettings = function() end
 	btn:SetCursor(current and "arrow" or "hand")
 	btn.RelapseDir = dir
 	btn.RelapseTarget = target
 	btn.RelapseCurrent = current
+	SizeShopSwitch(btn)
 	btn.Paint = PaintShopSwitch
 	btn.DoClick = function(me)
 		if me.RelapseCurrent then return end
@@ -2055,8 +2226,23 @@ function RelapseUI.BuildShopFrame(titleKey, opts)
 	frame.RelapseShop = opts.shop
 	frame.Paint = RelapseUI.PaintWindow
 	RelapseUI.HideChrome(frame)
+	frame.Close = function(me, instant)
+		RelapseUI.FadeClose(me, instant, function(pnl)
+			pnl:SetVisible(false)
+			if pnl.OnClose then
+				pnl:OnClose()
+			end
+			if pnl:GetDeleteOnClose() then
+				pnl:Remove()
+			else
+				pnl:SetAlpha(0)
+			end
+		end)
+	end
 
 	local title = EasyLabel(frame, RelapseUI.T(titleKey), "Relapse30", RelapseUI.Col.Text)
+	title:SetContentAlignment(4)
+	title:SizeToContents()
 	frame.RelapseTitle = title
 	if opts.shop then
 		frame.RelapseShopPrev = MakeShopSwitch(frame, -1, "worth", opts.shop == "worth")
@@ -2128,11 +2314,16 @@ function RelapseUI.MakeShopGrid(parent, L, trinkets)
 	return list
 end
 
+function RelapseUI.TabInkPad()
+	return RelapseUI.Grid15(2)
+end
+
 function RelapseUI.SizeTabButton(tab)
 	if not IsValid(tab) then return end
 	surface.SetFont(tab.m_FontName or "Relapse20")
 	local tw = surface.GetTextSize(tab:GetText() or "")
-	local w = tw + RelapseUI.Grid15(3)
+	local pad = RelapseUI.TabInkPad()
+	local w = tw + pad * 2
 	local h = tab.GetTabHeight and tab:GetTabHeight() or RelapseUI.M().tabs
 	if tab:GetWide() ~= w or tab:GetTall() ~= h then
 		tab:SetSize(w, h)
@@ -2207,9 +2398,8 @@ end
 function RelapseUI.FinishShopFrame(frame, propertysheet)
 	RelapseUI.WarmPropertySheet(propertysheet)
 	frame:Center()
-	frame:SetAlpha(0)
-	frame:AlphaTo(255, 0.12, 0)
 	frame:MakePopup()
+	RelapseUI.FadeOpen(frame)
 	return frame
 end
 
@@ -2231,9 +2421,25 @@ function RelapseUI.PaintMenuRow(self, w, h)
 end
 
 function RelapseUI.PaintMenuClose(self, w, h)
-	DisableClipping(true)
-	RelapseUI.HudText("×", self:GetFont() or "RelapseClose", w * 0.5, h * 0.5, RelapseUI.Col.Text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 0)
-	DisableClipping(false)
+	local col = RelapseUI.Col.Text
+	local thick = math.max(1, RelapseUI.sPx(1))
+	local span = RelapseUI.Grid15(2)
+	local x = math.floor((w - span) * 0.5)
+	local y = math.floor((h - span) * 0.5)
+	RelapseUI.FillQuad(
+		x + thick, y,
+		x + span, y + span - thick,
+		x + span - thick, y + span,
+		x, y + thick,
+		col
+	)
+	RelapseUI.FillQuad(
+		x + span - thick, y,
+		x + span, y + thick,
+		x + thick, y + span,
+		x, y + span - thick,
+		col
+	)
 	return true
 end
 
@@ -2268,19 +2474,7 @@ function RelapseUI.BuildMenuFrame()
 		end
 	end
 	frame.Close = function(me, instant)
-		if not IsValid(me) then return end
-		if instant then
-			me._RelapseFade = nil
-			me:Remove()
-			return
-		end
-		if me._RelapseClosing then return end
-		me._RelapseClosing = true
-		RelapseUI.PlayFade(me, 0, RelapseUI.Duration(2), RelapseUI.EaseIn, function(pnl)
-			if IsValid(pnl) then
-				pnl:Remove()
-			end
-		end)
+		RelapseUI.FadeClose(me, instant)
 	end
 	return frame
 end
@@ -2299,9 +2493,8 @@ end
 
 function RelapseUI.MakeMenuClose(parent, onClick)
 	local close = vgui.Create("DButton", parent)
-	local s = RelapseUI.Grid15(5)
-	close:SetText("×")
-	close:SetFont("RelapseClose")
+	local s = RelapseUI.Grid15(3)
+	close:SetText("")
 	close:SetTextColor(Color(0, 0, 0, 0))
 	close:SetPaintBackground(false)
 	close:SetKeyboardInputEnabled(false)
@@ -2309,6 +2502,294 @@ function RelapseUI.MakeMenuClose(parent, onClick)
 	close.Paint = RelapseUI.PaintMenuClose
 	close.DoClick = onClick
 	return close
+end
+
+function RelapseUI.PaintOptionsCheck(self, w, h)
+	local cv = GetConVar(self.RelapseCvar)
+	local on = cv and cv:GetBool()
+	local cell = RelapseUI.sPx(20)
+	local capNudge = RelapseUI.sPx(5)
+	local s = math.max(1, math.floor(RelapseUI.ManropeBaseline(0, cell) - capNudge + 0.5))
+	local y = capNudge
+	local c = RelapseUI.Col
+	local cx, cy = s * 0.5, y + s * 0.5
+	local rad = s * 0.5
+	RelapseUI.FillCircle(cx, cy, rad, self.Hovered and c.CardHover or c.Card)
+	if on then
+		local p = math.max(1, RelapseUI.sPx(2))
+		RelapseUI.FillCircle(cx, cy, math.max(1, rad - p), c.Text)
+	end
+	draw.SimpleText(self.RelapseLabel or "", "Relapse20", s + RelapseUI.Grid15(2), 0, c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	return true
+end
+
+function RelapseUI.PaintSliderTrack(self, w, h)
+	local th = math.max(2, RelapseUI.sPx(2))
+	local y = math.floor((h - th) * 0.5)
+	RelapseUI.RoundFill(RelapseUI.RadPx("Bar"), 0, y, w, th, RelapseUI.Col.Track)
+	return true
+end
+
+function RelapseUI.PaintSliderKnob(self, w, h)
+	local c = RelapseUI.Col
+	local s = math.min(w, h)
+	local x = math.floor((w - s) * 0.5)
+	local y = math.floor((h - s) * 0.5)
+	RelapseUI.RoundFill(RelapseUI.RadPx("Bar"), x, y, s, s, (self.Hovered or self:IsDown()) and c.Text or c.Muted)
+	return true
+end
+
+function RelapseUI.MakeOptionsScroll(sheet)
+	local scroll = vgui.Create("DScrollPanel", sheet)
+	scroll.Paint = function() return true end
+	RelapseUI.StyleScroll(scroll)
+	-- Tab rule → first Relapse20 cap = 3 cells. tabGap is 2; cell sits 5px above caps.
+	local top = RelapseUI.Grid15(3) - RelapseUI.M().tabGap - RelapseUI.sPx(5)
+	local canvas = scroll:GetCanvas()
+	if IsValid(canvas) then
+		canvas:DockPadding(0, top, RelapseUI.Grid5(23), RelapseUI.Grid15())
+	end
+	local bar = scroll:GetVBar()
+	if IsValid(bar) then
+		bar:DockMargin(0, top, 0, RelapseUI.Grid15())
+	end
+	return scroll
+end
+
+function RelapseUI.OptionsCheck(parent, text, cvar)
+	local row = vgui.Create("DButton", parent)
+	row:SetText("")
+	row:SetTall(RelapseUI.Grid15(3))
+	row:Dock(TOP)
+	row:DockMargin(0, 0, 0, RelapseUI.Grid15())
+	row:SetPaintBackground(false)
+	row.RelapseCvar = cvar
+	row.RelapseLabel = text
+	row.Paint = RelapseUI.PaintOptionsCheck
+	row.DoClick = function(me)
+		local cv = GetConVar(me.RelapseCvar)
+		if not cv then return end
+		cv:SetBool(not cv:GetBool())
+	end
+	return row
+end
+
+function RelapseUI.OptionsCaption(parent, text)
+	local lab = EasyLabel(parent, text, "Relapse20", RelapseUI.Col.Muted)
+	lab:SetContentAlignment(7)
+	lab:Dock(TOP)
+	lab:DockMargin(0, 0, 0, RelapseUI.Grid15(2))
+	lab:SetTall(RelapseUI.sPx(20))
+	return lab
+end
+
+function RelapseUI.OptionsSlider(parent, text, cvar, min, max, decimals)
+	local wrap = vgui.Create("DPanel", parent)
+	wrap:SetTall(RelapseUI.Grid15(5))
+	wrap:Dock(TOP)
+	wrap:DockMargin(0, 0, 0, RelapseUI.Grid15())
+	wrap:SetPaintBackground(false)
+	wrap.Paint = function() return true end
+
+	local slider = vgui.Create("DNumSlider", wrap)
+	slider:Dock(FILL)
+	slider:SetText(text)
+	slider:SetMinMax(min, max)
+	slider:SetDecimals(decimals or 0)
+	slider:SetConVar(cvar)
+	slider:SetDark(false)
+	if IsValid(slider.Label) then
+		slider.Label:SetFont("Relapse20")
+		slider.Label:SetTextColor(RelapseUI.Col.Text)
+	end
+	if IsValid(slider.TextArea) then
+		slider.TextArea:SetFont("Relapse20")
+		slider.TextArea:SetTextColor(RelapseUI.Col.Muted)
+		slider.TextArea:SetDrawBackground(false)
+		slider.TextArea.Paint = function(me, w, h)
+			draw.SimpleText(me:GetValue(), "Relapse20", w, h * 0.5, RelapseUI.Col.Muted, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+			return true
+		end
+	end
+	local bar = slider.Slider
+	if IsValid(bar) then
+		bar.Paint = RelapseUI.PaintSliderTrack
+		if IsValid(bar.Knob) then
+			local s = RelapseUI.Grid15()
+			bar.Knob:SetSize(s, s)
+			bar.Knob.Paint = RelapseUI.PaintSliderKnob
+		end
+	end
+	return slider
+end
+
+function RelapseUI.PaintComboMenu(self, w, h)
+	RelapseUI.RoundFill(RelapseUI.RadPx("Card"), 0, 0, w, h, RelapseUI.Col.Bg)
+	return true
+end
+
+function RelapseUI.PaintComboOption(self, w, h)
+	local c = RelapseUI.Col
+	local hot = self.Hovered or self.Highlight
+	local on = self.RelapseSelected
+	if hot or on then
+		RelapseUI.RoundFill(RelapseUI.RadPx("Bar"), 0, 0, w, h, c.Hover)
+	end
+	local col = (hot or on) and c.Text or c.Muted
+	draw.SimpleText(self:GetText() or "", "Relapse20", RelapseUI.Grid15(), h * 0.5, col, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+	return true
+end
+
+function RelapseUI.PaintComboCaret(x, y, open, col)
+	local s = RelapseUI.sPx(5)
+	if open then
+		RelapseUI.FillQuad(x - s, y + s * 0.4, x + s, y + s * 0.4, x, y - s * 0.5, x, y - s * 0.5, col)
+	else
+		RelapseUI.FillQuad(x - s, y - s * 0.4, x + s, y - s * 0.4, x, y + s * 0.5, x, y + s * 0.5, col)
+	end
+end
+
+function RelapseUI.StyleComboMenu(combo)
+	local menu = combo.Menu
+	if not IsValid(menu) then return end
+
+	local pad = RelapseUI.Grid5()
+	local rowH = RelapseUI.Grid15(3)
+	local selected = combo:GetText()
+
+	menu:SetDrawBorder(false)
+	menu:SetPaintBackground(false)
+	menu:SetPadding(0)
+	menu.Paint = RelapseUI.PaintComboMenu
+
+	RelapseUI.StyleScroll(menu)
+	local canvas = menu.GetCanvas and menu:GetCanvas()
+	if IsValid(canvas) then
+		canvas:SetPaintBackground(false)
+		canvas.Paint = function() return true end
+	end
+
+	local kids = IsValid(canvas) and canvas:GetChildren() or menu:GetChildren()
+	for _, opt in ipairs(kids) do
+		if not isfunction(opt.SetMenu) then continue end
+		opt:SetFont("Relapse20")
+		opt:SetTextColor(Color(0, 0, 0, 0))
+		opt:SetTextInset(RelapseUI.Grid15(), 0)
+		opt:SetContentAlignment(4)
+		opt:SetPaintBackground(false)
+		opt.RelapseSelected = opt:GetText() == selected
+		opt.Paint = RelapseUI.PaintComboOption
+		opt.PerformLayout = function(me)
+			me:SetTall(rowH)
+		end
+	end
+
+	menu.PerformLayout = function(me)
+		local minW = math.max(me:GetMinimumWidth() or 0, combo:GetWide())
+		local host = me:GetCanvas()
+		if not IsValid(host) then return end
+
+		local y = pad
+		for _, pnl in ipairs(host:GetChildren()) do
+			pnl:InvalidateLayout(true)
+			pnl:SetWide(minW - pad * 2)
+			pnl:SetPos(pad, y)
+			y = y + pnl:GetTall()
+		end
+		y = y + pad
+
+		local maxH = me:GetMaxHeight() or ScrH() * 0.9
+		local tall = math.min(y, maxH)
+		me:SetSize(minW, tall)
+		host:SetPos(0, 0)
+		host:SetSize(minW, y)
+
+		local bar = me.GetVBar and me:GetVBar()
+		if IsValid(bar) then
+			if y <= maxH then
+				bar:SetVisible(false)
+				bar:SetWide(0)
+			else
+				bar:SetVisible(true)
+				RelapseUI.StyleScroll(me)
+				bar:SetUp(tall, y)
+			end
+		end
+	end
+
+	menu:InvalidateLayout(true)
+
+	local gap = RelapseUI.Grid5()
+	local x, y = combo:LocalToScreen(0, combo:GetTall() + gap)
+	local mw, mh = menu:GetWide(), menu:GetTall()
+	if y + mh > ScrH() then
+		x, y = combo:LocalToScreen(0, -mh - gap)
+	end
+	if x + mw > ScrW() then x = ScrW() - mw end
+	if x < 1 then x = 1 end
+	if y < 1 then y = 1 end
+
+	local parent = menu:GetParent()
+	if IsValid(parent) and parent.IsModal and parent:IsModal() then
+		x, y = parent:ScreenToLocal(x, y)
+	end
+	menu:SetPos(x, y)
+end
+
+function RelapseUI.OptionsCombo(parent, caption, choices, current, onSelect)
+	RelapseUI.OptionsCaption(parent, caption)
+
+	local row = vgui.Create("DPanel", parent)
+	row:SetTall(RelapseUI.Grid15(3))
+	row:Dock(TOP)
+	row:DockMargin(0, 0, 0, RelapseUI.Grid15())
+	row:SetPaintBackground(false)
+	row.Paint = function() return true end
+
+	local combo = vgui.Create("DComboBox", row)
+	combo:SetWide(RelapseUI.Grid15(20))
+	combo:Dock(LEFT)
+	combo:SetFont("Relapse20")
+	combo:SetTextColor(Color(0, 0, 0, 0))
+	combo:SetPaintBackground(false)
+	combo:SetSortItems(false)
+	if IsValid(combo.DropButton) then
+		combo.DropButton:SetVisible(false)
+		combo.DropButton.Paint = function() return true end
+	end
+	for _, choice in ipairs(choices) do
+		combo:AddChoice(choice[1], choice[2], current == choice[2])
+	end
+	combo.Paint = function(me, w, h)
+		RelapseUI.PaintCard(me, w, h, me:IsMenuOpen(), false, false)
+		draw.SimpleText(me:GetText() or "", "Relapse20", RelapseUI.Grid15(), h * 0.5, RelapseUI.Col.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+		RelapseUI.PaintComboCaret(w - RelapseUI.Grid15() - RelapseUI.sPx(4), h * 0.5, me:IsMenuOpen(), RelapseUI.Col.Muted)
+		return true
+	end
+	combo.OnMenuOpened = function(me)
+		RelapseUI.StyleComboMenu(me)
+	end
+	combo.OnSelect = function(me, index, value, data)
+		if onSelect then onSelect(data, value) end
+	end
+	return combo
+end
+
+function RelapseUI.OptionsColor(parent, caption, cr, cg, cb, ca)
+	RelapseUI.OptionsCaption(parent, caption)
+	local mix = vgui.Create("DColorMixer", parent)
+	mix:SetTall(RelapseUI.Grid15(8))
+	mix:Dock(TOP)
+	mix:DockMargin(0, 0, 0, RelapseUI.Grid15())
+	mix:SetPalette(false)
+	mix:SetAlphaBar(ca ~= nil)
+	mix:SetConVarR(cr)
+	mix:SetConVarG(cg)
+	mix:SetConVarB(cb)
+	if ca then
+		mix:SetConVarA(ca)
+	end
+	return mix
 end
 
 

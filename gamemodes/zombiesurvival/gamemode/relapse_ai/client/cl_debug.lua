@@ -5,6 +5,13 @@
 local cvDraw = CreateClientConVar("relapse_ai_debug_draw", "1", true, false, "Draw the Relapse AI debug overlay when the server streams it.")
 local cvXray = CreateClientConVar("relapse_ai_debug_xray", "1", true, false, "Draw Relapse AI debug lines through walls.")
 
+concommand.Add("relapse_ai_debug", function(_, _, args)
+	local n = tonumber(args[1])
+	net.Start("RelapseAI.DebugCmd")
+	net.WriteInt(n == nil and -1 or math.Clamp(math.floor(n), 0, 2), 3)
+	net.SendToServer()
+end)
+
 local Snapshot = {Bots = {}, Time = -10, ComputesPerSec = 0, AvgMs = 0, Blocked = 0}
 
 local MODE_NAME = {[0] = "stop", [1] = "path", [2] = "direct"}
@@ -12,7 +19,7 @@ local MODE_NAME = {[0] = "stop", [1] = "path", [2] = "direct"}
 local STATE_COLORS = {
 	hunt = Color(255, 70, 70),
 	search = Color(255, 160, 60),
-	sigil = Color(120, 120, 255),
+	sigil = RelapseUI.CopyCol(RelapseUI.Col.Text),
 	["break"] = Color(255, 230, 60),
 	wander = Color(120, 220, 120),
 	crow = Color(200, 200, 200),

@@ -10,6 +10,16 @@ SWEP.WorldModel = "models/props_c17/tools_wrench01a.mdl"
 SWEP.ModelScale = 1.5
 SWEP.UseHands = true
 
+-- Prop lies in XY (handle +Y). Same shop pose as the hammer: pitch 45
+-- toward the camera, roll 45 to the right.
+SWEP.RelapsePreviewParts = {
+	"models/props_c17/tools_wrench01a.mdl",
+}
+SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
+SWEP.RelapsePreviewLocalAng = Angle(45, 0, 45)
+SWEP.RelapsePreviewLift = 0.7
+SWEP.RelapsePreviewCamScale = 1.6
+
 SWEP.HoldType = "melee"
 
 SWEP.DamageType = DMG_CLUB

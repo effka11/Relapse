@@ -31,7 +31,7 @@ SWEP.RelapsePreviewCamScale = 1.4
 
 SWEP.Base = "mg_base"
 
-SWEP.PrintName = "Пистолет 1911"
+SWEP.PrintName = "Кольт 1911"
 SWEP.TranslationName = "wep_1911"
 SWEP.TranslationDescription = "wep_1911_desc"
 SWEP.Category = "Modern Warfare"

@@ -18,7 +18,7 @@ alwaysApply: true
 
 В аддон копировать **только lua этого ствола**: `mg_<class>/{shared,animations,customization}.lua`, `attachments_ar_*.lua` / `attachments_sm_*.lua`, `attachmentss/<name>/`, `mw_sounds_*.lua`. Тонкий бэкап: `reference/mw2019_<name>/` (lua). Полный extract **удалить**, не коммитить.
 
-Пути mdl — как в lua пака. SCAR: аттачи **без** подпапки. VAL: `attachments/valpha/`. АК: `attachments/akilo47/`. UMP: `attachments/smgolf45/`. Origin-12: `attachments/oscar12/`.
+Пути mdl — как в lua пака. SCAR: аттачи **без** подпапки. VAL: `attachments/valpha/`. АК: `attachments/akilo47/`. M4A1: `attachments/mike4/`. UMP: `attachments/smgolf45/`. Origin-12: `attachments/oscar12/`. JAK-12: `attachments/aalpha12/`. ПКМ: `attachments/pkilo/`. FiNN: `attachments/sierrax/`. M19/1911: `attachments/` без подпапки.
 
 ## Статы
 
@@ -28,12 +28,17 @@ alwaysApply: true
 |---|---|---:|---:|---:|---:|---|
 | MP5 T2 | 9×19 | 30 | 0.075 | 800 | 16 | ~1.05 с |
 | UMP T2 | .45 ACP | 25 | 0.10 | 600 | 22 | ~1.00 с |
+| M19 T2 | 9×19 | 17 | 0.15 | 400 | 23 | ~1.35 с |
 | AK T3 | 7.62×39 | 30 | 0.10 | 600 | 24 | ~0.90 с |
+| M4A1 T3 | 5.56×45 | 30 | 0.075 | 800 | 20 | ~0.83 с |
 | Origin-12 T3 | 12ga | 8 | 0.32 | ~188 | 12×9 | ~0.64 с |
 | VAL T4 | 9×39 | 20 | 0.068 | ~882 | 18 | ~0.82 с |
+| FiNN T4 | 5.56×45 | 75 | 0.095 | ~632 | 23 | ~0.86 с |
+| JAK-12 T4 | 12ga | 8 | 0.20 | 300 | 8×9 | ~0.60 с |
 | SCAR T5 | 7.62×51 | 20 | 0.105 | ~571 | 30 | ~0.73 с |
+| PKM T5 | 7.62×54R | 100 | 0.092 | ~650 | 26 | ~0.74 с |
 
-19 на Вале = 12 попаданий = TTK SCAR — не поднимать. SCAR 30 < СКС 34 за пулю.
+19 на Вале = 12 попаданий = TTK SCAR — не поднимать. SCAR 30 < СКС 34 за пулю. FiNN 23 < АК 24 за пулю: 5.56 и короб 75, не чужой 7.62×39. M4A1 20 < FiNN 23 за пулю: 800 в/мин и магазин 30, не короб. ПКМ 26 < SCAR 30 за пулю: 650 в/мин и короб 100, не чужой 7.62×51. JAK-12 8×9 < Origin 12×9 за выстрел: 300 в/мин очередь, четыре попадания, не CoD 339 и не 4 дробины пака.
 
 Одинаковые числа в `SWEP.Relapse` и `GM.RelapseWeapons.<class>.Relapse`. `Primary.Ammo` = id гильзы (`relapse-ammo`). Новый калибр — строка в таблице, не чужой id.
 
@@ -51,6 +56,6 @@ self.Primary.RPM = 450
 self.Primary.Automatic = false
 ```
 
-`GiveEmptyWeapon`. `item.Tier = N`. EN/RU: `wep_*`, `wep_*_desc`, `shop_ammo_<id>`. Иконка — правило иконок. Превью — правило превью (автомат как СКС: bone merge, hull; `[0]=1` только если default WM пустой — MP5/Uzi/UMP, не АК/SCAR). SCAR/VAL/АК/Origin-12 Lift **2.8**, Offset `(0,0,-3)`.
+`GiveEmptyWeapon`. `item.Tier = N`. EN/RU: `wep_*`, `wep_*_desc`, `shop_ammo_<id>`. Иконка — правило иконок. Превью — правило превью (автомат как СКС: bone merge, hull; `[0]=1` только если default WM пустой — MP5/Uzi/UMP, не АК/SCAR/ПКМ/FiNN/M19/M4/JAK-12). SCAR/VAL/АК/Origin-12/M4A1/JAK-12 Lift **2.8**, Offset `(0,0,-3)`, LocalAng 90. M4 default receiver — отдельный mdl (`attachments/mike4/`), класть в PreviewParts; не копировать AK `att_receiver`. JAK-12 default stock/grip — `att_stock` / `att_grip`, не выдумывать приклад Origin. ПКМ/FiNN Lift **2.8**, Offset `(-6,0,-3)` к прикладу, yaw **90**, без LocalAng 90 (hull вдоль +X). M19 как 1911: Lift **0.7**, Offset `(-0.8,0,0.5)`, LocalAng 90.
 
 Проверка: `changelevel`, не `restart`. Вкладка тира, поинты, волна, 3D, ящик патрона, TTK.

@@ -32,7 +32,7 @@ SWEP.RelapsePreviewCamScale = 1.4
 SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_vert_offset", "grip_vert_pro_offset", "grip_vert_large_offset", "grenade_launcher_offset"}
 
-SWEP.PrintName = "Винтовка SCAR-H"
+SWEP.PrintName = "SCAR-H"
 SWEP.TranslationName = "wep_scar"
 SWEP.TranslationDescription = "wep_scar_desc"
 SWEP.Category = "Modern Warfare"

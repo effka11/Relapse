@@ -450,9 +450,9 @@ net.Receive("zs_sigilcorrupted", function(length)
 		end)
 
 		if corrupted == maxsigils then
-			GAMEMODE:CenterNotify({killicon = "default"}, {font = "ZSHUDFontSmall"}, COLOR_RED, translate.Get("sigil_corrupted_last"), {killicon = "default"})
+			GAMEMODE:CenterNotify({killicon = "default"}, {font = "ZSHUDFontSmall"}, RelapseUI.Col.Danger, translate.Get("sigil_corrupted_last"), {killicon = "default"})
 		else
-			GAMEMODE:CenterNotify(COLOR_RED, {font = "ZSHUDFontSmall"}, translate.Get("sigil_corrupted"))
+			GAMEMODE:CenterNotify(RelapseUI.Col.Danger, {font = "ZSHUDFontSmall"}, translate.Get("sigil_corrupted"))
 			--GAMEMODE:CenterNotify(COLOR_RED, translate.Format("sigil_corrupted_x_remain", maxsigils - corrupted))
 		end
 	end
@@ -469,7 +469,7 @@ net.Receive("zs_sigiluncorrupted", function(length)
 		timer.Simple(1.25, function()
 			MySelf:EmitSound("ambient/machines/teleport1.wav", 75, 60, 0.3)
 		end)
-		GAMEMODE:CenterNotify(COLOR_GREEN, {font = "ZSHUDFontSmall"}, translate.Get("sigil_uncorrupted"))
+		GAMEMODE:CenterNotify(RelapseUI.Col.Text, {font = "ZSHUDFontSmall"}, translate.Get("sigil_uncorrupted"))
 	end
 end)
 

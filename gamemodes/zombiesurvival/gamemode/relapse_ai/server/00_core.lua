@@ -49,7 +49,7 @@ AI.cv = {
 	path_budget = ServerVar("relapse_ai_path_budget", "2", "Max path computations per server tick.", FCVAR_ARCHIVE),
 	nav_autogen = ServerVar("relapse_ai_nav_autogen", "1", "Generate a navmesh automatically on an empty server when the map has none."),
 	name_prefix = ServerVar("relapse_ai_name_prefix", "", "Prefix added to bot names.", FCVAR_ARCHIVE),
-	debug = ServerVar("relapse_ai_debug", "0", "1 = stream bot debug overlay to superadmins, 2 = to everyone.", FCVAR_ARCHIVE),
+	debug = ServerVar("relapse_ai_debug", "0", "0 off, 1 = stream bot debug overlay to owners, 2 = to everyone. Use the relapse_ai_debug command from the game console.", FCVAR_NOTIFY),
 	max_drop = ServerVar("relapse_ai_max_drop", "200", "Max drop height (units) a bot path may include.", FCVAR_ARCHIVE),
 }
 

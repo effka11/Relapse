@@ -1,10 +1,10 @@
 -- Relapse mesh editor shell. Same UX as D3bot (noclip + overlay + owner SteamID),
 -- but this is NOT Valve nav_edit and NOT maps/*.nav.
--- Walking still uses Source .nav in 10_nav.lua until this graph exists.
+-- Bots walk this skin once 93_mesh_path.lua finishes linking (else Source .nav).
 
 local AI = RelapseAI
-local Mesh = {}
-AI.Mesh = Mesh
+AI.Mesh = AI.Mesh or {}
+local Mesh = AI.Mesh
 
 Mesh.Kind = "relapse_graph"
 Mesh.Editors = Mesh.Editors or {} -- [Player] = "edit" | "view"
@@ -16,7 +16,7 @@ local OWNERS = {
 	["76561198869690992"] = true,
 }
 
-local function isOwner(pl)
+function Mesh.IsOwner(pl)
 	if not IsValid(pl) then return true end
 	if pl:IsBot() then return false end
 	local sid = pl:SteamID()
@@ -24,7 +24,7 @@ local function isOwner(pl)
 	return OWNERS[sid] or (sid64 and OWNERS[tostring(sid64)]) or false
 end
 
-local function reply(pl, msg)
+function Mesh.Reply(pl, msg)
 	print(msg)
 	if IsValid(pl) then
 		pl:PrintMessage(HUD_PRINTCONSOLE, msg)
@@ -70,6 +70,9 @@ function Mesh.SetMode(pl, mode)
 	end
 
 	sendState(pl, mode)
+	if Mesh.OnMode then
+		Mesh.OnMode(pl, mode)
+	end
 end
 
 function Mesh.FilePath()
@@ -77,8 +80,8 @@ function Mesh.FilePath()
 end
 
 concommand.Add("relapse_viewmesh", function(pl)
-	if not isOwner(pl) then
-		reply(pl, "[Relapse AI] mesh denied")
+	if not Mesh.IsOwner(pl) then
+		Mesh.Reply(pl, "[Relapse AI] mesh denied")
 		return
 	end
 	if not IsValid(pl) then
@@ -86,12 +89,12 @@ concommand.Add("relapse_viewmesh", function(pl)
 		return
 	end
 	Mesh.SetMode(pl, "view")
-	reply(pl, "[Relapse AI] mesh overlay on. Custom graph, not Source .nav. relapse_hidemesh to hide.")
+	Mesh.Reply(pl, "[Relapse AI] mesh overlay on. Painted walkable skin, not Source .nav. relapse_hidemesh to hide.")
 end)
 
 concommand.Add("relapse_editmesh", function(pl)
-	if not isOwner(pl) then
-		reply(pl, "[Relapse AI] mesh denied")
+	if not Mesh.IsOwner(pl) then
+		Mesh.Reply(pl, "[Relapse AI] mesh denied")
 		return
 	end
 	if not IsValid(pl) then
@@ -99,25 +102,30 @@ concommand.Add("relapse_editmesh", function(pl)
 		return
 	end
 	Mesh.SetMode(pl, "edit")
-	reply(pl, "[Relapse AI] EDIT + noclip. Custom graph (not .nav / not nav_edit). Overlay is a stub until that format exists. relapse_hidemesh to leave.")
+	Mesh.Reply(pl, "[Relapse AI] EDIT + noclip. Walkable surfaces (not .nav). relapse_buildmesh to regenerate, relapse_hidemesh to leave.")
 end)
 
 concommand.Add("relapse_hidemesh", function(pl)
-	if not isOwner(pl) then
-		reply(pl, "[Relapse AI] mesh denied")
+	if not Mesh.IsOwner(pl) then
+		Mesh.Reply(pl, "[Relapse AI] mesh denied")
 		return
 	end
 	if not IsValid(pl) then return end
 	Mesh.SetMode(pl, nil)
-	reply(pl, "[Relapse AI] mesh overlay off")
+	Mesh.Reply(pl, "[Relapse AI] mesh overlay off")
 end)
 
 concommand.Add("relapse_savemesh", function(pl)
-	if IsValid(pl) and not isOwner(pl) then
-		reply(pl, "[Relapse AI] mesh denied")
+	if IsValid(pl) and not Mesh.IsOwner(pl) then
+		Mesh.Reply(pl, "[Relapse AI] mesh denied")
 		return
 	end
-	reply(pl, "[Relapse AI] save skipped: Relapse graph is not wired yet (data/" .. Mesh.FilePath() .. "). Walking still uses Source .nav.")
+	if Mesh.Save then
+		local ok, err = Mesh.Save()
+		Mesh.Reply(pl, ok and ("[Relapse AI] saved data/" .. Mesh.FilePath()) or ("[Relapse AI] save failed: " .. tostring(err)))
+		return
+	end
+	Mesh.Reply(pl, "[Relapse AI] save skipped: generator not loaded")
 end)
 
 hook.Add("PlayerSpawn", "RelapseAI.MeshEdit", function(pl)
@@ -131,5 +139,8 @@ hook.Add("PlayerSpawn", "RelapseAI.MeshEdit", function(pl)
 end)
 
 hook.Add("PlayerDisconnected", "RelapseAI.MeshEdit", function(pl)
+	if Mesh.OnMode then
+		Mesh.OnMode(pl, nil)
+	end
 	Mesh.Editors[pl] = nil
 end)

@@ -91,10 +91,6 @@ function GM:ShowHelp()
 
 	local x = RelapseUI.Snap((ScrW() - innerW) * 0.5)
 	local y = RelapseUI.Snap((ScrH() - bodyH) * 0.5)
-	local close = RelapseUI.MakeMenuClose(frame, function()
-		GAMEMODE:CloseHelpMenu()
-	end)
-	close:SetPos(x + innerW + RelapseUI.Grid15(), y - close:GetTall() - RelapseUI.Grid15())
 	for i, item in ipairs(items) do
 		local fn = item[2]
 		local btn = RelapseUI.MakeMenuButton(frame, RelapseUI.T(item[1]), function()
@@ -110,10 +106,9 @@ function GM:ShowHelp()
 		y = y + rowH
 	end
 
-	frame:SetAlpha(0)
 	frame:MakePopup()
 	frame:SetKeyboardInputEnabled(false)
-	RelapseUI.PlayFade(frame, 255, RelapseUI.Duration(3), RelapseUI.EaseOut)
+	RelapseUI.FadeOpen(frame)
 end
 
 hook.Add("PlayerButtonDown", "RelapseHelpMenuF1", function(pl, button)

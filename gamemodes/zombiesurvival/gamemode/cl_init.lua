@@ -506,12 +506,13 @@ function GM:LocalPlayerFound()
 	end
 end
 
-local matSigil = Material("zombiesurvival/sigil.png")
+local matSigil = Material("zombiesurvival/relapse_sigil.png")
 local matArsenal = Material("zombiesurvival/arsenalcrate.png")
 local matResupply = Material("zombiesurvival/resupply.png")
 local matRemantler = Material("zombiesurvival/remantler.png")
 local matCrossout = Material("zombiesurvival/crossout.png")
 local matNest = Material("zombiesurvival/nest.png")
+local colSigilHud = Color(0, 0, 0, 255)
 --local matGradientRight = Material("vgui/gradient-r")
 --local matGradientLeft = CreateMaterial("gradient-l", "UnlitGeneric", {["$basetexture"] = "vgui/gradient-l", ["$vertexalpha"] = "1", ["$vertexcolor"] = "1", ["$ignorez"] = "1", ["$nomip"] = "1"})
 function GM:DrawFearMeter(screenscale)
@@ -524,7 +525,7 @@ function GM:DrawFearMeter(screenscale)
 	local extrude = size * 0.25 + sighei / 2
 	local angle_current = -180
 	local angle_step = 180 / (self.MaxSigils - 1)
-	local rad, sigil, health, maxhealth, corrupt, damageflash, sigx, sigy, healthfrac
+	local rad, sigil, health, maxhealth, corrupt, sigx, sigy, healthfrac
 
 	local sigils = GAMEMODE.CachedSigils
 	for i=1, self.MaxSigils do
@@ -543,24 +544,21 @@ function GM:DrawFearMeter(screenscale)
 			sigx = mx + half_size + math.cos(rad) * extrude
 			sigy = my + half_size + math.sin(rad) * extrude
 
+			healthfrac = maxhealth > 0 and health / maxhealth or 0
 			if sigil and sigil:IsValid() then
-				damageflash = math.min((CurTime() - sigil:GetSigilLastDamaged()) * 2, 1) * 255
+				RelapseUI.SigilFromEnt(sigil, colSigilHud)
 			else
-				damageflash = 255
+				RelapseUI.SigilCol(corrupt, healthfrac, 0, colSigilHud)
 			end
-			healthfrac = health / maxhealth
-			if corrupt then
-				surface_SetDrawColor((255 - damageflash) * healthfrac, damageflash * healthfrac, 0, 220)
-			else
-				surface_SetDrawColor((255 - damageflash) * healthfrac, damageflash * healthfrac, 220, 220)
-			end
+			surface_SetDrawColor(colSigilHud.r, colSigilHud.g, colSigilHud.b, 220)
 
 			surface_SetMaterial(matSigil)
 			surface_DrawTexturedRectRotated(sigx, sigy, sigwid, sighei, angle_current + 90)
 
 			if corrupt then
+				local wine = RelapseUI.Col.Danger
 				surface_SetMaterial(matCrossout)
-				surface_SetDrawColor(220, 0, 0, 220)
+				surface_SetDrawColor(wine.r, wine.g, wine.b, 220)
 				surface_DrawTexturedRect(sigx - sigwid / 2, sigy - sighei / 2, sigwid, sighei)
 			end
 
@@ -756,13 +754,9 @@ function GM:DrawPackUpBar(x, y, fraction, notowner, screenscale)
 	draw_SimpleText(notowner and CurTime() % 2 < 1 and translate.Format("requires_x_people", 4) or notowner and translate.Get("packing_others_object") or translate.Get("packing"), "ZSHUDFontSmall", x, y - draw_GetFontHeight("ZSHUDFontSmall") - 2, col, TEXT_ALIGN_CENTER)
 end
 
-local colSigilTeleport = Color(125, 215, 255, 220)
 function GM:DrawSigilTeleportBar(x, y, fraction, target, screenscale)
-	local maxbarwidth = 270 * screenscale
-	local barheight = 11 * screenscale
-	local barwidth = maxbarwidth * math.Clamp(fraction, 0, 1)
-	local startx = x - maxbarwidth * 0.5
-
+	RelapseUI.CreateFonts()
+	local c = RelapseUI.Col
 	local letter = "?"
 	for i, sigil in pairs(ents.FindByClass("prop_obj_sigil")) do
 		if target == sigil then
@@ -771,15 +765,14 @@ function GM:DrawSigilTeleportBar(x, y, fraction, target, screenscale)
 		end
 	end
 
-	surface_SetDrawColor(0, 0, 0, 220)
-	surface_DrawRect(startx, y, maxbarwidth, barheight)
-	surface_SetDrawColor(colSigilTeleport)
-	surface_DrawRect(startx + 3, y + 3, barwidth - 6, barheight - 6)
-	surface_DrawOutlinedRect(startx, y, maxbarwidth, barheight)
+	local barw = RelapseUI.Grid15(18)
+	local barh = RelapseUI.sPx(10)
+	local bx = math.floor(x - barw * 0.5 + 0.5)
 
-	draw_SimpleText(translate.Format("teleporting_to_sigil", letter), "ZSHUDFontSmall", x, y - draw_GetFontHeight("ZSHUDFontSmall") - 2, colSigilTeleport, TEXT_ALIGN_CENTER)
-	draw_SimpleText(translate.Get("press_shift_to_cancel"), "ZSHUDFontSmaller", x, y + draw_GetFontHeight("ZSHUDFontSmaller") - 16, colSigilTeleport, TEXT_ALIGN_CENTER)
-	draw_SimpleText(translate.Get("point_at_a_sigil_to_choose_destination"), "ZSHUDFontSmaller", x, y + draw_GetFontHeight("ZSHUDFontSmaller") * 2 - 16, colSigilTeleport, TEXT_ALIGN_CENTER)
+	RelapseUI.PaintHudHairBar(bx, y, barw, barh, fraction, c.Text, nil, nil, 4)
+	RelapseUI.HudText(translate.Format("teleporting_to_sigil", letter), "Relapse30", x, y - RelapseUI.sPx(8), c.Text, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM, 4)
+	RelapseUI.HudText(translate.Get("press_shift_to_cancel"), "Relapse15", x, y + barh + RelapseUI.Grid5(), c.Muted, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, 1)
+	RelapseUI.HudText(translate.Get("point_at_a_sigil_to_choose_destination"), "Relapse15", x, y + barh + RelapseUI.Grid5() + RelapseUI.sPx(22), c.Muted, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, 1)
 end
 
 function GM:HumanHUD(screenscale)
@@ -1104,10 +1097,8 @@ end
 function GM:DrawSigilIndicators()
 	if not self:GetUseSigils() then return end
 
-	local health, pos, distance, maxhealth, corrupted, damageflash, missinghealthfrac, ang, alpha
+	local health, pos, distance, maxhealth, frac, ang, alpha
 	local eyepos = EyePos()
-
-	surface_SetMaterial(matSigil)
 
 	for i, sigil in pairs(GAMEMODE.CachedSigils) do
 		if not sigil:IsValid() then continue end
@@ -1119,9 +1110,7 @@ function GM:DrawSigilIndicators()
 			distance = eyepos:DistToSqr(pos)
 
 			maxhealth = sigil:GetSigilMaxHealth()
-			corrupted = sigil:GetSigilCorrupted()
-			damageflash = math.min((CurTime() - sigil:GetSigilLastDamaged()) * 2, 1) * 255
-			missinghealthfrac = 1 - health / maxhealth
+			frac = maxhealth > 0 and health / maxhealth or 0
 			alpha = math.min(220, math.sqrt(distance / 4))
 
 			ang = (eyepos - pos):Angle()
@@ -1133,18 +1122,8 @@ function GM:DrawSigilIndicators()
 			local oldfogmode = render_GetFogMode()
 			render_FogMode(0)
 
-			if corrupted then
-				surface_SetDrawColor(255 - damageflash, damageflash, 0, alpha)
-			else
-				surface_SetDrawColor(damageflash, 255, damageflash, alpha)
-			end
-			surface_DrawTexturedRect(-64, -128, 128, 256)
-			if missinghealthfrac > 0 then
-				surface_SetDrawColor(40, 40, 40, 255)
-				surface_DrawTexturedRectUV(-64, -128, 128, 256 * missinghealthfrac, 0, 0, 1, missinghealthfrac)
-			end
-
-			draw_SimpleTextBlurry(string.char(64 + i), "ZS3D2DFont2Big", 0, 128, COLOR_GRAY, TEXT_ALIGN_CENTER)
+			RelapseUI.SigilFromEnt(sigil, colSigilHud)
+			RelapseUI.PaintWorldSigil(string.char(64 + i), frac, colSigilHud, alpha)
 
 			render_FogMode(oldfogmode)
 			cam_End3D2D()
@@ -1394,7 +1373,7 @@ function GM:EvaluateFilmMode()
 	end
 
 	if self.XPHUD and self.XPHUD:IsValid() then
-		self.XPHUD:SetVisible(false)
+		self.XPHUD:SetVisible(visible and self.DisplayXPHUD)
 	end
 
 	if self.HealthHUD and self.HealthHUD:IsValid() then
@@ -1454,7 +1433,7 @@ function GM:CreateLateVGUI()
 	if not self.XPHUD then
 		self.XPHUD = vgui.Create("ZSExperienceHUD")
 		self.XPHUD:ParentToHUD()
-		self.XPHUD:SetVisible(false)
+		self.XPHUD:SetVisible(self.DisplayXPHUD and not self.FilmMode)
 		self.XPHUD:InvalidateLayout()
 	end
 end

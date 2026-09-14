@@ -1,10 +1,11 @@
 INC_CLIENT()
 
+-- Relapse sigil world draw. Colours from RelapseUI.Col (Fog live, Wine corrupt).
+
 ENT.RenderGroup = RENDERGROUP_TRANSLUCENT
 
 function ENT:Initialize()
 	self:DrawShadow(false)
-	self:SetRenderFX(kRenderFxDistort)
 
 	self:SetRenderBounds(Vector(-128, -128, -128), Vector(128, 128, 200))
 
@@ -31,7 +32,8 @@ ENT.Rotation = math.random(360)
 local matWhite = Material("models/debug/debugwhite")
 local matGlow = Material("sprites/light_glow02_add")
 local cDraw = Color(255, 255, 255)
-local cDrawWhite = Color(255, 255, 255)
+local cDrawCore = Color(255, 255, 255)
+local cSigil = Color(0, 0, 0, 255)
 
 local math_sin = math.sin
 local math_cos = math.cos
@@ -52,32 +54,21 @@ function ENT:DrawTranslucent()
 
 	local curtime = CurTime()
 	local sat = math_abs(math_sin(curtime))
-	local colsat = sat * 0.125
 	local eyepos = EyePos()
 	local eyeangles = EyeAngles()
 	local forwardoffset = 16 * scale * self:GetForward()
 	local rightoffset = 16 * scale * self:GetRight()
 	local healthperc = self:GetSigilHealth() / self:GetSigilMaxHealth()
 	local radius = (180 + math_cos(sat) * 40) * scale
-	local whiteradius = (122 + math_sin(sat) * 32) * scale
+	local coreradius = (122 + math_sin(sat) * 32) * scale
 	local up = self:GetUp()
 	local spritepos = self:GetPos() + up
 	local spritepos2 = self:WorldSpaceCenter()
 	local corrupt = self:GetSigilCorrupted()
-	local r, g, b
-	if corrupt then
-		r = colsat
-		g = 0.75
-		b = colsat
-	else
-		r = 0.15 + colsat
-		g = 0.4 + colsat
-		b = 1
-	end
 
-	r = r * healthperc
-	g = g * healthperc
-	b = b * healthperc
+	RelapseUI.SigilFromEnt(self, cSigil)
+	local r, g, b = cSigil.r / 255, cSigil.g / 255, cSigil.b / 255
+
 	render_SuppressEngineLighting(true)
 	render_SetColorModulation(r ^ 0.5, g ^ 0.5, b ^ 0.5)
 
@@ -120,17 +111,13 @@ function ENT:DrawTranslucent()
 		self.Rotation = self.Rotation - 360
 	end
 
-	cDraw.r = r * 255
-	cDraw.g = g * 255
-	cDraw.b = b * 255
-	cDrawWhite.r = healthperc * 255
-	cDrawWhite.g = cDrawWhite.r
-	cDrawWhite.b = cDrawWhite.r
+	cDraw.r, cDraw.g, cDraw.b = cSigil.r, cSigil.g, cSigil.b
+	RelapseUI.LerpCol(RelapseUI.Col.Ink, RelapseUI.Col.Text, healthperc, cDrawCore)
 
 	render.SetMaterial(matGlow)
 	if not corrupt then
-		render_DrawQuadEasy(spritepos, up, whiteradius, whiteradius, cDrawWhite, self.Rotation)
-		render_DrawQuadEasy(spritepos, up * -1, whiteradius, whiteradius, cDrawWhite, self.Rotation)
+		render_DrawQuadEasy(spritepos, up, coreradius, coreradius, cDrawCore, self.Rotation)
+		render_DrawQuadEasy(spritepos, up * -1, coreradius, coreradius, cDrawCore, self.Rotation)
 	end
 	render_DrawQuadEasy(spritepos, up, radius, radius, cDraw, self.Rotation)
 	render_DrawQuadEasy(spritepos, up * -1, radius, radius, cDraw, self.Rotation)
@@ -158,7 +145,7 @@ function ENT:DrawTranslucent()
 	particle:SetEndSize(0)
 	particle:SetRoll(math.Rand(0, 360))
 	particle:SetRollDelta(math.Rand(-1, 1))
-	particle:SetColor(r * 255, g * 255, b * 255)
+	particle:SetColor(cSigil.r, cSigil.g, cSigil.b)
 	particle:SetCollide(true)
 
 	emitter:Finish() emitter = nil collectgarbage("step", 64)

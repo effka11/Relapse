@@ -186,7 +186,8 @@ function ENT:DrawTranslucent()
 		if wep:IsValid() and wep:GetClass() == "weapon_zs_sigilplacer" then
 			cam.IgnoreZ(true)
 			render.SetBlend(0.5)
-			render.SetColorModulation(1, 0, 0)
+			local wine = RelapseUI.Col.Danger
+			render.SetColorModulation(wine.r / 255, wine.g / 255, wine.b / 255)
 			render.SuppressEngineLighting(true)
 
 			self:DrawModel()

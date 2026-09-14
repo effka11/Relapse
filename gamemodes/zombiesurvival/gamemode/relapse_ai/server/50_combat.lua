@@ -23,11 +23,9 @@ Combat.Melee = Melee
 
 Melee.Defaults = {
 	DefaultReach = 48,
-	PlayerSlack = 12, -- the hull is hit before the aim point
-	PropSlack = 6,
+	DefaultSize = 4.5, -- weapon_zs_zombie MeleeSize; the swing hull, not a reach bonus
 	LeadTime = 0.08,
 	ReactionTime = 0.15, -- after acquiring a target
-	FacingDot = 0.96, -- ~16 degrees
 }
 
 function Melee.New(bot)
@@ -65,6 +63,14 @@ function Melee:GetReach()
 	return self.P.DefaultReach
 end
 
+function Melee:GetSwingSize()
+	local wep = self.Player:GetActiveWeapon()
+	if IsValid(wep) then
+		return wep.MeleeSize or self.P.DefaultSize
+	end
+	return self.P.DefaultSize
+end
+
 function Melee:IsSwinging()
 	local wep = self.Player:GetActiveWeapon()
 	return IsValid(wep) and wep.IsSwinging and wep:IsSwinging() or false
@@ -78,43 +84,104 @@ local function SurfacePoint(ent, from)
 	return point
 end
 
--- The zombie swing traces from the eyes and from the torso along the same aim
--- direction (CompensatedZombieMeleeTrace). Returns the squared distance from the
--- closer origin, the reach (with slack) that applies, the point to look at so that
--- the chosen ray goes through the target, and whether the torso ray was chosen.
-local function Measure(self, target, reach)
+-- Squared hull distance from the closer of eyes / torso, plus the point the
+-- swing should look through. Slack used to be added on top of NearestPoint;
+-- the real claw is MeleeReach along the aim (MeleeSize is only ~4.5).
+local function Measure(self, target)
 	local pl = self.Player
 	local eye = pl:EyePos()
+	local center = pl:WorldSpaceCenter()
 
 	if target:IsPlayer() then
-		-- Reach is measured to the hull, not to the aim point.
-		return eye:DistToSqr(target:NearestPoint(eye)), reach + self.P.PlayerSlack, nil, false
+		local pe = target:NearestPoint(eye)
+		local pc = target:NearestPoint(center)
+		local de2, dc2 = eye:DistToSqr(pe), center:DistToSqr(pc)
+		if de2 <= dc2 then
+			return de2, pe, false
+		end
+		return dc2, pc + (eye - center), true
 	end
 
-	local center = pl:WorldSpaceCenter()
 	local pe = SurfacePoint(target, eye)
 	local pc = SurfacePoint(target, center)
 	local de2 = eye:DistToSqr(pe)
 	local dc2 = center:DistToSqr(pc)
-
 	if de2 <= dc2 then
-		return de2, reach + self.P.PropSlack, pe, false
+		return de2, pe, false
+	end
+	return dc2, pc + (eye - center), true
+end
+
+local swingRes = {}
+local swingMins = Vector(-4.5, -4.5, -4.5)
+local swingMaxs = Vector(4.5, 4.5, 4.5)
+local swingStart, swingEnd = Vector(), Vector()
+local swingSelf
+local function SwingFilter(ent)
+	if ent == swingSelf or ent.IgnoreMelee then return false end
+	if ent:IsPlayer() and ent:Team() == swingSelf:Team() then return false end
+	return true
+end
+local swingTr = {
+	mask = MASK_SOLID,
+	output = swingRes,
+	mins = swingMins,
+	maxs = swingMaxs,
+	filter = SwingFilter,
+	start = swingStart,
+	endpos = swingEnd,
+}
+
+-- Same shape as Player:MeleeTrace: line, then hull of MeleeSize. Eyes then torso,
+-- matching CompensatedZombieMeleeTrace. No lag compensation (bots, 0 ping).
+function Melee:SwingHits(target, dir)
+	if not IsValid(target) or not dir then return false end
+	local dist = self:GetReach()
+	local size = self:GetSwingSize()
+	local len = math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z)
+	if len < 0.001 then return false end
+	local dx, dy, dz = dir.x / len, dir.y / len, dir.z / len
+
+	swingMins.x, swingMins.y, swingMins.z = -size, -size, -size
+	swingMaxs.x, swingMaxs.y, swingMaxs.z = size, size, size
+	swingSelf = self.Player
+
+	local function ray(ox, oy, oz)
+		swingStart:SetUnpacked(ox, oy, oz)
+		swingEnd:SetUnpacked(ox + dx * dist, oy + dy * dist, oz + dz * dist)
+		util.TraceLine(swingTr)
+		if swingRes.Hit then return swingRes.Entity end
+		util.TraceHull(swingTr)
+		if swingRes.Hit then return swingRes.Entity end
+		return nil
 	end
 
-	-- Torso ray: look at the point shifted up by (eye - center) so the parallel
-	-- ray from the torso passes through pc.
-	return dc2, reach + self.P.PropSlack, pc + (eye - center), true
+	local eye = self.Player:EyePos()
+	if ray(eye.x, eye.y, eye.z) == target then return true end
+	local mid = self.Player:WorldSpaceCenter()
+	return ray(mid.x, mid.y, mid.z) == target
+end
+
+function Melee:LookDirTo(target)
+	local eye = self.Player:EyePos()
+	if target:IsPlayer() then
+		local center = target:WorldSpaceCenter()
+		local teye = target:EyePos()
+		return center * 0.45 + teye * 0.55 - eye
+	end
+	return SurfacePoint(target, eye) - eye
 end
 
 -- Pure check used by brains before committing to a target.
 function Melee:IsInReachOf(target)
 	if not IsValid(target) then return false end
-	local d2, reach = Measure(self, target, self:GetReach())
+	local d2 = Measure(self, target)
+	local reach = self:GetReach()
 	if d2 > reach * reach then return false end
 	if target:IsPlayer() and math.abs(target:GetPos().z - self.Player:GetPos().z) > reach then
 		return false
 	end
-	return true
+	return self:SwingHits(target, self:LookDirTo(target))
 end
 
 function Melee:Think(dt)
@@ -132,7 +199,7 @@ function Melee:Think(dt)
 	self.WantDuck = false
 
 	local aim = self.AimPos
-	local d2, effective, lookPoint, torso = Measure(self, target, reach)
+	local d2, lookPoint, torso = Measure(self, target)
 
 	if target:IsPlayer() then
 		local center = target:WorldSpaceCenter()
@@ -147,8 +214,8 @@ function Melee:Think(dt)
 	end
 
 	self.Dist = math.sqrt(d2)
-	self.InReach = d2 <= effective * effective
-	if self.InReach and target:IsPlayer() and math.abs(target:GetPos().z - pl:GetPos().z) > effective then
+	self.InReach = d2 <= reach * reach and self:SwingHits(target, aim - pl:EyePos())
+	if self.InReach and target:IsPlayer() and math.abs(target:GetPos().z - pl:GetPos().z) > reach then
 		self.InReach = false
 	end
 
@@ -186,18 +253,12 @@ function Melee:GetStandoff()
 	return math.max(24, self.Reach * 0.6)
 end
 
--- Per tick: hold attack while the target is in reach and roughly in front.
+-- Per tick: only claw if this view's swing would hit. InReach is hull-distance
+-- plus a desired-aim probe; the view lags, so the live forward is what matters.
 function Melee:WantsAttack(viewAngles)
-	if not self.InReach or not IsValid(self.Target) then return false end
+	local target = self.Target
+	if not IsValid(target) then return false end
 	if CurTime() - self.TargetSince < self.P.ReactionTime then return false end
-
-	local eye = self.Player:EyePos()
-	local aim = self.AimPos
-	local dx, dy, dz = aim.x - eye.x, aim.y - eye.y, aim.z - eye.z
-	local len = math.sqrt(dx * dx + dy * dy + dz * dz)
-	if len < 1 then return true end
-
-	local fwd = viewAngles:Forward()
-	local dot = (fwd.x * dx + fwd.y * dy + fwd.z * dz) / len
-	return dot >= self.P.FacingDot
+	if self.Dist > self.Reach then return false end
+	return self:SwingHits(target, viewAngles:Forward())
 end

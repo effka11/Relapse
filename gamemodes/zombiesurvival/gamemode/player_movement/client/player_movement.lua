@@ -6,6 +6,7 @@ local bit = bit
 local IN_JUMP = IN_JUMP
 local IN_DUCK = IN_DUCK
 local IN_ZOOM = IN_ZOOM
+local IN_SPEED = IN_SPEED
 local FrameTime = FrameTime
 --
 
@@ -64,6 +65,9 @@ function GM:_CreateMove(cmd)
 	local myteam = MySelf:Team()
 	if myteam == TEAM_HUMAN then
 		if MySelf:Alive() then
+			if MySelf:GetBarricadeGhosting() then
+				cmd:RemoveKey(IN_SPEED)
+			end
 			local lockon = self.HumanMenuLockOn
 			if lockon then
 				if self:ValidMenuLockOnTarget(MySelf, lockon) and self.HumanMenuPanel and self.HumanMenuPanel:IsValid() and self.HumanMenuPanel:IsVisible() and MySelf:KeyDown(self.MenuKey) then

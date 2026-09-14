@@ -67,7 +67,8 @@ function ENT:Think()
 end
 
 function ENT:SetParticleColor(particle)
-	particle:SetColor(38, 102, 255)
+	local c = RelapseUI.Col.Text
+	particle:SetColor(c.r, c.g, c.b)
 end
 
 function ENT:Draw()

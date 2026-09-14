@@ -296,6 +296,76 @@ function meta:GetBloodArmor()
 	return self:GetDTInt(DT_PLAYER_INT_BLOODARMOR)
 end
 
+-- Relapse.Weight is kilograms. SWEP.Weight is GMod slot priority — do not use it.
+function GM:GetWeaponCarryWeight(wep)
+	if not wep then return 0 end
+
+	local class
+	if isstring(wep) then
+		class = wep
+	elseif IsValid(wep) then
+		class = wep:GetClass()
+	elseif istable(wep) then
+		class = wep.ClassName
+	end
+
+	local def = class and self.RelapseWeapons and self.RelapseWeapons[class]
+	local r = def and def.Relapse
+	if not r then
+		if IsValid(wep) then
+			r = wep.Relapse
+		elseif istable(wep) then
+			r = wep.Relapse
+		end
+	end
+	if (not r or not r.Weight) and class then
+		local stored = weapons.GetStored(class)
+		r = stored and stored.Relapse
+	end
+
+	return math.max(0, (r and r.Weight) or 0)
+end
+
+-- Extra kilograms on top of an unladen human. Starts at 0; weapons always add.
+function meta:GetExtraWeightBase()
+	return math.max(0, self:GetDTFloat(DT_PLAYER_FLOAT_EXTRAWEIGHT) or 0)
+end
+
+function meta:SetExtraWeight(kg)
+	self:SetDTFloat(DT_PLAYER_FLOAT_EXTRAWEIGHT, math.max(0, kg or 0))
+	if SERVER and P_Team(self) == TEAM_HUMAN then
+		self:ResetSpeed()
+	end
+end
+
+function meta:GetWeaponCarryWeight()
+	local gm = GAMEMODE
+	if not gm or not gm.GetWeaponCarryWeight then return 0 end
+
+	local total = 0
+	for _, wep in ipairs(self:GetWeapons()) do
+		if wep:IsValid() then
+			total = total + gm:GetWeaponCarryWeight(wep)
+		end
+	end
+
+	return total
+end
+
+function meta:GetExtraWeight()
+	return self:GetExtraWeightBase() + self:GetWeaponCarryWeight()
+end
+
+function meta:GetCarrySpeedMul()
+	local extra = self:GetExtraWeight()
+	if extra <= 0 then return 1 end
+
+	local body = GAMEMODE.HumanBodyMass or 75
+	local load = extra * math.max(0, self.WeaponWeightSlowMul or 1)
+
+	return body / (body + load)
+end
+
 function meta:AddLegDamage(damage)
 	if self.SpawnProtection then return end
 
@@ -572,6 +642,10 @@ function meta:ResetSpeed(noset, health)
 
 	if self:IsSkillActive(SKILL_LIGHTWEIGHT) and wep:IsValid() and wep.IsMelee then
 		speed = speed + 6
+	end
+
+	if P_Team(self) == TEAM_HUMAN then
+		speed = speed * self:GetCarrySpeedMul()
 	end
 
 	speed = math.max(1, speed)

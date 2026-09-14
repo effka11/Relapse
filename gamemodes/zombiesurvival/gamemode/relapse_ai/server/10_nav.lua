@@ -1,6 +1,6 @@
--- Relapse AI navigation: Valve .nav is a temporary walk host until Relapse's own
--- graph exists. relapse_editmesh is that editor shell — not nav_edit, not maps/*.nav.
--- Readiness, budgeted path computation, blocked-area memory, BSP ladders.
+-- Relapse AI navigation: Valve .nav is fallback until Relapse mesh links.
+-- relapse_editmesh is that editor shell — not nav_edit, not maps/*.nav.
+-- Relapse mesh: painted skin + A* on cell centres (93_mesh_path.lua).
 
 local AI = RelapseAI
 local Nav = {}
@@ -29,6 +29,7 @@ end
 Nav.Penalty = {
 	Stuck = 500, -- snagged on geometry the mesh does not show
 	Barricade = 1400, -- nailed prop in the way: walk up to this much further instead of breaking it
+	Prop = 450, -- unnailed physics: walk around the crate, don't drop off the roof
 	Unbreakable = 3000, -- hammered for ObstacleTimeout without result (locked door, elevator)
 }
 Nav.Queue = {} -- pending requests, FIFO
@@ -74,7 +75,7 @@ end
 Nav.Profiles = {
 	zombie = {
 		StepHeight = 18,
-		JumpHeight = 60, -- duck-jump ledge (185 jump power, 600 gravity)
+		JumpHeight = 68, -- 64u crate + duck-jump (185 jump power, 600 gravity)
 		JumpMul = 2.5,
 		JumpCost = 60, -- flat cost per jump connection
 		CrouchMul = 1.5,
@@ -448,6 +449,15 @@ local function SpecFromBox(box)
 	local height = maxs.z - mins.z
 	if height < 40 or sx < 1 or sy < 1 then return nil, "too small" end
 
+	-- Stair / ramp func_ladder is a brush along the slope. Its AABB is longer
+	-- than it is tall (thin slab on the run) or a fat stairwell volume. Spec
+	-- would still emit a vertical shaft at the box centre — bots then spin on
+	-- the ramp trying to "climb" it. A real shaft is taller than it is long.
+	local thick, span = math.min(sx, sy), math.max(sx, sy)
+	if (thick <= 48 and span > height * 1.2) or (thick > 40 and span >= height * 0.85) then
+		return nil, "ramp"
+	end
+
 	local cx, cy = (mins.x + maxs.x) * 0.5, (mins.y + maxs.y) * 0.5
 	local width, thickness, dirs
 	if sx >= sy then
@@ -624,11 +634,22 @@ end
 
 -- Best shaft that actually changes floor toward the goal. Uses BSP climbables
 -- so a roof ladder still counts if CreateNavLadder failed or A* will not climb it.
+function Nav.IsShaft(ladder)
+	local b, t = ladder:GetBottom(), ladder:GetTop()
+	if not b or not t then return false end
+	local rise = math.abs(t.z - b.z)
+	if rise < 48 then return false end
+	local dx, dy = t.x - b.x, t.y - b.y
+	-- Stair volumes lean with the slope (run ≈ rise). A shaft is nearly vertical.
+	return (dx * dx + dy * dy) * 4 <= rise * rise
+end
+
 function Nav.FindLadderForGoal(pos, goal, maxMountDist)
 	if not pos or not goal then return nil end
 	local dz = goal.z - pos.z
+	local island = math.abs(dz) <= 36
 	local wantUp = dz > 36
-	if not wantUp and dz > -36 then return nil end
+	if not island and not wantUp and dz > -36 then return nil end
 
 	local list = Nav.Climbables
 	if not list or #list == 0 then
@@ -640,37 +661,49 @@ function Nav.FindLadderForGoal(pos, goal, maxMountDist)
 	local best, bestScore, bestUp
 	local now = CurTime()
 	local bad = Nav.BadLadders
+	local hereX, hereY = pos.x - goal.x, pos.y - goal.y
+	local hereD = math.sqrt(hereX * hereX + hereY * hereY)
 
 	for _, ladder in ipairs(list) do
-		if Nav.HasLadder(ladder) then
+		if Nav.HasLadder(ladder) and Nav.IsShaft(ladder) then
 			local banned = bad[ladder:GetID()]
 			if not (banned and banned > now) then
 				local b, t = ladder:GetBottom(), ladder:GetTop()
-				local mount, land, usable, reaches
-				if wantUp then
-					usable = math.abs(b.z - pos.z) <= 160 and t.z >= pos.z + 24
-					reaches = t.z >= goal.z - 140
-					mount, land = b, t
-				else
-					usable = math.abs(t.z - pos.z) <= 160 and b.z <= pos.z - 24
-					reaches = b.z <= goal.z + 140
-					mount, land = t, b
-				end
-				if usable then
+				local function consider(mount, land, up, usable, reaches, extra)
+					if not usable then return end
 					local mdx, mdy = mount.x - pos.x, mount.y - pos.y
 					local mountD2 = mdx * mdx + mdy * mdy
-					if not maxMountD2 or mountD2 <= maxMountD2 then
-						local ldx, ldy = land.x - goal.x, land.y - goal.y
-						local landD2 = ldx * ldx + ldy * ldy
-						if landD2 <= landMax then
-							local score = math.sqrt(mountD2) + math.sqrt(landD2) * 1.2
-							if not reaches then score = score + 2500 end
-							if not best or score < bestScore then
-								best, bestScore, bestUp = ladder, score, wantUp
-							end
-						end
+					if maxMountD2 and mountD2 > maxMountD2 then return end
+					local ldx, ldy = land.x - goal.x, land.y - goal.y
+					local landD = math.sqrt(ldx * ldx + ldy * ldy)
+					if landD * landD > landMax then return end
+					-- Down is a first leg (courtyard). Do not require the pit to
+					-- already be closer to the other roof.
+					if island and up and landD > hereD - 40 then return end
+					local score = math.sqrt(mountD2) + landD * 1.2 + (extra or 0)
+					if not reaches then score = score + 2500 end
+					if not best or score < bestScore then
+						best, bestScore, bestUp = ladder, score, up
 					end
 				end
+				if island or wantUp then
+					local reaches = t.z >= goal.z - 140
+					local climbs = t.z >= pos.z + 24
+					local bottomHere = math.abs(b.z - pos.z) <= 280
+					-- Bottom in the pit: dest is that landing; mesh walks down first.
+					local bottomBelow = wantUp and b.z <= pos.z - 40
+					if climbs and (bottomHere or bottomBelow) then
+						local extra = bottomBelow and (400 + (pos.z - b.z) * 0.4) or 0
+						consider(b, t, true, true, reaches, extra)
+					end
+				end
+				-- Always allow a down shaft: wantDown, same-Z island, or the
+				-- first leg of down-then-up to a high pad.
+				local extraDown = wantUp and 180 or 0
+				consider(t, b, false,
+					math.abs(t.z - pos.z) <= 280 and b.z <= pos.z - 24,
+					not wantUp or b.z <= goal.z + 140,
+					extraDown)
 			end
 		end
 	end
@@ -742,6 +775,9 @@ function Nav.BuildLadders()
 	if wired > 0 then
 		AI.Log("nav ladders: wired %d (promoted %d wall-ladder exits so A* will climb them)", wired, promoted)
 	end
+	if AI.Mesh and AI.Mesh.LinkLadders and AI.Mesh.Linked then
+		AI.Mesh.LinkLadders()
+	end
 	return climbN, #boxes
 end
 
@@ -767,7 +803,7 @@ do
 		self:SetSolid(SOLID_NONE)
 		self:SetNoDraw(true)
 		self.loco:SetStepHeight(18)
-		self.loco:SetJumpHeight(60)
+		self.loco:SetJumpHeight(68)
 		self.loco:SetDeathDropHeight(200)
 	end
 
@@ -973,6 +1009,7 @@ hook.Add("InitPostEntity", "RelapseAI.NavAutogen", function()
 		if not GAMEMODE or not AI.cv.nav_autogen:GetBool() then return end
 		if game.SinglePlayer() then return end
 		if navmesh.IsLoaded() or navmesh.IsGenerating() then return end
+		if AI.Mesh and AI.Mesh.Cells and #AI.Mesh.Cells > 0 then return end
 
 		if AI.HasRealPlayer() then
 			AI.Log("no navmesh for %s and players are online; run relapse_ai_nav_generate when ready", game.GetMap())

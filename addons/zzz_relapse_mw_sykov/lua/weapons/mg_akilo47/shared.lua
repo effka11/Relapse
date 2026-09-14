@@ -33,7 +33,7 @@ SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_smg_pose_offset", "grip_vert_offset", "grip_vert_smg_offset",
 "grip_vert_pro_offset", "grip_vert_pro_smg_offset", "grip_smg_anggrip_offset", "grip_gl_offset"}
 
-SWEP.PrintName = "Автомат АК-47"
+SWEP.PrintName = "АК-47"
 SWEP.TranslationName = "wep_ak47"
 SWEP.TranslationDescription = "wep_ak47_desc"
 SWEP.Category = "Modern Warfare"

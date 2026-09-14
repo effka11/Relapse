@@ -1250,6 +1250,17 @@ function PANEL:PerformLayout()
 end
 
 function PANEL:Think()
+	if not IsValid(MySelf) then return end
+
+	local show = GAMEMODE.DisplayXPHUD and not GAMEMODE.FilmMode and MySelf:Team() ~= TEAM_UNDEAD
+	if self:IsVisible() ~= show then
+		self:SetVisible(show)
+		if show then
+			self:InvalidateLayout(true)
+		end
+	end
+	if not show then return end
+
 	local new_level = MySelf:GetZSLevel()
 
 	if new_level ~= self.PlayerLevel then

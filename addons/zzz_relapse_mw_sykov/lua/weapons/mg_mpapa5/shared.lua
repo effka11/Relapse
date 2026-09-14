@@ -35,7 +35,7 @@ SWEP.RelapsePreviewCamScale = 1.4
 SWEP.Base = "mg_base"
 SWEP.GripPoseParameters = {"grip_ang_offset", "grip_vert_offset", "grip_barshort_offset", "grip_barcust_offset", "grip_vertpro_offset"}
 
-SWEP.PrintName = "Пистолет-пулемёт MP5"
+SWEP.PrintName = "MP5"
 SWEP.TranslationName = "wep_mp5"
 SWEP.TranslationDescription = "wep_mp5_desc"
 SWEP.Category = "Modern Warfare"

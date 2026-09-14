@@ -4,7 +4,7 @@ local Models = {
 	Model("models/props_debris/concrete_chunk08a.mdl")
 }
 
-local colRubble = Color(20, 20, 140)
+local colRubble = RelapseUI.CopyCol(RelapseUI.Col.Muted)
 function EFFECT:Init(data)
 	local origin = data:GetOrigin()
 	local maxs = Vector(16, 16, 72)
@@ -28,7 +28,6 @@ function EFFECT:Init(data)
 			ent:SetCollisionBounds(minbound, maxbound)]]
 			ent:PhysicsInit(SOLID_VPHYSICS)
 
-			ent:SetRenderFX(kRenderFxDistort)
 			ent:SetColor(colRubble)
 
 			local phys = ent:GetPhysicsObject()

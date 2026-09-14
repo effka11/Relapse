@@ -2,7 +2,8 @@
 -- Layout (5/15) lives in vgui/relapse_ui.lua and reads only these colours.
 --
 -- Off-white, same-hue gray. Surfaces are neutral value steps.
--- Wine only for damage and shortage. Cyan stays in the world (sigils).
+-- Wine only for damage and shortage. World sigils use the same tokens:
+-- live Fog (Text / HealthMax), hurt and corrupt Wine.
 
 RelapseUI = RelapseUI or {}
 
@@ -80,3 +81,50 @@ RelapseUI.Rad = {
 	Button = 16,
 	Bar    = 8
 }
+
+local colSigil = Color(0, 0, 0, 255)
+
+function RelapseUI.CopyCol(c, a)
+	return Color(c.r, c.g, c.b, a or c.a or 255)
+end
+
+function RelapseUI.LerpCol(a, b, t, out)
+	t = math.Clamp(t or 0, 0, 1)
+	out = out or Color(0, 0, 0, 255)
+	out.r = a.r + (b.r - a.r) * t
+	out.g = a.g + (b.g - a.g) * t
+	out.b = a.b + (b.b - a.b) * t
+	out.a = (a.a or 255) + ((b.a or 255) - (a.a or 255)) * t
+	return out
+end
+
+-- Live Fog, corrupt Wine. healthfrac 1 is full. flashfrac 1 is a just-hit pulse.
+function RelapseUI.SigilCol(corrupt, healthfrac, flashfrac, out)
+	local c = RelapseUI.Col
+	out = out or colSigil
+	healthfrac = math.Clamp(healthfrac or 1, 0, 1)
+	flashfrac = math.Clamp(flashfrac or 0, 0, 1)
+	if corrupt then
+		RelapseUI.LerpCol(c.HealthMin, c.Danger, healthfrac, out)
+		if flashfrac > 0 then
+			RelapseUI.LerpCol(out, c.Text, flashfrac, out)
+		end
+	else
+		RelapseUI.LerpCol(c.HealthMin, c.HealthMax, healthfrac, out)
+		if flashfrac > 0 then
+			RelapseUI.LerpCol(out, c.Danger, flashfrac, out)
+		end
+	end
+	return out
+end
+
+function RelapseUI.SigilFromEnt(ent, out)
+	if not (ent and ent:IsValid()) then
+		return RelapseUI.SigilCol(false, 0, 0, out)
+	end
+
+	local maxh = ent:GetSigilMaxHealth()
+	local frac = maxh > 0 and ent:GetSigilHealth() / maxh or 0
+	local flash = 1 - math.min((CurTime() - ent:GetSigilLastDamaged()) * 2, 1)
+	return RelapseUI.SigilCol(ent:GetSigilCorrupted(), frac, flash, out)
+end
