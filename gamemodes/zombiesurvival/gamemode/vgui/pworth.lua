@@ -85,9 +85,16 @@ local function WorthThink(self)
 end
 
 function MakepWorth()
+	if GAMEMODE.CloseOtherOverlays then
+		GAMEMODE:CloseOtherOverlays("shop")
+	end
 	RelapseUI.HideOtherShops("worth")
 	if pWorth and pWorth:IsValid() then
+		local host = RelapseUI.MenuHost(pWorth)
 		pWorth:Remove()
+		if IsValid(host) then
+			host:Remove()
+		end
 		pWorth = nil
 	end
 

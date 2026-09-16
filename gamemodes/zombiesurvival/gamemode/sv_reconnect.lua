@@ -335,7 +335,8 @@ local function RestoreReconnectActiveWeapon(pl, class)
 	if pl:GetActiveWeapon() == wep then return end
 
 	local active = pl:GetActiveWeapon()
-	if active:IsValid() and not active.Unarmed and active:GetClass() ~= "weapon_zs_fists" then
+	local gm = GAMEMODE or GM
+	if active:IsValid() and not active.Unarmed and not (gm and gm:IsHumanUnarmedWeapon(active:GetClass())) then
 		return
 	end
 
@@ -548,11 +549,15 @@ function GM:ApplyReconnectSpawn(pl)
 		self:SyncReconnectInventory(pl)
 
 		for _, wepdata in ipairs(state.weapons or {}) do
-			GiveReconnectWeapon(pl, wepdata.class)
+			local class = wepdata.class
+			if self:IsHumanUnarmedWeapon(class) then
+				class = self.HumanUnarmedWeapon
+			end
+			GiveReconnectWeapon(pl, class)
 		end
 
-		if not pl:HasWeapon("weapon_zs_fists") and not self.ZombieEscape then
-			GiveReconnectWeapon(pl, "weapon_zs_fists")
+		if not pl:HasWeapon(self.HumanUnarmedWeapon) and not self.ZombieEscape then
+			GiveReconnectWeapon(pl, self.HumanUnarmedWeapon)
 		end
 
 		for _, wep in pairs(pl:GetWeapons()) do

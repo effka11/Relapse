@@ -32,6 +32,9 @@ function PANEL:SetModel(strModelName)
 	end
 
 	local seqs = {"idle", "idle_unholstered", "inspect", "draw", "walk", "Run1", "walk_all", "WalkUnarmed_all", "walk_all_moderate"}
+	if self.RelapsePlayerPreview then
+		seqs = {"idle_all_01", "idle_subtle", "menu_walk", "pose_standing_02", "idle", "walk_all", "WalkUnarmed_all"}
+	end
 	for _, name in ipairs(seqs) do
 		local iSeq = self.Entity:LookupSequence(name)
 		if iSeq > 0 then
@@ -81,6 +84,14 @@ function PANEL:LayoutEntity(ent)
 		return
 	end
 
+	if self.RelapsePlayerPreview and RelapseUI and RelapseUI.OrbitPlayerPreview then
+		RelapseUI.OrbitPlayerPreview(self, ent)
+		if self.bAnimated then
+			self:RunAnimation()
+		end
+		return
+	end
+
 	if self.bAnimated then
 		self:RunAnimation()
 	end
@@ -93,7 +104,29 @@ function PANEL:PostDrawModel(ent)
 	end
 end
 
+function PANEL:OnMousePressed(mc)
+	if RelapseUI and RelapseUI.PlayerPreviewDragPress and RelapseUI.PlayerPreviewDragPress(self, mc) then
+		return
+	end
+	if self.BaseClass and self.BaseClass.OnMousePressed then
+		self.BaseClass.OnMousePressed(self, mc)
+	end
+end
+
+function PANEL:OnMouseReleased(mc)
+	if RelapseUI and RelapseUI.PlayerPreviewDragRelease and RelapseUI.PlayerPreviewDragRelease(self) then
+		return
+	end
+	if self.BaseClass and self.BaseClass.OnMouseReleased then
+		self.BaseClass.OnMouseReleased(self, mc)
+	end
+end
+
 function PANEL:OnRemove()
+	if self.RelapseOrbitDragging then
+		self:MouseCapture(false)
+		self.RelapseOrbitDragging = false
+	end
 	if RelapseUI and RelapseUI.ClearShopPreviewParts then
 		RelapseUI.ClearShopPreviewParts(self)
 	end

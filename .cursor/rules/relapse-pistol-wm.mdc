@@ -1,0 +1,45 @@
+---
+description: MW pistol worldmodel hold — 1911 is the etalon. Same pipeline for 357/M19/Makarov.
+globs: addons/zzz_relapse_mw_sykov/lua/autorun/relapse_mw_playermodel_pose.lua,addons/zzz_relapse_mw_sykov/lua/weapons/mg_m1911/**/*.lua,addons/zzz_relapse_mw_sykov/lua/weapons/mg_357/**/*.lua,addons/zzz_relapse_mw_sykov/lua/weapons/mg_p320/**/*.lua,addons/zzz_relapse_mw_sykov/lua/weapons/mg_makarov/**/*.lua,gamemodes/zombiesurvival/gamemode/*relapse_wmpose*
+alwaysApply: true
+---
+
+# Relapse WM пистолета
+
+Эталон: **Кольт 1911** (`mg_m1911`, `tag_pistol_offset`). M19 / Макаров / .357 — тот же пайплайн. Не `PlaceWorldModelInHands` (это винтовка, `tag_sling`).
+
+Код: `ApplyPistolBindToOffsets` в `relapse_mw_playermodel_pose.lua`.
+
+## Один меш
+
+Рамка на кости оружия, ствол/слайд — `m_TpModel`. `CLASS_HOLD` кольта крутили **уже на pack**: Move/Pitch в осях ствола после `Angle(0,90,-90)`. Считать extras от identity — оси едут, поза съезжает.
+
+| | Куда |
+|---|---|
+| `WorldModelOffsets` | только pack пака |
+| Кость игрока `tag_pistol_offset` | pack |
+| Кость оружия сначала | pack, `SetupBones` |
+| Потом `OffsetWithBind` | pack + `CLASS_HOLD` + слайдеры, оси от pack |
+| WM-аттачи | `PoseTpModels` pack → extra |
+
+Не рисовать `ShowOnWorldModel == false` (.357 спидлоадер).
+
+DWM: keepalive `DrawModel`, спрятать blend/material, на время RO=nil. Сборка в RO. `SetNoDraw(false)`.
+
+Hold: сразу Idle (не ждать бег). `SWEP.HoldType = "Pistol"` сам по себе — однорукий HL2.
+
+```lua
+-- ❌ extras от нулевой кости — оси не те, что у кольта
+self:ManipulateBonePosition(wepBone, vector_origin)
+local pos, ang = OffsetWithBind(self, owner, bind, false, self)
+
+-- ✅ pack на рамке, затем extras в этих осях, слайд тем же дельта
+self:ManipulateBonePosition(wepBone, packPos)
+self:ManipulateBoneAngles(wepBone, packAng)
+self:SetupBones()
+local pos, ang = OffsetWithBind(self, owner, bind, false, self)
+self:ManipulateBonePosition(wepBone, pos)
+PoseTpModels(self, packPos, packAng, extraPos, extraAng)
+```
+
+Не пустой DWM. Не extras в `WorldModelOffsets` (пак съест). Не шить rifle `MW_HOLD_POS` на пистолет. `changelevel`, не `restart`.

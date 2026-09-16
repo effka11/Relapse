@@ -10,6 +10,9 @@ local SHADE_CONTROL = {
 
 local SLOW_VEL_SQR = 48 * 48
 local SLOW_ANG_SQR = 20 * 20
+-- Resting phys objects sit on contact or a millimetre of penetration. Anything
+-- larger is a hang (player crawled out, door opened, the crate underneath moved).
+local SUPPORT_DROP = 8
 
 ---------------------------------------------------------------------------
 -- Candidates
@@ -54,6 +57,26 @@ local function IsHeldByGameplay(ent)
 	return IsShadeGrabbed(ent)
 end
 
+-- True if the collision hull still meets world / another solid within SUPPORT_DROP.
+-- Players and NPCs count: while they are underneath the prop stays put; once they
+-- leave, the next settle tick unfreezes it so it can fall.
+local function HasRestSupport(ent)
+	local pos = ent:GetPos()
+	local tr = util.TraceEntity({
+		start = pos,
+		endpos = pos + Vector(0, 0, -SUPPORT_DROP),
+		filter = ent,
+		mask = MASK_SOLID,
+	}, ent)
+	return tr.Hit or tr.StartSolid
+end
+
+local function WakePhys(ent)
+	EachPhys(ent, function(obj)
+		obj:Wake()
+	end)
+end
+
 -- Loose map/player props that would otherwise slide when walked into.
 function meta:RelapseIsPushCandidate()
 	if not self:IsValid() then return false end
@@ -84,6 +107,7 @@ function meta:RelapseFreezeAgainstPush()
 
 	local phys = self:GetPhysicsObject()
 	if not phys:IsValid() or not phys:IsMoveable() then return false end
+	if not HasRestSupport(self) then return false end
 
 	self.m_RelapsePushFrozen = true
 	EachPhys(self, function(obj)
@@ -107,20 +131,38 @@ end
 
 local function TrySettle(ent)
 	if not ent:RelapseIsPushCandidate() then return end
-	if ent.m_RelapsePushFrozen then return end
 	if IsHeldByGameplay(ent) then return end
+
+	if ent.m_RelapsePushFrozen then
+		if not HasRestSupport(ent) then
+			ent:RelapseUnfreezeAgainstPush()
+		end
+		return
+	end
 
 	local phys = ent:GetPhysicsObject()
 	if not phys:IsValid() or not phys:IsMoveable() then return end
 
-	if phys:IsAsleep() then
-		ent:RelapseFreezeAgainstPush()
+	local asleep = phys:IsAsleep()
+	if not asleep then
+		local velSqr = phys:GetVelocity():LengthSqr()
+		local angSqr = phys:GetAngleVelocity():LengthSqr()
+		if velSqr >= SLOW_VEL_SQR or angSqr >= SLOW_ANG_SQR then return end
+	end
+
+	-- Asleep / slow in mid-air: the thing it landed on walked away. Wake so
+	-- gravity runs; do not freeze or it stays a static hanging hull.
+	if not HasRestSupport(ent) then
+		if asleep then
+			WakePhys(ent)
+		end
 		return
 	end
 
-	local velSqr = phys:GetVelocity():LengthSqr()
-	local angSqr = phys:GetAngleVelocity():LengthSqr()
-	if velSqr >= SLOW_VEL_SQR or angSqr >= SLOW_ANG_SQR then return end
+	if asleep then
+		ent:RelapseFreezeAgainstPush()
+		return
+	end
 
 	for _, ply in ipairs(player.GetAll()) do
 		if ply:Alive() and ply:GetGroundEntity() == ent then

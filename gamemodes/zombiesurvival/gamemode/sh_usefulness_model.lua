@@ -325,6 +325,31 @@ GM.RelapseWeapons = {
 			Clip = 8,
 		}
 	},
+	mg_fists = {
+		PrintName = "Кулаки",
+		Description = "Your hands. They reach the one in front of you, not the one in the doorway.",
+		TranslationName = "wep_fists",
+		TranslationDescription = "wep_fists_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_fists",
+		IsMelee = true,
+		Unarmed = true,
+		IsFistWeapon = true,
+		Undroppable = true,
+		NoDismantle = true,
+		NoPickupNotification = true,
+		NoGlassWeapons = true,
+		Relapse = {
+			Melee = true,
+			Type = "unarmed",
+			Damage = 15,
+			Delay = 0.6,
+			Swing = 0.25,
+			Stopping = 0,
+			Range = 40,
+			Weight = 0,
+			DamageType = DMG_CLUB,
+		}
+	},
 	mg_me_t9loadout = {
 		PrintName = "Нож",
 		Description = "A service knife. Issued with the kit: it reaches the one in the doorway, not the one behind him.",
@@ -351,6 +376,36 @@ GM.RelapseWeapons = {
 			Stopping = 40,
 			Range = 48,
 			Weight = 0.32,
+		}
+	},
+	mg_me_t9machete = {
+		PrintName = "Мачете",
+		Description = "A long blade. It reaches the one behind the doorway, not the one in the next room.",
+		TranslationName = "wep_cwmachete",
+		TranslationDescription = "wep_cwmachete_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_cwmachete.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/easy/cw/weapons/wm_me_t9machete.mdl",
+		},
+		PreviewClipZ = -4.12,
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(45, 0, 45),
+		PreviewOffset = Vector(0, 0, -1),
+		PreviewLift = 0.7,
+		PreviewCamScale = 1.0,
+		IsMelee = true,
+		Tier = 2,
+		Relapse = {
+			Melee = true,
+			Type = "slash",
+			Damage = 38,
+			Delay = 0.70,
+			Swing = 0.28,
+			Stopping = 75,
+			Range = 58,
+			Weight = 0.65,
 		}
 	},
 	mg_m1911 = {
@@ -769,6 +824,41 @@ GM.RelapseWeapons = {
 			Automatic = true,
 		}
 	},
+	mg_falima = {
+		PrintName = "FAL",
+		Description = "A battle rifle. Twenty 7.62×51: one shot, then the trigger waits.",
+		TranslationName = "wep_fal",
+		TranslationDescription = "wep_fal_desc",
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_fal_side.png",
+		PreviewBoneMerge = true,
+		PreviewHullBounds = true,
+		PreviewParts = {
+			"models/viper/mw/weapons/w_falima.mdl",
+			"models/viper/mw/attachments/falima/attachment_vm_ar_falima_reciever.mdl",
+			"models/viper/mw/attachments/falima/attachment_vm_ar_falima_barrel.mdl",
+			"models/viper/mw/attachments/falima/attachment_vm_ar_falima_mag.mdl",
+			"models/viper/mw/attachments/falima/attachment_vm_ar_falima_stock.mdl",
+			"models/viper/mw/attachments/falima/attachment_vm_ar_falima_forend.mdl",
+		},
+		PreviewAngle = Angle(0, 0, 0),
+		PreviewLocalAng = Angle(0, 0, 90),
+		PreviewOffset = Vector(0, 0, -3),
+		PreviewLift = 2.8,
+		PreviewCamScale = 1.4,
+		Ammo = "762x51",
+		Tier = 5,
+		Relapse = {
+			Damage = 38,
+			Delay = 0.16,
+			Reload = 2.6,
+			Kinetic = 0.16,
+			Recoil = 1.45,
+			Accuracy = 0.95,
+			Weight = 4.25,
+			Clip = 20,
+			Automatic = false,
+		}
+	},
 	mg_smgolf45 = {
 		PrintName = "UMP-45",
 		Description = "A duty .45 SMG. Twenty-five rounds: heavier than the nines, the mag is shorter.",
@@ -930,6 +1020,7 @@ function GM:BindRelapseWeapon(src)
 			src.RelapsePreviewHullBounds = def.PreviewHullBounds
 		end
 		src.RelapsePreviewBodygroups = def.PreviewBodygroups
+		src.RelapsePreviewClipZ = def.PreviewClipZ or src.RelapsePreviewClipZ
 		src.RelapsePreviewAngle = def.PreviewAngle or src.RelapsePreviewAngle
 		src.RelapsePreviewLocalAng = def.PreviewLocalAng or src.RelapsePreviewLocalAng
 		src.RelapsePreviewOffset = def.PreviewOffset or src.RelapsePreviewOffset

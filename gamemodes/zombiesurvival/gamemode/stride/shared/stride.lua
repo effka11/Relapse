@@ -1,5 +1,7 @@
 -- Shared stride clock. Sounds, view bob, leg anims, and weapon mods should
 -- read this instead of inventing their own step rate.
+-- Procedural eye/VM overlay is off (ViewBob). MW locomotion stays on the
+-- viewmodel camera bone. Sounds and legs still use this clock.
 --
 --   local st = GAMEMODE.Stride:Get(pl)
 --   st.cycle      0-1 gait (two steps)
@@ -7,14 +9,17 @@
 --   st.foot       0 left, 1 right
 --   st.interval   seconds per step
 --   st.intensity  0-1
+--   st.sprintBlend 0-1 (IN_SPEED run, for eye bob)
 --   st.speed      2D u/s
 --   st.sprinting
 --   st.grounded
 --
 -- SWEP flags (client bob):
---   StrideSkipViewModel   skip our viewmodel overlay
---   StrideKeepEngineBob   keep HL2 BobScale
---   StrideBobScale        extra amplitude mul
+--   StrideSkipViewModel     skip our viewmodel overlay
+--   StrideSkipCamera        skip our eye bob
+--   StrideKeepEngineBob     keep HL2 BobScale
+--   StrideKeepRelapseBob    force our overlay on an mg_base weapon
+--   StrideBobScale          extra amplitude mul
 
 local TEAM_HUMAN = TEAM_HUMAN
 local IN_SPEED = IN_SPEED
@@ -58,6 +63,7 @@ local Stride = {}
 GM.Stride = Stride
 
 Stride.Enabled = true
+Stride.ViewBob = false -- no fake camera/VM sway; MW keeps tag_camera
 -- One step, Source units (1 unit = 1 inch). Walk ~0.75-1 m, run ~1.9 m.
 Stride.WalkLength = 40
 Stride.RunLength = 76
@@ -69,6 +75,22 @@ Stride.MaxPlaybackRate = 2
 Stride.MinStepMs = 240
 Stride.MaxStepMs = 720
 Stride.BobFreq = 0.5
+-- Walk: gun sway, camera still. Sprint: one bounce per foot, like sprint_loop.
+Stride.VMWalkDip = 1.05
+Stride.VMWalkSide = 0.62
+Stride.VMWalkPitch = 0.75
+Stride.VMWalkRoll = 1.05
+Stride.CamSprintDip = 1.35
+Stride.CamSprintSide = 0.45
+Stride.CamSprintPitch = 1.05
+Stride.CamSprintYaw = 0.28
+Stride.CamSprintRoll = 2.1
+Stride.VMSprintDip = 1.8
+Stride.VMSprintSide = 0.9
+Stride.VMSprintPitch = 1.35
+Stride.VMSprintRoll = 2.4
+Stride.CrouchBobMul = 0.7
+Stride.AdsBobMul = 0.12
 
 local function GetState(pl)
 	local pt = E_GetTable(pl)
@@ -80,14 +102,20 @@ local function GetState(pl)
 			foot = 0,
 			interval = 0.45,
 			intensity = 0,
+			sprintBlend = 0,
 			speed = 0,
 			sprinting = false,
 			grounded = true,
 			lastStepTime = -1
 		}
 		pt.StrideState = st
-	elseif st.bobCycle == nil then
-		st.bobCycle = 0
+	else
+		if st.bobCycle == nil then
+			st.bobCycle = 0
+		end
+		if st.sprintBlend == nil then
+			st.sprintBlend = 0
+		end
 	end
 
 	return st
@@ -214,6 +242,7 @@ function Stride:FinishMove(pl, mv)
 		local pt = E_GetTable(pl)
 		if pt.StrideState then
 			pt.StrideState.intensity = 0
+			pt.StrideState.sprintBlend = 0
 		end
 
 		return
@@ -234,6 +263,7 @@ function Stride:FinishMove(pl, mv)
 
 	local want = (grounded and speed >= self.MinSpeed) and 1 or 0
 	st.intensity = math_Approach(st.intensity, want, dt * self.IntensityRate)
+	st.sprintBlend = math_Approach(st.sprintBlend or 0, (want > 0 and sprinting) and 1 or 0, dt * self.IntensityRate)
 
 	if want > 0 then
 		if CLIENT and not IsFirstTimePredicted() then
@@ -256,9 +286,67 @@ if not CLIENT then return end
 
 local Angle = Angle
 local IsValid = IsValid
+local weapons_IsBasedOn = weapons.IsBasedOn
+
+function Stride:IsMWBaseWeapon(wep)
+	if not IsValid(wep) then
+		return false
+	end
+
+	local class = wep:GetClass()
+	if not class then
+		return false
+	end
+
+	return class == "mg_base" or weapons_IsBasedOn(class, "mg_base")
+end
+
+function Stride:ShouldSkipCamera(wep)
+	if not IsValid(wep) then
+		return false
+	end
+	if wep.StrideSkipCamera then
+		return true
+	end
+
+	return self:IsMWBaseWeapon(wep) and not wep.StrideKeepRelapseBob
+end
+
+function Stride:ShouldSkipViewModel(wep)
+	if not IsValid(wep) or wep.StrideSkipViewModel then
+		return true
+	end
+
+	return self:IsMWBaseWeapon(wep) and not wep.StrideKeepRelapseBob
+end
+
+function Stride:GetHoldMul(pl, wep)
+	local mul = 1
+	if P_Crouching(pl) then
+		mul = mul * (self.CrouchBobMul or 1)
+	end
+	if IsValid(wep) then
+		mul = mul * (wep.StrideBobScale or 1)
+		if wep.GetIronsights and wep:GetIronsights() then
+			mul = mul * (self.AdsBobMul or 0.12)
+		end
+	end
+
+	return mul
+end
+
+-- One bounce per foot, sway over the two-step gait. Same clock as footsteps.
+function Stride:GetSprintShape(st)
+	local c = st.cycle or 0
+	local bounce = 0.5 - 0.5 * math_cos(c * math_pi * 4)
+	local sway = math_sin(c * math_pi * 2)
+	local kick = math_sin(c * math_pi * 4)
+
+	return bounce, sway, kick
+end
 
 function Stride:ZeroEngineBob(pl)
-	if not self:UsesStride(pl) then return end
+	if not self.ViewBob or not self:UsesStride(pl) then return end
 
 	local wep = pl:GetActiveWeapon()
 	if IsValid(wep) and not wep.StrideKeepEngineBob then
@@ -267,36 +355,62 @@ function Stride:ZeroEngineBob(pl)
 end
 
 function Stride:ApplyCamera(pl, origin, angles)
-	if not self:UsesStride(pl) then return origin, angles end
+	if not self.ViewBob or not self:UsesStride(pl) then return origin, angles end
 
-	local vertical, lateral, _, amp = self:GetBob(pl)
-	if amp < 0.001 then return origin, angles end
+	local wep = pl:GetActiveWeapon()
+	if self:ShouldSkipCamera(wep) then return origin, angles end
 
-	origin = origin + angles:Up() * (vertical * 0.16)
+	local st = GetState(pl)
+	local blend = (st.sprintBlend or 0) * (st.intensity or 0) * self:GetHoldMul(pl, wep)
+	if blend < 0.001 then return origin, angles end
+
+	local bounce, sway, kick = self:GetSprintShape(st)
+	local dip = bounce + kick * 0.12
+	origin = origin + angles:Up() * (-dip * self.CamSprintDip * blend) + angles:Right() * (sway * self.CamSprintSide * blend)
 	angles = Angle(angles.p, angles.y, angles.r)
-	angles.p = angles.p + vertical * 0.08
-	angles.r = angles.r + lateral * 0.12
+	angles.p = angles.p + (-dip * self.CamSprintPitch) * blend
+	angles.y = angles.y + sway * self.CamSprintYaw * blend
+	angles.r = angles.r + sway * self.CamSprintRoll * blend
 
 	return origin, angles
 end
 
 function Stride:ApplyViewModel(pl, wep, pos, ang)
-	if not pos or not ang or wep.StrideSkipViewModel or not self:UsesStride(pl) then
+	if not self.ViewBob or not pos or not ang or self:ShouldSkipViewModel(wep) or not self:UsesStride(pl) then
 		return pos, ang
 	end
 
-	local vertical, lateral, _, amp = self:GetBob(pl)
-	if amp < 0.001 then return pos, ang end
-
-	local mul = wep.StrideBobScale or 1
-	if wep.GetIronsights and wep:GetIronsights() then
-		mul = mul * 0.12
+	local st = GetState(pl)
+	local hold = self:GetHoldMul(pl, wep)
+	local intensity = st.intensity or 0
+	local sprintBlend = st.sprintBlend or 0
+	local walkMul = intensity * (1 - sprintBlend) * hold
+	local sprintMul = intensity * sprintBlend * hold
+	if walkMul < 0.001 and sprintMul < 0.001 then
+		return pos, ang
 	end
 
 	ang = Angle(ang.p, ang.y, ang.r)
-	pos = pos + ang:Up() * (vertical * 0.32 * mul) + ang:Right() * (lateral * 0.18 * mul)
-	ang:RotateAroundAxis(ang:Right(), vertical * 0.22 * mul)
-	ang:RotateAroundAxis(ang:Forward(), lateral * 0.24 * mul)
+
+	if walkMul >= 0.001 then
+		local vertical, lateral = self:GetBob(pl)
+		-- GetBob already includes intensity; peel it so walkMul owns the fade.
+		if intensity > 0.001 then
+			vertical = vertical / intensity
+			lateral = lateral / intensity
+		end
+		pos = pos + ang:Up() * (vertical * self.VMWalkDip * walkMul) + ang:Right() * (lateral * self.VMWalkSide * walkMul)
+		ang:RotateAroundAxis(ang:Right(), vertical * self.VMWalkPitch * walkMul)
+		ang:RotateAroundAxis(ang:Forward(), lateral * self.VMWalkRoll * walkMul)
+	end
+
+	if sprintMul >= 0.001 then
+		local bounce, sway, kick = self:GetSprintShape(st)
+		local dip = bounce + kick * 0.12
+		pos = pos + ang:Up() * (-dip * self.VMSprintDip * sprintMul) + ang:Right() * (sway * self.VMSprintSide * sprintMul)
+		ang:RotateAroundAxis(ang:Right(), -dip * self.VMSprintPitch * sprintMul)
+		ang:RotateAroundAxis(ang:Forward(), sway * self.VMSprintRoll * sprintMul)
+	end
 
 	return pos, ang
 end

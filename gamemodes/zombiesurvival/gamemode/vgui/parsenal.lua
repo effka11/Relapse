@@ -696,6 +696,7 @@ function GM:CreateItemViewerGenericElems(viewer)
 	local modelicon = vgui.Create("DImage", vbg)
 	modelicon:SetVisible(false)
 	modelicon:SetKeepAspect(true)
+	modelicon:SetMouseInputEnabled(false)
 	modelicon:Dock(FILL)
 	viewer.m_ModelIcon = modelicon
 
@@ -1044,6 +1045,9 @@ local function ArsenalThink(self)
 end
 
 function GM:OpenArsenalMenu()
+	if self.CloseOtherOverlays then
+		self:CloseOtherOverlays("shop")
+	end
 	RelapseUI.HideOtherShops("points")
 	if self.ArsenalInterface and self.ArsenalInterface:IsValid() then
 		RelapseUI.ShowShopFrame(self.ArsenalInterface)

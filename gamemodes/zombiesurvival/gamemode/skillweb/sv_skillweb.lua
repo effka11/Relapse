@@ -248,8 +248,12 @@ function meta:SkillsRemort()
 	self:SetDesiredActiveSkills({})
 	self.NextSkillReset = nil
 
+	if GAMEMODE.GrantRelapseScarPick then
+		GAMEMODE:GrantRelapseScarPick(self)
+	end
+
 	self:CenterNotify(COLOR_CYAN, translate.ClientFormat(self, "you_have_remorted_now_rl_x", rl))
-	self:CenterNotify(COLOR_YELLOW, translate.ClientFormat(self, "you_now_have_x_extra_sp", rl))
+	self:CenterNotify(COLOR_YELLOW, translate.ClientFormat(self, "you_have_relapse_picks", self.RelapseScarPicks or 1))
 	for _, pl in pairs(player.GetAll()) do
 		if pl ~= self then
 			pl:CenterNotify(COLOR_CYAN, translate.ClientFormat(pl, "x_has_remorted_to_rl_y", myname, rl))

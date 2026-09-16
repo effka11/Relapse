@@ -11,9 +11,8 @@
 -- it, then hop over it, then ask the mesh for a way around it (the barricade gets
 -- a path penalty, so a detour up to that long wins), and only then swing.
 --
--- Ladders: walk toward the func_ladder AABB until MOVETYPE_LADDER, press into
--- the wall, look along the rungs. No hop onto the volume (IN_JUMP lets go).
--- Dismount on a floor is USE only; jump+use is for letting go still in the shaft.
+-- Ladders: CONTENTS_LADDER does not grab. Walk to the wall, press E to seat,
+-- then W/S climb the face. E again to get off. No hop onto the volume.
 
 local AI = RelapseAI
 local Loco = {}
@@ -32,6 +31,8 @@ local math_cos = math.cos
 local math_sin = math.sin
 local math_rad = math.rad
 local bit_bor = bit.bor
+local bit_band = bit.band
+local bit_bnot = bit.bnot
 local util_TraceHull = util.TraceHull
 local util_TraceLine = util.TraceLine
 local navmesh_GetNavArea = navmesh.GetNavArea
@@ -1145,10 +1146,9 @@ end
 ---------------------------------------------------------------------------
 -- Ladders
 --
--- D3bot-style: walk toward the func_ladder AABB until MOVETYPE_LADDER, then
--- press into the wall (IN_FORWARD, look along the rungs). Success is attach,
--- not reaching the 10u box centre. Floor leave is USE; jump+use still in the
--- shaft. Phases: ground -> attached -> leave.
+-- D3bot-style after +USE: press into the wall (IN_FORWARD, look along the
+-- rungs). The brush does not grab without E. Floor leave is USE. Phases:
+-- ground -> attached -> leave.
 ---------------------------------------------------------------------------
 
 -- GMod leaves PathSegment.type 4/5 unused. A ladder shows up as seg.ladder
@@ -1444,6 +1444,56 @@ local function DropGrounded(pl)
 	return math_abs(pl:GetVelocity().z) < 32
 end
 
+local rimRes = {}
+local rimTr = {mask = MASK_PLAYERSOLID_BRUSHONLY, output = rimRes}
+local function FloorZ(x, y, z)
+	rimTr.start = Vector(x, y, z + 24)
+	rimTr.endpos = Vector(x, y, z - 72)
+	util.TraceLine(rimTr)
+	if rimRes.Hit and not rimRes.HitSky then
+		return rimRes.HitPos.z
+	end
+end
+
+-- Feet on the traced floor, not a deck 8–17u below. deckZ is the hop landing.
+-- FloorZ band only: |vz| belongs to OnVolumeDeck, not USE / stall-leave.
+local function StoodOnDeck(pl, pos, deckZ)
+	if not pl or not pos then return false end
+	local gz = FloorZ(pos.x, pos.y, pos.z)
+	if not gz then return false end
+	if pos.z < gz - 2 or pos.z > gz + 4 then return false end
+	if deckZ and math_abs(gz - deckZ) >= 12 then return false end
+	return true
+end
+
+local function FloorUnder(pos, band)
+	local gz = FloorZ(pos.x, pos.y, pos.z)
+	if gz and math_abs(gz - pos.z) < band then return gz end
+end
+
+-- One helper for InDropBrush, CanAttach, and hop ground. |vz|<32 on the
+-- ladder still needs a floor (grate); slow rungs in empty air are not a deck.
+local function OnVolumeDeck(pl, pos)
+	if StoodOnDeck(pl, pos) then return true end
+	if pl:IsOnGround() then return true end
+	if math_abs(pl:GetVelocity().z) >= 32 then return false end
+	return FloorUnder(pos, 18) ~= nil
+end
+
+-- A grate in the shaft often has IsOnGround false. Floor under the feet, not
+-- a deck 40u below (that is "under the platform").
+local function LadderOnFloor(pl, pos)
+	if FloorUnder(pos, 18) then return true end
+	return DropGrounded(pl)
+end
+
+-- Already on the DROP landing (below the lip). JUMP here falls off the grate.
+local function OnDropLandingFloor(pl, pos, landing)
+	if not landing then return false end
+	if pos.z > landing.z + 12 then return false end
+	return LadderOnFloor(pl, pos)
+end
+
 local function DropKey(drop)
 	local p = drop and drop.pos
 	if not p then return nil end
@@ -1528,7 +1578,7 @@ function Loco:InDropBrush(pos)
 	if pos.z < landing.z - 24 then return false end
 	local vol = ContainingClimbableVol(pos)
 	if not vol then return false end
-	if DropGrounded(self.Player) then
+	if OnVolumeDeck(self.Player, pos) then
 		if pos.z > landing.z + 12 then return false end
 		if vol.mins and vol.maxs
 			and Aabb2DDist(vol.mins, vol.maxs, landing.x, landing.y) < DROP_PAD then
@@ -1694,32 +1744,6 @@ end
 -- Which way is the pit? n points away from the wall. The rim is the side
 -- that still has a floor at the top; the pit does not. A flipped GetNormal
 -- used to put the down-mount in the void, so bots spun on the lip.
-local rimRes = {}
-local rimTr = {mask = MASK_PLAYERSOLID_BRUSHONLY, output = rimRes}
-local function FloorZ(x, y, z)
-	rimTr.start = Vector(x, y, z + 24)
-	rimTr.endpos = Vector(x, y, z - 72)
-	util.TraceLine(rimTr)
-	if rimRes.Hit and not rimRes.HitSky then
-		return rimRes.HitPos.z
-	end
-end
-
--- A grate in the shaft often has IsOnGround false. Floor under the feet, not
--- a deck 40u below (that is "under the platform").
-local function LadderOnFloor(pl, pos)
-	local gz = FloorZ(pos.x, pos.y, pos.z)
-	if gz and math_abs(gz - pos.z) < 18 then return true end
-	return DropGrounded(pl)
-end
-
--- Already on the DROP landing (below the lip). JUMP here falls off the grate.
-local function OnDropLandingFloor(pl, pos, landing)
-	if not landing then return false end
-	if pos.z > landing.z + 12 then return false end
-	return LadderOnFloor(pl, pos)
-end
-
 function Loco:LadderDownNormal(ladder)
 	local n = AI.Nav.LadderNormal(ladder)
 	local t = ladder:GetTop()
@@ -1813,12 +1837,116 @@ function Loco:DestForGoal(pos, goal)
 	return mount
 end
 
+-- Mount on the open-face pad: (C)+n*(ext+DROP_PAD). Not DropWalkStep.
+local function HopMountXY(n, mins, maxs, cx, cy)
+	local hx = (maxs.x - mins.x) * 0.5
+	local hy = (maxs.y - mins.y) * 0.5
+	local nx, ny = n.x, n.y
+	local ext = math_abs(nx) * hx + math_abs(ny) * hy
+	local halfPerp = math_abs(ny) * hx + math_abs(nx) * hy
+	return cx + nx * (ext + DROP_PAD), cy + ny * (ext + DROP_PAD), ext, halfPerp, nx, ny
+end
+
+local function HopOnOpenPad(px, py, cx, cy, nx, ny, ext, halfPerp)
+	local ox, oy = px - cx, py - cy
+	local along = ox * nx + oy * ny
+	local perp = -ox * ny + oy * nx
+	return along >= ext - 2 and math_abs(perp) <= halfPerp + DROP_PAD
+end
+
+-- Two padded corners of the +n face; nearest to the feet.
+local function HopOpenPadCorner(mins, maxs, pad, px, py, nx, ny, cx, cy)
+	local x0, y0 = mins.x - pad, mins.y - pad
+	local x1, y1 = maxs.x + pad, maxs.y + pad
+	local ax, ay, aa, bx, by, ba
+	local function consider(x, y)
+		local along = (x - cx) * nx + (y - cy) * ny
+		if not aa or along > aa then
+			bx, by, ba = ax, ay, aa
+			ax, ay, aa = x, y, along
+		elseif not ba or along > ba then
+			bx, by, ba = x, y, along
+		end
+	end
+	consider(x0, y0)
+	consider(x1, y0)
+	consider(x0, y1)
+	consider(x1, y1)
+	if Dist2(px, py, ax, ay) <= Dist2(px, py, bx, by) then
+		return ax, ay
+	end
+	return bx, by
+end
+
+local function HopBrushDist(L, pos)
+	local vol = AI.Nav.LadderVolumeOf(L.Ent)
+	if not vol or not vol.mins then return 1 end
+	return Aabb2DDist(vol.mins, vol.maxs, pos.x, pos.y)
+end
+
+-- Open pad, or in the volume off the deck (rungs). Not the long face.
+local function CanAttach(pl, pos, L)
+	if not pl or not pos or not L then return false end
+	local vol = AI.Nav.LadderVolumeOf(L.Ent)
+	if not vol or not vol.mins then
+		return pl:GetMoveType() == MOVETYPE_LADDER and not OnVolumeDeck(pl, pos)
+	end
+	local _, _, ext, halfPerp, nx, ny = HopMountXY(L.Normal, vol.mins, vol.maxs, L.Cx, L.Cy)
+	if HopOnOpenPad(pos.x, pos.y, L.Cx, L.Cy, nx, ny, ext, halfPerp) then
+		return true
+	end
+	return Aabb2DContains(vol.mins, vol.maxs, pos.x, pos.y) and not OnVolumeDeck(pl, pos)
+end
+
+-- Ground wish: mount / pad corner around the brush. -n only on the open pad
+-- or on the rungs. Do not walk the mount chord through a grate hole.
+local function HopGroundWish(pl, pos, L)
+	local n = L.Normal
+	local vol = AI.Nav.LadderVolumeOf(L.Ent)
+	if not vol or not vol.mins then
+		local mx, my = L.Cx + n.x * DROP_PAD, L.Cy + n.y * DROP_PAD
+		local dx, dy = mx - pos.x, my - pos.y
+		local d = math_sqrt(dx * dx + dy * dy)
+		if d > 1 then return dx / d, dy / d, mx, my end
+		return -n.x, -n.y, mx, my
+	end
+	local mins, maxs = vol.mins, vol.maxs
+	local cx, cy = L.Cx, L.Cy
+	local mx, my, ext, halfPerp, nx, ny = HopMountXY(n, mins, maxs, cx, cy)
+	local onPad = HopOnOpenPad(pos.x, pos.y, cx, cy, nx, ny, ext, halfPerp)
+	local inside = Aabb2DContains(mins, maxs, pos.x, pos.y)
+	local onDeck = OnVolumeDeck(pl, pos)
+	if onPad or (inside and not onDeck) then
+		return -n.x, -n.y, mx, my
+	end
+	local tx, ty
+	if inside then
+		tx, ty = HopOpenPadCorner(mins, maxs, DROP_PAD, pos.x, pos.y, nx, ny, cx, cy)
+	elseif SegHitsAabbInterior(pos.x, pos.y, mx, my, mins, maxs) then
+		tx, ty = PaddedCornerToward(mins, maxs, DROP_PAD, pos.x, pos.y, mx, my)
+		if SegHitsAabbInterior(pos.x, pos.y, tx, ty, mins, maxs) then
+			tx, ty = Aabb2DClampOutside(mins, maxs, pos.x, pos.y, DROP_PAD)
+		end
+	else
+		tx, ty = mx, my
+	end
+	local dx, dy = tx - pos.x, ty - pos.y
+	local d = math_sqrt(dx * dx + dy * dy)
+	if d > 1 then return dx / d, dy / d, tx, ty end
+	-- Long-face pad: keep walking the +n corner. Do not -n or freeze here.
+	tx, ty = HopOpenPadCorner(mins, maxs, DROP_PAD, pos.x, pos.y, nx, ny, cx, cy)
+	dx, dy = tx - pos.x, ty - pos.y
+	d = math_sqrt(dx * dx + dy * dy)
+	if d > 1 then return dx / d, dy / d, tx, ty end
+	return -n.x, -n.y, mx, my
+end
+
 function Loco:BeginLadder(seg, up, nextSeg)
 	if self.Ladder then return false end
 	local ladder = seg.ladder
 	if not AI.Nav.HasLadder(ladder) then return false end
 	local now = CurTime()
-	local onLadder = self.Player:GetMoveType() == MOVETYPE_LADDER
+	local onLadder = self.Player:GetMoveType() == MOVETYPE_LADDER or self.Player.RelapseLadderHold
 	local done = self.LadderDone
 	-- Only a successful leave skips remount, and never while already attached.
 	-- Same brush, another hop (mid then up) is a different StartZ — allow it.
@@ -1842,8 +1970,16 @@ function Loco:BeginLadder(seg, up, nextSeg)
 		leaveZ, leaveX, leaveY = nextSeg.pos.z, nextSeg.pos.x, nextSeg.pos.y
 	else
 		leaveZ = up and topZ or botZ
-		leaveX, leaveY = cx, cy
+		local vol = AI.Nav.LadderVolumeOf(ladder)
+		if vol and vol.mins then
+			leaveX, leaveY = HopMountXY(n, vol.mins, vol.maxs, cx, cy)
+		else
+			leaveX, leaveY = cx + n.x * DROP_PAD, cy + n.y * DROP_PAD
+		end
 	end
+	local pos = self.Player:GetPos()
+	local hop = {Ent = ladder, Normal = n, Cx = cx, Cy = cy}
+	local phase = CanAttach(self.Player, pos, hop) and "attached" or "ground"
 
 	self.Ladder = {
 		Ent = ladder,
@@ -1858,7 +1994,7 @@ function Loco:BeginLadder(seg, up, nextSeg)
 		Cx = cx,
 		Cy = cy,
 		HalfWidth = ladder:GetWidth() * 0.5,
-		Phase = onLadder and "attached" or "ground",
+		Phase = phase,
 		Since = now,
 		PhaseSince = now,
 		BestZ = nil,
@@ -1967,6 +2103,9 @@ function Loco:EndLadder(reason, success)
 	self.Bot.View:ClearOverride()
 	self:ResetProgress()
 	self.StuckLevel = 0
+	if GAMEMODE.RelapseLadderRelease then
+		GAMEMODE:RelapseLadderRelease(self.Player)
+	end
 	if success then
 		self.LadderDone = {Ent = L.Ent, Until = CurTime() + 0.45, StartZ = L.StartZ, SegDist = L.SegDist}
 		self:AdvancePastLadder(L)
@@ -2065,7 +2204,7 @@ function Loco:ThinkLadder(now)
 	local pl = self.Player
 	local n = L.Normal
 	local phase = L.Phase
-	local onLadder = pl:GetMoveType() == MOVETYPE_LADDER
+	local onLadder = pl:GetMoveType() == MOVETYPE_LADDER or pl.RelapseLadderHold
 	local pos = pl:GetPos()
 	self:ProbeLadderBlock(pos)
 
@@ -2078,8 +2217,19 @@ function Loco:ThinkLadder(now)
 		end
 		self.Bot.View:SetOverride(p)
 	elseif phase == "ground" then
-		local dx, dy = L.Cx - pos.x, L.Cy - pos.y
-		if dx * dx + dy * dy > 36 then
+		local wx, wy, tx, ty = HopGroundWish(pl, pos, L)
+		local lx, ly = wx, wy
+		if tx then
+			lx, ly = tx - pos.x, ty - pos.y
+		end
+		if lx * lx + ly * ly > 1 then
+			self:LadderLook(lx, ly, L.Up and -12 or 20)
+		else
+			self:LadderLook(-n.x, -n.y, L.Up and P.LadderPitchUp or P.LadderPitchDown)
+		end
+	elseif phase == "leave" then
+		local dx, dy = (L.LeaveX or L.Cx) - pos.x, (L.LeaveY or L.Cy) - pos.y
+		if dx * dx + dy * dy > 1 then
 			self:LadderLook(dx, dy, L.Up and -12 or 20)
 		else
 			self:LadderLook(-n.x, -n.y, L.Up and P.LadderPitchUp or P.LadderPitchDown)
@@ -2100,15 +2250,14 @@ function Loco:ThinkLadder(now)
 		if onLadder and L.BestZ and now - L.BestZTime > P.LadderStallTime then
 			if IsValid(self.Obstacle) then
 				-- Punching a shelf in the shaft: height will not change until it is gone.
-			elseif LadderOnFloor(pl, pos) then
-				-- Mid landing: leave here. Abort+jump falls into the shaft.
-				L.LeaveZ, L.LeaveX, L.LeaveY = pos.z, pos.x, pos.y
+			elseif StoodOnDeck(pl, pos, L.LeaveZ) then
+				-- Destination cell deck: leave here. Abort+jump falls into the shaft.
 				self:SetLadderPhase("leave")
 			end
-			-- No floor: stay attached. AbortLadder EndLadder then Step IN_JUMP.
+			-- Not on that deck: stay attached. AbortLadder EndLadder then Step IN_JUMP.
 		end
 	elseif phase == "leave" then
-		if inPhase > P.LadderDismountTime then
+		if inPhase > P.LadderDismountTime and HopBrushDist(L, pos) > 0 then
 			self:EndLadder("leave", true)
 		end
 	end
@@ -2120,95 +2269,90 @@ function Loco:StepLadder(cmd, viewYaw, buttons, now)
 	local pl = self.Player
 	local pos = pl:GetPos()
 	local n = L.Normal
-	local onLadder = pl:GetMoveType() == MOVETYPE_LADDER
+	local onLadder = pl:GetMoveType() == MOVETYPE_LADDER or pl.RelapseLadderHold
 	local onGround = pl:IsOnGround()
 	local phase = L.Phase
 
 	local wx, wy = 0, 0
 
-	if onLadder and phase == "ground" then
+	if phase == "ground" and onLadder then
 		self:SetLadderPhase("attached")
 		phase = "attached"
 	end
 
+	if phase == "attached" then
+		wx, wy = -n.x, -n.y
+		if onLadder then
+			LadderProgress(L, pos.z, now)
+			-- LeaveZ is the cell (floor + 1.5). Feet on that deck count as at Z.
+			if (L.Up and pos.z >= L.LeaveZ) or (not L.Up and pos.z <= L.LeaveZ)
+				or StoodOnDeck(pl, pos, L.LeaveZ) then
+				self:SetLadderPhase("leave")
+				phase = "leave"
+			end
+		elseif onGround then
+			if (L.Up and pos.z >= L.LeaveZ) or (not L.Up and pos.z <= L.LeaveZ)
+				or StoodOnDeck(pl, pos, L.LeaveZ) then
+				self:SetLadderPhase("leave")
+				phase = "leave"
+			elseif math_abs(pos.z - L.StartZ) < 28 then
+				self:SetLadderPhase("ground") -- slid off the foot; walk in again
+				phase = "ground"
+			end
+		end
+	end
+
 	if phase == "ground" then
-		-- Already in this hop's brush (grate): press the rungs, not the AABB centre.
-		local hopVol = AI.Nav.LadderVolumeOf and AI.Nav.LadderVolumeOf(L.Ent)
-		local inHop = hopVol and hopVol.mins and hopVol.maxs
-			and Aabb2DDist(hopVol.mins, hopVol.maxs, pos.x, pos.y) == 0
-		if inHop then
+		wx, wy = HopGroundWish(pl, pos, L)
+		-- USE opts into the brush; without it the engine no longer auto-grabs.
+		if not onLadder and not pl.RelapseLadderHold
+			and GAMEMODE.RelapseLadderIsNear and GAMEMODE:RelapseLadderIsNear(pl) then
+			if (self.LadderUsePulse or 0) < now then
+				buttons = bit_bor(buttons, IN_USE)
+				self.UseUntil = now + 0.08
+				self.LadderUsePulse = now + 0.6
+			end
+		end
+	elseif phase == "leave" then
+		local dist = HopBrushDist(L, pos)
+		local farZ = L.LeaveZ
+		-- Cell Z is floor+1.5; StoodOnDeck is the feet on that landing.
+		local atZ = StoodOnDeck(pl, pos, farZ)
+			or (L.Up and pos.z >= farZ)
+			or (not L.Up and pos.z <= farZ)
+		if not atZ then
 			wx, wy = -n.x, -n.y
 		else
-			-- Lip of the volume on the start-cell side, not the AABB centre
-			-- (that walks through to the far rim) and not +normal (sign of n).
-			local tx, ty = L.Cx, L.Cy
-			local sp = L.Seg and L.Seg.pos
-			if sp then
-				local sx, sy = sp.x - L.Cx, sp.y - L.Cy
-				local sl = math_sqrt(sx * sx + sy * sy)
-				if sl > 1 then
-					tx = L.Cx + sx / sl * 8
-					ty = L.Cy + sy / sl * 8
-				end
-			end
-			local dx, dy = tx - pos.x, ty - pos.y
+			local dx, dy = (L.LeaveX or L.Cx) - pos.x, (L.LeaveY or L.Cy) - pos.y
 			local d = math_sqrt(dx * dx + dy * dy)
 			if d > 1 then
 				wx, wy = dx / d, dy / d
 			else
-				wx, wy = -n.x, -n.y
-			end
-		end
-	elseif phase == "attached" then
-		wx, wy = -n.x, -n.y
-		if onLadder then
-			LadderProgress(L, pos.z, now)
-			local farZ = L.LeaveZ
-			if L.Up then
-				if pos.z >= farZ - 8 then self:SetLadderPhase("leave") end
-			elseif pos.z <= farZ + 16 then
-				self:SetLadderPhase("leave")
-			end
-		elseif onGround then
-			local farZ, startZ = L.LeaveZ, L.StartZ
-			if math_abs(pos.z - farZ) < 28 then
-				self:SetLadderPhase("leave")
-			elseif math_abs(pos.z - startZ) < 28 then
-				self:SetLadderPhase("ground") -- slid off the foot; walk in again
-			else
-				wx, wy = -n.x, -n.y -- in the shaft, not attached: reach the volume
-			end
-		else
-			wx, wy = -n.x, -n.y
-		end
-	elseif phase == "leave" then
-		local onFloor = LadderOnFloor(pl, pos)
-		local dx, dy = (L.LeaveX or L.Cx) - pos.x, (L.LeaveY or L.Cy) - pos.y
-		local d = math_sqrt(dx * dx + dy * dy)
-		local atCx = math_abs((L.LeaveX or L.Cx) - L.Cx) < 1
-			and math_abs((L.LeaveY or L.Cy) - L.Cy) < 1
-		if onFloor then
-			if d > 1 and not atCx then
-				wx, wy = dx / d, dy / d
-			else
 				wx, wy = 0, 0
 			end
-			buttons = bit_bor(buttons, IN_USE)
-			self.UseUntil = now + 0.08
-		else
-			if d > 1 then
-				wx, wy = dx / d, dy / d
-			else
-				wx, wy = -n.x, -n.y
+			if dist > 0 then
+				buttons = bit_bor(buttons, IN_USE)
+				self.UseUntil = now + 0.08
 			end
-			buttons = bit_bor(buttons, IN_JUMP, IN_USE)
-			self.JumpUntil = now + 0.08
-			self.UseUntil = now + 0.08
 		end
-		if not onLadder then
+		if atZ and dist > 0 and not onLadder then
 			self:EndLadder("leave", true)
 			wx, wy = 0, 0
 		end
+	end
+
+	if pl.RelapseLadderHold then
+		cmd:SetSideMove(0)
+		if L.Up then
+			cmd:SetForwardMove(10000)
+			buttons = bit_bor(buttons, IN_FORWARD)
+			buttons = bit_band(buttons, bit_bnot(IN_BACK))
+		else
+			cmd:SetForwardMove(-10000)
+			buttons = bit_bor(buttons, IN_BACK)
+			buttons = bit_band(buttons, bit_bnot(IN_FORWARD))
+		end
+		return buttons
 	end
 
 	local wish = self.WishDir
@@ -2220,7 +2364,7 @@ function Loco:StepLadder(cmd, viewYaw, buttons, now)
 	local yaw = math_rad(viewYaw)
 	local fwd = wx * math_cos(yaw) + wy * math_sin(yaw)
 	local side = wx * math_sin(yaw) - wy * math_cos(yaw)
-	if onLadder then side = 0 end -- a sideways press slides us off the rungs
+	if phase == "attached" then side = 0 end -- a sideways press slides us off the rungs
 	return self:ApplyMove(cmd, buttons, fwd, side)
 end
 
@@ -2228,12 +2372,18 @@ end
 -- If the path wants it, take it; otherwise let go. Stair func_ladder is not a shaft.
 -- A DROP on this floor comes first: the brush beside the lip is not our hop.
 function Loco:HandleUnplannedLadder(pos, now)
+	local function letGo()
+		if GAMEMODE.RelapseLadderRelease then
+			GAMEMODE:RelapseLadderRelease(self.Player)
+		end
+		self:Note("ladder:off")
+	end
 	local inBrush, _, landing = self:InDropBrush(pos)
 	if inBrush then
 		-- Falling in the column: let go. Landing grate: JUMP falls into the shaft.
 		if not OnDropLandingFloor(self.Player, pos, landing) then
 			self.JumpUntil = now + 0.06
-			self:Note("ladder:off")
+			letGo()
 			return
 		end
 	end
@@ -2246,16 +2396,13 @@ function Loco:HandleUnplannedLadder(pos, now)
 				-- jump falls off the grate.
 				if pos.z > seg.pos.z - 4 then
 					self.JumpUntil = now + 0.06
-					self:Note("ladder:off")
+					letGo()
 					return
 				end
 			elseif IsLadderSeg(seg) and AI.Nav.HasLadder(seg.ladder) then
 				if self:IsNearLadderSeg(pos, seg) then
 					local up = self:LadderSegIsUp(seg, seg.ladder)
 					if self:BeginLadder(seg, up, segs[j + 1]) then
-						if self.Player:GetMoveType() == MOVETYPE_LADDER then
-							self:SetLadderPhase("attached")
-						end
 						return
 					end
 				end
@@ -2279,9 +2426,6 @@ function Loco:HandleUnplannedLadder(pos, now)
 				end
 				local fakeType = up and SEG_LADDER_UP or SEG_LADDER_DOWN
 				if self:BeginLadder({ladder = ladder, type = fakeType, how = fakeType}, up) then
-					if self.Player:GetMoveType() == MOVETYPE_LADDER then
-						self:SetLadderPhase("attached")
-					end
 					return
 				end
 			end
@@ -2304,7 +2448,7 @@ function Loco:HandleUnplannedLadder(pos, now)
 	if not jumped and LadderOnFloor(self.Player, pos) then
 		self.UseUntil = now + 0.08
 	end
-	self:Note("ladder:off")
+	letGo()
 end
 
 -- Goal is on another floor: climb if we are at the rungs. Mesh paths start the

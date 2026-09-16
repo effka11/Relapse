@@ -24,6 +24,7 @@ local function ApplyOne(class, def)
 		wep.RelapsePreviewHullBounds = def.PreviewHullBounds
 	end
 	wep.RelapsePreviewBodygroups = def.PreviewBodygroups
+	wep.RelapsePreviewClipZ = def.PreviewClipZ or wep.RelapsePreviewClipZ
 	wep.RelapsePreviewAngle = def.PreviewAngle or wep.RelapsePreviewAngle or Angle(8, 90, 0)
 	wep.RelapsePreviewLocalAng = def.PreviewLocalAng or wep.RelapsePreviewLocalAng
 	wep.RelapsePreviewOffset = def.PreviewOffset or wep.RelapsePreviewOffset
@@ -46,7 +47,14 @@ local function ApplyOne(class, def)
 		wep.MeleeRange = R.Range
 		wep.MeleeKnockBack = R.Stopping
 		wep.SwingTime = R.Swing
-		wep.MeleeDamageType = DMG_SLASH
+		local dmgtype = R.DamageType or DMG_SLASH
+		wep.MeleeDamageType = dmgtype
+		if def.Unarmed ~= nil then wep.Unarmed = def.Unarmed end
+		if def.IsFistWeapon ~= nil then wep.IsFistWeapon = def.IsFistWeapon end
+		if def.Undroppable ~= nil then wep.Undroppable = def.Undroppable end
+		if def.NoDismantle ~= nil then wep.NoDismantle = def.NoDismantle end
+		if def.NoPickupNotification ~= nil then wep.NoPickupNotification = def.NoPickupNotification end
+		if def.NoGlassWeapons ~= nil then wep.NoGlassWeapons = def.NoGlassWeapons end
 		wep.Primary = wep.Primary or {}
 		wep.Primary.Damage = R.Damage
 		wep.Primary.Delay = R.Delay
@@ -69,7 +77,7 @@ local function ApplyOne(class, def)
 			if R.Delay then
 				hit.Length = R.Delay * (11 / 15)
 			end
-			hit.DamageType = DMG_SLASH
+			hit.DamageType = dmgtype
 			if R.Stopping then
 				hit.DamageForce = R.Stopping * 20
 			end

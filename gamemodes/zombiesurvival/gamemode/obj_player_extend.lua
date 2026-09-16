@@ -709,6 +709,13 @@ function meta:SetBarricadeGhosting(b, fullspeed)
 
 	if fullspeed == nil then fullspeed = false end
 
+	if not b then
+		self.RelapseLadderGhosting = nil
+		if SERVER then
+			self:SetNW2Bool("RelapseLadderGhosting", false)
+		end
+	end
+
 	self:SetDTBool(0, b)
 	self:SetDTBool(1, b and fullspeed)
 	--self:SetCustomCollisionCheck(b)
@@ -723,7 +730,13 @@ end
 meta.IsBarricadeGhosting = meta.GetBarricadeGhosting
 
 function meta:ShouldBarricadeGhostWith(ent)
-	return ent:IsBarricadeProp()
+	if ent:IsBarricadeProp() then return true end
+	if not (E_GetTable(self).RelapseLadderGhosting or (self.GetNW2Bool and self:GetNW2Bool("RelapseLadderGhosting", false))) then
+		return false
+	end
+	if ent:GetMoveType() == MOVETYPE_VPHYSICS then return true end
+	local cls = ent:GetClass() or ""
+	return string.sub(cls, 1, 12) == "prop_physics" or string.sub(cls, 1, 12) == "func_physbox"
 end
 
 function meta:BarricadeGhostingThink()
@@ -757,7 +770,18 @@ function meta:ShouldNotCollide(ent)
 			return false
 		end
 
-		return E_GetDTBool(self, 0) and ent:IsBarricadeProp()
+		if E_GetDTBool(self, 0) then
+			if ent:IsBarricadeProp() then return true end
+			if E_GetTable(self).RelapseLadderGhosting
+				or (self.GetNW2Bool and self:GetNW2Bool("RelapseLadderGhosting", false)) then
+				if ent:GetMoveType() == MOVETYPE_VPHYSICS then return true end
+				local cls = ent:GetClass() or ""
+				if string.sub(cls, 1, 12) == "prop_physics" or string.sub(cls, 1, 12) == "func_physbox" then
+					return true
+				end
+			end
+		end
+		return false
 	end
 
 	return false

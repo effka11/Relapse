@@ -14,3 +14,6 @@ resource.AddWorkshop("2685550699") -- Random's Spetsnaz Ground Forces (Airborne 
 resource.AddWorkshop("2816381632") -- Random's Spetsnaz Content Pack 2 (airborne textures)
 resource.AddWorkshop("3739488356") -- [RE2: Remake] Zombies Ragdolls
 resource.AddWorkshop("3629315417") -- zs_hades3
+resource.AddWorkshop("2904144632") -- COD BO1 Undercover Spetsnaz
+resource.AddWorkshop("3486238431") -- Alvaro's Shared Textures
+resource.AddWorkshop("3571846979") -- Wuchang Fallen Feathers playermodel

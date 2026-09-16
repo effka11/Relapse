@@ -107,6 +107,8 @@ function PANEL:Paint(w, h)
 
 	if infinite then
 		RelapseUI.HudText(clipstr, "Relapse64", rx, h + clipBelow, clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+		local sx = select(1, self:LocalToScreen(rx, 0))
+		self.ClipRightScreen = sx
 		surface.DisableClipping(false)
 		DisableClipping(false)
 		return true
@@ -119,6 +121,8 @@ function PANEL:Paint(w, h)
 	local clipRight = rx - spareW - RelapseUI.sPx(45) + spareLsb + clipRsb
 	RelapseUI.HudText(clipstr, "Relapse64", clipRight, h - RelapseUI.sPx(15) + clipBelow, clipcol, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
 	RelapseUI.HudText(sparestr, "Relapse32", rx, h + spareBelow, RelapseUI.Col.Muted, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 4)
+	local sx = select(1, self:LocalToScreen(clipRight, 0))
+	self.ClipRightScreen = sx
 
 	surface.DisableClipping(false)
 	DisableClipping(false)

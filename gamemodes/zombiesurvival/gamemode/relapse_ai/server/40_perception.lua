@@ -29,7 +29,7 @@ function Percep.UpdateWorld(force)
 	local humans = {}
 	for _, pl in ipairs(team.GetPlayers(TEAM_HUMAN)) do
 		if IsValid(pl) and pl:Alive() and pl:GetObserverMode() == OBS_MODE_NONE and not pl.IsRelapseAIBot
-			and not (AI.Mesh and AI.Mesh.Editors[pl]) then
+			and not (AI.Mesh and AI.Mesh.Editors[pl] == "edit") then
 			humans[#humans + 1] = pl
 		end
 	end

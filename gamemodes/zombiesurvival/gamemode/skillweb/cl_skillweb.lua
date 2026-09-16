@@ -1133,7 +1133,7 @@ function PANEL:OnMousePressed(mc)
 
 				return
 			elseif hoveredskill == -1 then
-				self:DisplayMessage("You need to be level 50 to remort!", COLOR_RED)
+				self:DisplayMessage("You need to be level "..GAMEMODE.MaxLevel.." to remort!", COLOR_RED)
 				surface.PlaySound("buttons/button8.wav")
 
 				return

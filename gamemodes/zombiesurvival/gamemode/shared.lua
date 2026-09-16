@@ -3,27 +3,44 @@ GM.Author	=	"William \"JetBoom\" Moodhe"
 GM.Email	=	"williammoodhe@gmail.com"
 GM.Website	=	"http://www.noxiousnet.com"
 
--- No, adding a gun doesn't make your name worth being here.
-GM.Credits = {
-	{"William \"JetBoom\" Moodhe", "williammoodhe@gmail.com (www.noxiousnet.com)", "Creator / Programmer"},
-	{"11k", "tjd113@gmail.com", "Zombie view models"},
-	{"Eisiger", "k2deseve@gmail.com", "Zombie kill icons"},
-	{"Austin \"Little Nemo\" Killey", "austin_odyssey@yahoo.com", "Ambient music"},
-	{"Zombie Panic: Source", "http://www.zombiepanic.org/", "Melee weapon sounds"},
-	{"Samuel", "samuel_games@hotmail.com", "Board Kit models"},
-	{"Typhon", "lukas-tinel@hotmail.com", "Fear-o-meter textures"},
-	{"Benjy, The Darker One, Raox, Scott", "", "Code contributions"},
+-- Named Relapse authors under Flora Studio. Add a { name, roleKey } row
+-- when someone else ships Relapse work. roleKey is optional.
+GM.RelapseStudioPeople = {
+	{ "effka", "credits_role_relapse_author" },
+}
 
-	{"Mr. Darkness", "", "Russian translation"},
-	{"honsal", "", "Korean translation"},
-	{"rui_troia", "", "Portuguese translation"},
-	{"Shinyshark", "", "Dutch translation"},
-	{"Kradar", "", "Italian translation"},
-	{"Raptor", "", "German translation"},
-	{"The Special Duckling", "", "Danish translation"},
-	{"ptown, Dr. Broly", "", "Spanish translation"},
-
-	{"Anyone else on GitHub or who I've forgotten", "", "Various contributions"},
+GM.RelapseCreditSections = {
+	{
+		Title = "credits_section_studio",
+		People = GM.RelapseStudioPeople
+	},
+	{
+		Title = "credits_section_zs",
+		People = {
+			{ "William \"JetBoom\" Moodhe", "credits_role_zs_creator" }
+		}
+	},
+	{
+		Title = "credits_section_upstream",
+		People = {
+			{ "11k", "credits_role_zombie_vm" },
+			{ "Eisiger", "credits_role_killicons" },
+			{ "Austin \"Little Nemo\" Killey", "credits_role_music" },
+			{ "Zombie Panic: Source", "credits_role_melee_sounds" },
+			{ "Samuel", "credits_role_boardkit" },
+			{ "Typhon", "credits_role_fearometer" },
+			{ "Benjy, The Darker One, Raox, Scott", "credits_role_code" },
+			{ "Mr. Darkness", "credits_role_tr_ru" },
+			{ "honsal", "credits_role_tr_ko" },
+			{ "rui_troia", "credits_role_tr_pt" },
+			{ "Shinyshark", "credits_role_tr_nl" },
+			{ "Kradar", "credits_role_tr_it" },
+			{ "Raptor", "credits_role_tr_de" },
+			{ "The Special Duckling", "credits_role_tr_da" },
+			{ "ptown, Dr. Broly", "credits_role_tr_es" },
+			{ "Anyone else on GitHub or who I've forgotten", "credits_role_various" }
+		}
+	}
 }
 
 if file.Exists(GM.FolderName.."/gamemode/maps/"..game.GetMap()..".lua", "LUA") then
@@ -65,6 +82,10 @@ include("sh_weaponquality.lua")
 include("sh_usefulness.lua")
 include("sh_usefulness_model.lua")
 include("sh_relapse_tabclass.lua")
+include("sh_relapse_inventory.lua")
+include("sh_relapse_scars.lua")
+include("sh_cycle_grid.lua")
+include("sh_relapse_wmpose.lua")
 
 include("noxapi/noxapi.lua")
 
@@ -240,8 +261,10 @@ end
 function GM:FixWeaponBase()
 	local base = weapons.GetStored("weapon_base")
 
-	base.TranslateActivity = function(me)
-		if me.ActivityTranslate[act] ~= nil then
+	-- `act` must be the parameter. A missing arg makes ActivityTranslate[nil]
+	-- always fail, so weapon_base SWEPs (MW) never get hold/ADS poses.
+	base.TranslateActivity = function(me, act)
+		if me.ActivityTranslate and me.ActivityTranslate[act] ~= nil then
 			return me.ActivityTranslate[act]
 		end
 
@@ -631,9 +654,12 @@ function GM:GetDamageResistance(fearpower)
 end
 
 function GM:FindUseEntity(pl, ent)
+	if IsValid(ent) and ent.RelapseLadderClip then
+		ent = NULL
+	end
 	if not ent:IsValid() then
 		local e = pl:TraceLine(90, MASK_SOLID, pl:GetDynamicTraceFilter()).Entity
-		if e:IsValid() then return e end
+		if e:IsValid() and not e.RelapseLadderClip then return e end
 	end
 
 	return ent

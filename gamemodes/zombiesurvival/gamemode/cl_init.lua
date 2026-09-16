@@ -45,6 +45,8 @@ include("vgui/pendboard.lua")
 include("vgui/relapse_ui.lua")
 include("vgui/pworth.lua")
 include("vgui/parsenal.lua")
+include("vgui/pinventory.lua")
+include("vgui/pcharacter.lua")
 include("vgui/premantle.lua")
 include("vgui/dpingmeter.lua")
 include("vgui/dsidemenu.lua")
@@ -58,6 +60,7 @@ include("cl_dermaskin.lua")
 include("cl_deathnotice.lua")
 include("cl_floatingscore.lua")
 include("cl_hint.lua")
+include("cl_relapse_hints.lua")
 include("cl_thirdperson.lua")
 
 include("itemstocks/cl_stock.lua")
@@ -65,6 +68,8 @@ include("itemstocks/cl_stock.lua")
 include("cl_zombieescape.lua")
 include("cl_relapse_carry_holster.lua")
 include("cl_relapse_freecam.lua")
+include("cl_relapse_wmpose.lua")
+include("cl_relapse_inventory.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -1733,14 +1738,23 @@ function GM:ZombieSpawnMenu()
 end
 
 function GM:PlayerBindPress(pl, bind, wasin)
-	if wasin and bind == "gm_showhelp" and (
-		(self.HelpMenu and self.HelpMenu:IsValid())
-		or (self.HelpMenuIgnoreOpen and self.HelpMenuIgnoreOpen > CurTime())
-	) then
-		self:CloseHelpMenu()
+	if wasin and bind == "gm_showhelp" and self.RelapseInventoryOpen and self:RelapseInventoryOpen() then
+		self:CloseRelapseInventory()
 		return true
 	end
-	if wasin and bind == "cancelselect" and self:CloseHelpMenu(true) then
+	if wasin and bind == "gm_showteam" and self.ShopMenuOpen and self:ShopMenuOpen() then
+		self:CloseShopMenu()
+		return true
+	end
+	if wasin and bind == "gm_showspare2" and self.OptionsMenuOpen and self:OptionsMenuOpen() then
+		self:CloseOptionsMenu()
+		return true
+	end
+	if wasin and bind == "cancelselect" and (
+		self:CloseHelpMenu(true)
+		or self:CloseShopOverlays(true)
+		or (self.CloseScoreboard and self:CloseScoreboard(true))
+	) then
 		return true
 	end
 	if bind == "gmod_undo" or bind == "undo" then
@@ -2208,7 +2222,11 @@ end
 
 function GM:CloseWorth()
 	if pWorth and pWorth:IsValid() then
+		local host = RelapseUI.MenuHost(pWorth)
 		pWorth:Remove()
+		if IsValid(host) then
+			host:Remove()
+		end
 		pWorth = nil
 	end
 end

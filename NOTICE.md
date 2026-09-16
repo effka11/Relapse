@@ -73,7 +73,7 @@ These remain under their own terms. Relapse licenses do not replace them.
 | **Manrope** | SIL Open Font License 1.1 — `gamemodes/zombiesurvival/content/resource/fonts/OFL.txt` |
 | **Modern Warfare 2019 SWEPs / Sykov** (`addons/zzz_relapse_mw_sykov`, `reference/mw2019_sykov`, Workshop) | Third-party GMod port; models, sounds, and related assets originate with Activision / Infinity Ward and the SWEP authors. **Not** Flora Studio content; **not** licensed by this repository |
 | **Garry’s Mod, Source, Half-Life 2** | Facepunch / Valve. Relapse is an unofficial mod and does not grant rights in those works |
-| Other credited sounds, models, and translations | See in-game credits (`GM.Credits`) and original ZS attribution; still not relicensed here |
+| Other credited sounds, models, and translations | See in-game credits (`GM.RelapseCreditSections`) and original ZS attribution; still not relicensed here |
 
 ## 4. Names and marks
 

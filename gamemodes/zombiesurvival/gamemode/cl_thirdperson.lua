@@ -73,7 +73,18 @@ local function IgnoreTeam(ent)
 	return not (ent:IsPlayer() and ent:Team() == myteam)
 end
 function GM:CalcViewOTS(pl, origin, angles, fov, znear, zfar)
-	local camPos = origin - otscameraangles:Forward() * 28 + otsdesiredright * 12 * otscameraangles:Right() -- - otscameraangles:Up() * 2
+	local dist = 28
+	local right = 12
+	local wep = pl:GetActiveWeapon()
+	local ads = 0
+	if IsValid(wep) and wep.GetAimDelta then
+		ads = wep:GetAimDelta()
+	end
+	if ads > 0 then
+		dist = Lerp(ads, 28, 16)
+		right = Lerp(ads, 12, 7)
+	end
+	local camPos = origin - otscameraangles:Forward() * dist + otsdesiredright * right * otscameraangles:Right()
 	local eyepos = pl:EyePos()
 
 	trace_wall.start = eyepos

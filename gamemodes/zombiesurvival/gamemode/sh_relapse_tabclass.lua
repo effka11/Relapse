@@ -127,6 +127,7 @@ GM.TabClassWeapon = {
 	weapon_zs_mediccloudbomb = { class = "medic", weight = 14 },
 
 	weapon_zs_fists = { skip = true },
+	mg_fists = { skip = true },
 	weapon_zs_hands = { skip = true },
 	zs_hands = { skip = true },
 	weapon_zs_gunturretcontrol = { skip = true },

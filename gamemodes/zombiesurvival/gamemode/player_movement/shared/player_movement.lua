@@ -64,10 +64,15 @@ local fw, sd, pt, vel, mul, phase
 function GM:Move(pl, move)
 	if pl:GetMoveType() == MOVETYPE_NOCLIP then return end
 
+	if self.RelapseLadderClimb and self:RelapseLadderClimb(pl, move) then
+		return true
+	end
+
 	pt = E_GetTable(pl)
 
 	if P_Team(pl) == TEAM_HUMAN then
-		if P_GetBarricadeGhosting(pl) and not E_GetDTBool(pl, 1) then
+		if P_GetBarricadeGhosting(pl) and not E_GetDTBool(pl, 1)
+			and (pt.RelapseLadderGhostHop or 0) <= curtime() then
 			-- Use 7, because friction will amount this to a velocity of 1 roughly.
 			phase = pt.NoGhosting and E_GetDTFloat(pl, DT_PLAYER_FLOAT_WIDELOAD) > curtime()
 			M_SetMaxClientSpeed(move, math_min(M_GetMaxClientSpeed(move), phase and 7 or ((GAMEMODE.BarricadeGhostSpeed or 10) * (pt.BarricadePhaseSpeedMul or 1))))

@@ -157,6 +157,13 @@ GM.HumanSprintMultiplier = 240 / 95
 GM.ZombieEscapeSprintMultiplier = 1.2
 GM.BarricadeGhostSpeed = 17
 
+-- Default human unarmed. HL2 fists stay as a SWEP base for knuckles / power fists.
+GM.HumanUnarmedWeapon = "mg_fists"
+
+function GM:IsHumanUnarmedWeapon(class)
+	return class == self.HumanUnarmedWeapon or class == "weapon_zs_fists"
+end
+
 SPEED_ZOMBIEESCAPE_SLOWEST = 220
 SPEED_ZOMBIEESCAPE_SLOWER = 230
 SPEED_ZOMBIEESCAPE_SLOW = 240

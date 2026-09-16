@@ -347,6 +347,7 @@ end
 
 function RelapseUI.LayoutViewerStats(viewer)
 	if not IsValid(viewer) then return end
+	if viewer.RelapsePlayerView then return end
 	local bars = viewer.ItemStatBars
 	local bar = bars and bars[1]
 	if not IsValid(bar) then return end
@@ -419,6 +420,16 @@ end
 
 function RelapseUI.LayoutViewerAmmo(viewer)
 	if not IsValid(viewer) then return end
+	if viewer.RelapsePlayerView then
+		if IsValid(viewer.m_AmmoType) then
+			viewer.m_AmmoType:SetVisible(false)
+		end
+		if IsValid(viewer.m_AmmoIcon) then
+			viewer.m_AmmoIcon:SetVisible(false)
+		end
+		RelapseUI.LayoutViewerPlayerModel(viewer)
+		return
+	end
 	local title = viewer.m_Title
 	local icon = viewer.m_AmmoIcon
 	local lab = viewer.m_AmmoType
@@ -591,6 +602,40 @@ function RelapseUI.ShopPreviewBodygroups(sweptable)
 	return def and def.PreviewBodygroups or nil
 end
 
+function RelapseUI.ShopPreviewClipZ(sweptable)
+	if not sweptable then return nil end
+	if isnumber(sweptable.RelapsePreviewClipZ) then
+		return sweptable.RelapsePreviewClipZ
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	local clipZ = def and def.PreviewClipZ
+	return isnumber(clipZ) and clipZ or nil
+end
+
+-- Keep local +Z (blade). WM machete bakes the lanyard past the pommel on j_gun.
+local function withPreviewClipZ(pnl, ent, fn)
+	local clipZ = pnl and pnl.RelapsePreviewClipZ
+	if not isnumber(clipZ) or not IsValid(ent) then
+		fn()
+		return
+	end
+
+	local pos, ang = ent:GetPos(), ent:GetAngles()
+	local worldPos = LocalToWorld(Vector(0, 0, clipZ), angle_zero, pos, ang)
+	local normal = ang:Up()
+	local wasClipping = render.EnableClipping(true)
+	render.PushCustomClipPlane(normal, normal:Dot(worldPos))
+	local ok, err = pcall(fn)
+	render.PopCustomClipPlane()
+	render.EnableClipping(wasClipping)
+	if not ok then
+		error(err)
+	end
+end
+
 function RelapseUI.ApplyShopPreviewBodygroups(ent, groups)
 	if not IsValid(ent) or not istable(groups) then return end
 
@@ -680,38 +725,42 @@ function RelapseUI.DrawShopPreviewGun(pnl, ent)
 		if ent.SetupBones then
 			ent:SetupBones()
 		end
-		ent:DrawModel()
-		if istable(extras) then
-			for i = 1, #extras do
-				local part = extras[i]
-				if IsValid(part) then
-					if part.SetupBones then
-						part:SetupBones()
+		withPreviewClipZ(pnl, ent, function()
+			ent:DrawModel()
+			if istable(extras) then
+				for i = 1, #extras do
+					local part = extras[i]
+					if IsValid(part) then
+						if part.SetupBones then
+							part:SetupBones()
+						end
+						part:DrawModel()
 					end
-					part:DrawModel()
 				end
 			end
-		end
+		end)
 		return
 	end
 
 	local pos = ent:GetPos()
 	local ang = ent:GetAngles()
-	local drew = false
-	if istable(extras) then
-		for i = 1, #extras do
-			local part = extras[i]
-			if IsValid(part) then
-				part:SetPos(pos)
-				part:SetAngles(ang)
-				part:DrawModel()
-				drew = true
+	withPreviewClipZ(pnl, ent, function()
+		local drew = false
+		if istable(extras) then
+			for i = 1, #extras do
+				local part = extras[i]
+				if IsValid(part) then
+					part:SetPos(pos)
+					part:SetAngles(ang)
+					part:DrawModel()
+					drew = true
+				end
 			end
 		end
-	end
-	if not drew then
-		ent:DrawModel()
-	end
+		if not drew then
+			ent:DrawModel()
+		end
+	end)
 end
 
 function RelapseUI.DrawShopPreviewParts(pnl, ent)
@@ -989,6 +1038,231 @@ function RelapseUI.FrameModelPanel(pnl)
 	pnl:SetLookAt((mins + maxs) / 2)
 end
 
+function RelapseUI.PlayerPreviewBounds(ent)
+	if not IsValid(ent) then
+		return Vector(-16, -16, 0), Vector(16, 16, 72)
+	end
+	local omins, omaxs = ent:OBBMins(), ent:OBBMaxs()
+	local rmins, rmaxs = ent:GetRenderBounds()
+	local oh = omaxs.z - omins.z
+	local rh = rmaxs.z - rmins.z
+	if rh > 16 and rh < math.max(72, oh) * 2.2 then
+		return rmins, rmaxs
+	end
+	if oh > 8 then
+		return omins, omaxs
+	end
+	return rmins, rmaxs
+end
+
+function RelapseUI.FramePlayerPreview(pnl)
+	if not IsValid(pnl) then return end
+	RelapseUI.FrameModelPanel(pnl)
+	local ent = pnl.Entity
+	if not IsValid(ent) then return end
+
+	local w = math.max(1, pnl:GetWide())
+	local h = math.max(1, pnl:GetTall())
+	if w < 8 or h < 8 then return end
+
+	local fov = 28
+	pnl:SetFOV(fov)
+
+	local mins, maxs = RelapseUI.PlayerPreviewBounds(ent)
+	local height = math.max(16, maxs.z - mins.z)
+	local width = math.max(12, math.max(maxs.x - mins.x, maxs.y - mins.y))
+	local center = Vector(0, 0, mins.z + height * 0.5)
+
+	local hfov = math.rad(fov)
+	local aspect = w / h
+	local vfov = 2 * math.atan(math.tan(hfov * 0.5) / math.max(0.2, aspect))
+	local pad = 1.22
+	local dist = math.max(
+		(height * 0.5 * pad) / math.max(0.01, math.tan(vfov * 0.5)),
+		(width * 0.5 * pad) / math.max(0.01, math.tan(hfov * 0.5))
+	)
+
+	local yaw = math.rad(28)
+	pnl:SetLookAt(center)
+	pnl:SetCamPos(center + Vector(math.cos(yaw) * dist, math.sin(yaw) * dist, height * 0.02))
+end
+
+function RelapseUI.ResetPlayerPreviewOrbit(pnl)
+	if not IsValid(pnl) then return end
+	pnl.RelapseOrbitYaw = 20
+	pnl.RelapseOrbitVel = 0
+	pnl.RelapseOrbitVelFrom = 0
+	pnl.RelapseOrbitAuto = true
+	pnl.RelapseOrbitSpeedMul = 0
+	pnl.RelapseOrbitIdleAt = nil
+	pnl.RelapseOrbitDragging = false
+	if pnl.MouseCapture then
+		pnl:MouseCapture(false)
+	end
+end
+
+function RelapseUI.PlayerPreviewDragPress(pnl, mc)
+	if not IsValid(pnl) then return false end
+	if not pnl.RelapsePlayerPreview or pnl.RelapsePlayerPreviewStatic then
+		return false
+	end
+	if mc ~= MOUSE_LEFT then return false end
+	pnl:MouseCapture(true)
+	pnl.RelapseOrbitDragging = true
+	pnl.RelapseOrbitAuto = false
+	pnl.RelapseOrbitSpeedMul = 0
+	pnl.RelapseOrbitIdleAt = nil
+	pnl.RelapseOrbitVel = 0
+	pnl.RelapseOrbitLastMX = select(1, input.GetCursorPos())
+	return true
+end
+
+function RelapseUI.PlayerPreviewDragRelease(pnl)
+	if not IsValid(pnl) or not pnl.RelapseOrbitDragging then
+		return false
+	end
+	pnl:MouseCapture(false)
+	pnl.RelapseOrbitDragging = false
+	pnl.RelapseOrbitIdleAt = RealTime() + 5
+	return true
+end
+
+function RelapseUI.OrbitPlayerPreview(pnl, ent)
+	if not IsValid(pnl) or not IsValid(ent) then return end
+	local w, h = pnl:GetWide(), pnl:GetTall()
+	if pnl._RelapsePFW ~= w or pnl._RelapsePFH ~= h then
+		pnl._RelapsePFW, pnl._RelapsePFH = w, h
+		RelapseUI.FramePlayerPreview(pnl)
+	end
+
+	if pnl.RelapsePlayerPreviewStatic then
+		ent:SetAngles(Angle(0, 25, 0))
+		ent:SetPos(vector_origin)
+		return
+	end
+
+	local yaw = pnl.RelapseOrbitYaw
+	if yaw == nil then
+		yaw = 20
+		pnl.RelapseOrbitYaw = yaw
+		pnl.RelapseOrbitVel = 0
+		pnl.RelapseOrbitAuto = true
+		pnl.RelapseOrbitSpeedMul = 0
+	end
+
+	local vel = pnl.RelapseOrbitVel or 0
+	local dt = FrameTime()
+	if dt < 0.001 then
+		dt = 0.001
+	elseif dt > 0.1 then
+		dt = 0.1
+	end
+
+	if pnl.RelapseOrbitDragging then
+		local mx = select(1, input.GetCursorPos())
+		local last = pnl.RelapseOrbitLastMX or mx
+		local dyaw = (mx - last) * 0.45
+		yaw = yaw + dyaw
+		pnl.RelapseOrbitLastMX = mx
+		local instant = math.Clamp(dyaw / dt, -720, 720)
+		local follow = 1 - math.exp(-18 * dt)
+		vel = vel + (instant - vel) * follow
+	else
+		if pnl.RelapseOrbitIdleAt and RealTime() >= pnl.RelapseOrbitIdleAt then
+			pnl.RelapseOrbitIdleAt = nil
+			pnl.RelapseOrbitAuto = true
+			pnl.RelapseOrbitSpeedMul = 0
+			pnl.RelapseOrbitVelFrom = vel
+		end
+
+		if pnl.RelapseOrbitAuto then
+			local mul = math.min(1, (pnl.RelapseOrbitSpeedMul or 0) + dt / 1.1)
+			pnl.RelapseOrbitSpeedMul = mul
+			local ease = mul * mul * (3 - 2 * mul)
+			local from = pnl.RelapseOrbitVelFrom or 0
+			vel = from + (16 - from) * ease
+		else
+			vel = vel * math.exp(-2.15 * dt)
+			if math.abs(vel) < 0.35 then
+				vel = 0
+			end
+		end
+
+		yaw = yaw + vel * dt
+	end
+
+	pnl.RelapseOrbitVel = vel
+	pnl.RelapseOrbitYaw = yaw
+	ent:SetAngles(Angle(0, yaw, 0))
+	ent:SetPos(vector_origin)
+end
+
+function RelapseUI.SetPlayerPreview(pnl, mdl, viewer)
+	if IsValid(viewer) and IsValid(viewer.m_ModelIcon) then
+		viewer.m_ModelIcon:SetVisible(false)
+		viewer.m_ModelIcon:SetMouseInputEnabled(false)
+	end
+	if not IsValid(pnl) then return end
+
+	pnl:SetVisible(true)
+	pnl.RelapseShopPreview = false
+	pnl.RelapsePlayerPreview = true
+	pnl.RelapsePlayerPreviewStatic = false
+	pnl:SetMouseInputEnabled(true)
+	pnl:SetCursor("hand")
+	if RelapseUI.ClearShopPreviewParts then
+		RelapseUI.ClearShopPreviewParts(pnl)
+	end
+	pnl:SetModel(mdl or "")
+	pnl:SetAnimated(true)
+	pnl._RelapsePFW = nil
+	pnl._RelapsePFH = nil
+	RelapseUI.ResetPlayerPreviewOrbit(pnl)
+	RelapseUI.FramePlayerPreview(pnl)
+end
+
+function RelapseUI.LayoutViewerPlayerModel(viewer)
+	if not IsValid(viewer) then return end
+	local box = viewer.m_VBG
+	if not IsValid(box) then return end
+	local title = viewer.m_Title
+	local desc = viewer.m_Desc
+	local inset = RelapseUI.Grid15()
+	local left = viewer.RelapseDescLeft or RelapseUI.sPx(10)
+	local right = RelapseUI.sPx(15)
+	local y = RelapseUI.sPx(15)
+	if IsValid(title) then
+		y = title:GetY() + title:GetTall() + RelapseUI.sPx(10)
+	end
+
+	if IsValid(desc) then
+		local dw = math.max(1, viewer:GetWide() - left - right)
+		local text = desc:GetText() or ""
+		surface.SetFont("Relapse15")
+		local _, lineH = surface.GetTextSize("Ay")
+		lineH = math.max(1, lineH)
+		local n = 0
+		if text ~= "" then
+			n = math.Clamp(#RelapseUI.WrapLines(text, "Relapse15", dw), 1, 3)
+		end
+		local dh = n * lineH
+		desc:SetSize(dw, math.max(1, dh))
+		desc:SetPos(left, y)
+		viewer.RelapseDescVisualTop = y
+		if n > 0 then
+			y = y + dh + RelapseUI.sPx(15)
+		end
+	end
+
+	local boxH = math.max(RelapseUI.Grid15(8), viewer:GetTall() - y - RelapseUI.Grid15())
+	box:SetSize(math.max(1, viewer:GetWide() - 2 * inset), boxH)
+	box:SetPos(inset, y)
+	if IsValid(viewer.ModelPanel) then
+		viewer.ModelPanel._RelapsePFW = nil
+		viewer.ModelPanel._RelapsePFH = nil
+	end
+end
+
 function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 	if IsValid(viewer) and IsValid(viewer.m_ModelIcon) then
 		viewer.m_ModelIcon:SetVisible(false)
@@ -997,6 +1271,7 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 
 	pnl:SetVisible(true)
 	pnl.RelapseShopPreview = true
+	pnl.RelapsePlayerPreview = false
 	pnl.RelapsePreviewFramed = false
 	pnl.RelapsePreviewCenter = nil
 	RelapseUI.ClearShopPreviewParts(pnl)
@@ -1013,6 +1288,7 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 	pnl.RelapsePreviewLift = RelapseUI.ShopPreviewLift(sweptable)
 	pnl.RelapsePreviewCamScale = RelapseUI.ShopPreviewCamScale(sweptable)
 	pnl.RelapsePreviewHullBounds = RelapseUI.ShopPreviewHullBounds(sweptable)
+	pnl.RelapsePreviewClipZ = RelapseUI.ShopPreviewClipZ(sweptable)
 	pnl:SetModel(mdl)
 	pnl:SetAnimated(false)
 	if IsValid(pnl.Entity) then
@@ -1025,6 +1301,10 @@ end
 
 function RelapseUI.LayoutViewerModel(viewer)
 	if not IsValid(viewer) then return end
+	if viewer.RelapsePlayerView then
+		RelapseUI.LayoutViewerPlayerModel(viewer)
+		return
+	end
 	local box = viewer.m_VBG
 	if not IsValid(box) then return end
 	local icon = viewer.m_AmmoIcon
@@ -1099,6 +1379,7 @@ end
 
 function RelapseUI.LayoutViewerDesc(viewer)
 	if not IsValid(viewer) then return end
+	if viewer.RelapsePlayerView then return end
 	local desc = viewer.m_Desc
 	local box = viewer.m_VBG
 	if not IsValid(desc) or not IsValid(box) then return end
@@ -1116,7 +1397,7 @@ end
 
 function RelapseUI.CreateFonts()
 	local s = RelapseUI.S()
-	local rev = 12
+	local rev = 13
 	if RelapseUI._FontS == s and RelapseUI._FontRev == rev then return end
 	RelapseUI._FontS = s
 	RelapseUI._FontRev = rev
@@ -1139,6 +1420,7 @@ function RelapseUI.CreateFonts()
 	mk("Relapse17", 17, 400)
 	mk("Relapse22", 22, 400)
 	mk("Relapse25", 25, 400)
+	mk("Relapse27", 27, 400)
 	mk("Relapse28", 28, 400)
 	mk("Relapse30", 30, 400)
 	mk("Relapse32", 32, 400)
@@ -1455,33 +1737,72 @@ function RelapseUI.EaseIn(t)
 	return CubicBezier(t, 0.36, 0, 0.64, 1)
 end
 
-function RelapseUI.PlayFade(panel, target, duration, easeFn, onDone)
+local FadePanels = {}
+
+local function ClearFade(panel)
+	if IsValid(panel) then
+		panel._RelapseFade = nil
+	end
+	FadePanels[panel] = nil
+end
+
+-- t0 starts on first tick after the open hitch, not when the frame is built.
+local function StepFade(f, now)
+	if not f.armed then
+		f.armed = true
+		f.t0 = now
+		return f.from, false
+	end
+	local u = (now - f.t0) / math.max(0.01, f.dur)
+	if u >= 1 then
+		return f.to, true
+	end
+	return f.from + (f.to - f.from) * f.ease(math.Clamp(u, 0, 1)), false
+end
+
+local function PumpFades()
+	local now = RealTime()
+	local finished = {}
+	for pnl in pairs(FadePanels) do
+		if not IsValid(pnl) then
+			FadePanels[pnl] = nil
+		else
+			local f = pnl._RelapseFade
+			if not f then
+				FadePanels[pnl] = nil
+			else
+				local a, done = StepFade(f, now)
+				pnl:SetAlpha(math.floor(a + 0.5))
+				if done then
+					local cb = f.done
+					ClearFade(pnl)
+					if cb then
+						finished[#finished + 1] = { cb, pnl }
+					end
+				end
+			end
+		end
+	end
+	for i = 1, #finished do
+		finished[i][1](finished[i][2])
+	end
+	if not next(FadePanels) then
+		hook.Remove("Think", "RelapseUI.Fades")
+	end
+end
+
+function RelapseUI.PlayFade(panel, target, duration, easeFn, onDone, from)
 	if not IsValid(panel) then return end
 	panel._RelapseFade = {
-		from = panel:GetAlpha(),
+		from = from ~= nil and from or panel:GetAlpha(),
 		to = target,
-		t0 = RealTime(),
+		armed = false,
 		dur = math.max(0.01, duration or RelapseUI.Duration()),
 		ease = easeFn or RelapseUI.EaseOut,
 		done = onDone
 	}
-	if panel._RelapseFadeHooked then return end
-	panel._RelapseFadeHooked = true
-	local prev = panel.Think
-	panel.Think = function(me)
-		if prev then prev(me) end
-		local f = me._RelapseFade
-		if not f then return end
-		local u = (RealTime() - f.t0) / f.dur
-		if u >= 1 then
-			me:SetAlpha(f.to)
-			me._RelapseFade = nil
-			if f.done then f.done(me) end
-			return
-		end
-		local e = f.ease(math.Clamp(u, 0, 1))
-		me:SetAlpha(math.floor(f.from + (f.to - f.from) * e + 0.5))
-	end
+	FadePanels[panel] = true
+	hook.Add("Think", "RelapseUI.Fades", PumpFades)
 end
 
 local function ReleasePopupInput(panel)
@@ -1495,12 +1816,48 @@ local function ReleasePopupInput(panel)
 	panel:SetKeyboardInputEnabled(false)
 end
 
+-- MakePopup re-enables keyboard and eats WASD. Tab never MakePopups, so
+-- movement stays on the game. Shop/options must do the same after popup.
+local function IsTextEntry(panel)
+	if not IsValid(panel) then return false end
+	local class = panel.ClassName
+	if class == "DTextEntry" or class == "TextEntry" then
+		return true
+	end
+	return panel.IsEditing and panel:IsEditing()
+end
+
+local function LetMove(panel)
+	if not IsValid(panel) then return end
+	if IsTextEntry(vgui.GetKeyboardFocus()) then return end
+	if IsTextEntry(panel) then return end
+	panel:SetKeyboardInputEnabled(false)
+	for _, child in ipairs(panel:GetChildren()) do
+		LetMove(child)
+	end
+end
+
+local function BindLetMove(panel)
+	if not IsValid(panel) then return end
+	if not panel._RelapseLetMove then
+		panel._RelapseLetMove = true
+		local prev = panel.Think
+		panel.Think = function(me)
+			if prev then prev(me) end
+			LetMove(me)
+		end
+	end
+	LetMove(panel)
+end
+
 function RelapseUI.FadeOpen(panel)
 	if not IsValid(panel) then return end
 	panel._RelapseClosing = nil
-	panel:SetMouseInputEnabled(true)
+	if panel ~= RelapseUI.SharedScrim then
+		panel:SetMouseInputEnabled(true)
+	end
 	panel:SetAlpha(0)
-	RelapseUI.PlayFade(panel, 255, RelapseUI.Duration(3), RelapseUI.EaseOut)
+	RelapseUI.PlayFade(panel, 255, RelapseUI.Duration(3), RelapseUI.EaseOut, nil, 0)
 end
 
 function RelapseUI.FadeClose(panel, instant, onGone)
@@ -1516,14 +1873,374 @@ function RelapseUI.FadeClose(panel, instant, onGone)
 		end
 	end
 	if instant then
-		panel._RelapseFade = nil
+		ClearFade(panel)
+		ReleasePopupInput(panel)
 		finish(panel)
 		return
 	end
 	if panel._RelapseClosing then return end
 	panel._RelapseClosing = true
-	ReleasePopupInput(panel)
-	RelapseUI.PlayFade(panel, 0, RelapseUI.Duration(2), RelapseUI.EaseIn, finish)
+	RelapseUI.PlayFade(panel, 0, RelapseUI.Duration(2), RelapseUI.EaseIn, function(pnl)
+		ReleasePopupInput(pnl)
+		finish(pnl)
+	end)
+end
+
+function RelapseUI.MenuHost(panel)
+	if IsValid(panel) and IsValid(panel.RelapseScrim) then
+		return panel.RelapseScrim
+	end
+	return panel
+end
+
+function RelapseUI.PaintBlank()
+	return true
+end
+
+local function CountScrimUsers()
+	local users = RelapseUI._ScrimUsers
+	if not users then
+		return 0
+	end
+	local n = 0
+	for pnl in pairs(users) do
+		if IsValid(pnl) then
+			n = n + 1
+		else
+			users[pnl] = nil
+		end
+	end
+	return n
+end
+
+-- Plates stay while the glass is on screen. cover 0 = full hole, 1 = no hole.
+-- Opening fades the cutout with the plate's fade. Swap and close keep it put.
+local function MenuScrimHole(host, w, h)
+	local plates = RelapseUI._ScrimPlates
+	if not plates then return end
+	local hx, hy = host:LocalToScreen(0, 0)
+	local x, y, ww, hh
+	local cover = 0
+	local openingCover
+	local now = RealTime()
+	for pnl in pairs(plates) do
+		if not IsValid(pnl) or not pnl:IsVisible() then
+			plates[pnl] = nil
+		else
+			local pw, ph = pnl:GetWide(), pnl:GetTall()
+			if pw >= 2 and ph >= 2 and (pw < w - 1 or ph < h - 1) then
+				local sx, sy = pnl:LocalToScreen(0, 0)
+				local px = math.floor(sx - hx + 0.5)
+				local py = math.floor(sy - hy + 0.5)
+				if not x then
+					x, y, ww, hh = px, py, pw, ph
+				elseif x ~= px or y ~= py or ww ~= pw or hh ~= ph then
+					return
+				end
+				local f = pnl._RelapseFade
+				if f and f.to > f.from then
+					-- Hole only after the plate can hide the world. Early punch
+					-- is the ESC→window blink: empty cutout, then glass.
+					local a = StepFade(f, now)
+					local t = math.Clamp(a / 255, 0, 1)
+					local hole = t > 0.8 and (t - 0.8) / 0.2 or 0
+					local c = 1 - hole
+					openingCover = openingCover and math.min(openingCover, c) or c
+				end
+			end
+		end
+	end
+	if not x then return end
+	if openingCover then
+		cover = openingCover
+	end
+	return x, y, ww, hh, cover
+end
+
+-- AABB dim plus per-row ears so the hole matches RoundFill without stencil.
+local function DimRoundEars(x, y, w, h, r)
+	r = math.max(0, math.min(math.floor(r), math.floor(math.min(w, h) * 0.5)))
+	if r < 1 then return end
+	local r2 = r * r
+	for i = 0, r - 1 do
+		local t = r - i
+		local chord = math.floor(math.sqrt(math.max(0, r2 - t * t)) + 0.5)
+		local span = r - chord
+		if span > 0 then
+			surface.DrawRect(x, y + i, span, 1)
+			surface.DrawRect(x + w - span, y + i, span, 1)
+			surface.DrawRect(x, y + h - 1 - i, span, 1)
+			surface.DrawRect(x + w - span, y + h - 1 - i, span, 1)
+		end
+	end
+end
+
+local function DrawDimExcept(sw, sh, x, y, hw, hh)
+	if hw < 1 or hh < 1 or x >= sw or y >= sh then
+		surface.DrawRect(0, 0, sw, sh)
+		return
+	end
+	if y > 0 then
+		surface.DrawRect(0, 0, sw, y)
+	end
+	local below = y + hh
+	if below < sh then
+		surface.DrawRect(0, below, sw, sh - below)
+	end
+	if x > 0 then
+		surface.DrawRect(0, y, x, hh)
+	end
+	local right = x + hw
+	if right < sw then
+		surface.DrawRect(right, y, sw - right, hh)
+	end
+	DimRoundEars(x, y, hw, hh, RelapseUI.RadPx("Window"))
+end
+
+-- Inverse of DimRoundEars. DrawRect only — RoundFill does not paint on the scrim.
+local function FillRoundRect(x, y, w, h, r)
+	r = math.max(0, math.min(math.floor(r), math.floor(math.min(w, h) * 0.5)))
+	if r < 1 then
+		surface.DrawRect(x, y, w, h)
+		return
+	end
+	if h > 2 * r then
+		surface.DrawRect(x, y + r, w, h - 2 * r)
+	end
+	local r2 = r * r
+	for i = 0, r - 1 do
+		local t = r - i
+		local chord = math.floor(math.sqrt(math.max(0, r2 - t * t)) + 0.5)
+		local span = r - chord
+		local inner = w - 2 * span
+		if inner > 0 then
+			surface.DrawRect(x + span, y + i, inner, 1)
+			surface.DrawRect(x + span, y + h - 1 - i, inner, 1)
+		end
+	end
+end
+
+local function PinSharedScrim(scrim)
+	if not IsValid(scrim) then return end
+	scrim._RelapseClosing = nil
+	ClearFade(scrim)
+	scrim:SetVisible(true)
+	scrim:SetAlpha(255)
+	scrim:SetMouseInputEnabled(false)
+	scrim:MoveToBack()
+end
+
+local function SharedScrim()
+	local scrim = RelapseUI.SharedScrim
+	if IsValid(scrim) then
+		scrim:SetSize(ScrW(), ScrH())
+		scrim:SetPos(0, 0)
+		return scrim
+	end
+	scrim = vgui.Create("DPanel")
+	scrim:SetSize(ScrW(), ScrH())
+	scrim:SetPos(0, 0)
+	scrim:SetMouseInputEnabled(false)
+	scrim:SetKeyboardInputEnabled(false)
+	scrim:SetPaintBackground(false)
+	scrim:SetVisible(false)
+	scrim:SetAlpha(0)
+	scrim.Paint = function(me, w, h)
+		if w ~= ScrW() or h ~= ScrH() then
+			me:SetSize(ScrW(), ScrH())
+			w, h = ScrW(), ScrH()
+		end
+		return RelapseUI.PaintMenuScrim(me, w, h)
+	end
+	RelapseUI.SharedScrim = scrim
+	return scrim
+end
+
+-- One dim for every overlay. Hold/Release so window-to-window swaps keep it put.
+function RelapseUI.HoldMenuScrim(user)
+	RelapseUI._ScrimUsers = RelapseUI._ScrimUsers or {}
+	RelapseUI._ScrimPlates = RelapseUI._ScrimPlates or {}
+	if IsValid(user) then
+		RelapseUI._ScrimUsers[user] = true
+		RelapseUI._ScrimPlates[user] = true
+	end
+	local scrim = SharedScrim()
+	local pin = RelapseUI._GlassSwap or RelapseUI._PinScrim
+	RelapseUI._PinScrim = nil
+	if pin or (scrim:IsVisible() and (scrim:GetAlpha() > 0 or scrim._RelapseClosing)) then
+		if scrim:IsVisible() or scrim._RelapseClosing then
+			PinSharedScrim(scrim)
+			return
+		end
+	end
+	scrim:SetVisible(true)
+	RelapseUI.FadeOpen(scrim)
+	scrim:SetMouseInputEnabled(false)
+	scrim:MoveToBack()
+end
+
+function RelapseUI.ReleaseMenuScrim(user, instant)
+	local users = RelapseUI._ScrimUsers
+	if users and user ~= nil then
+		users[user] = nil
+	end
+	if CountScrimUsers() > 0 then
+		return
+	end
+	local scrim = RelapseUI.SharedScrim
+	if not IsValid(scrim) then return end
+	if RelapseUI._GlassSwap or RelapseUI._PinScrim then
+		PinSharedScrim(scrim)
+		return
+	end
+	RelapseUI.FadeClose(scrim, instant, function(pnl)
+		if CountScrimUsers() > 0 then
+			PinSharedScrim(pnl)
+			return
+		end
+		pnl:SetVisible(false)
+		pnl:SetAlpha(0)
+		pnl:SetMouseInputEnabled(false)
+	end)
+end
+
+-- Click-catcher behind chrome. Dim lives on SharedScrim, not here.
+function RelapseUI.CreateMenuScrim(opts)
+	opts = opts or {}
+	local scrim = vgui.Create(opts.class or "DFrame")
+	scrim:SetSize(ScrW(), ScrH())
+	scrim:SetPos(0, 0)
+	scrim:SetMouseInputEnabled(true)
+	scrim:SetKeyboardInputEnabled(false)
+	if scrim.SetPaintBackground then
+		scrim:SetPaintBackground(false)
+	end
+	scrim.Paint = RelapseUI.PaintBlank
+	scrim:SetVisible(false)
+	scrim:SetAlpha(0)
+	if scrim.SetTitle then
+		scrim:SetDeleteOnClose(true)
+		scrim:SetTitle("")
+		scrim:SetDraggable(false)
+		scrim:SetSizable(false)
+		scrim:DockPadding(0, 0, 0, 0)
+		RelapseUI.HideChrome(scrim)
+	end
+	return scrim
+end
+
+function RelapseUI.LinkMenuScrim(window, scrim, opts)
+	if not (IsValid(window) and IsValid(scrim)) then return end
+	opts = opts or {}
+	window.RelapseScrim = scrim
+	scrim.RelapseWindow = window
+	if opts.closeOnClick ~= false then
+		scrim.OnMousePressed = function()
+			if IsValid(window) and window.Close then
+				window:Close()
+			end
+		end
+	end
+	local prev = window.OnRemove
+	window.OnRemove = function(me)
+		if prev then prev(me) end
+		RelapseUI.ReleaseMenuScrim(me)
+		local host = me.RelapseScrim
+		me.RelapseScrim = nil
+		if IsValid(host) and not host._RelapseDead then
+			host._RelapseDead = true
+			host.RelapseWindow = nil
+			host:Remove()
+		end
+	end
+end
+
+function RelapseUI.MarkGlassSwap()
+	RelapseUI._GlassSwap = true
+end
+
+function RelapseUI.PinScrim()
+	RelapseUI._PinScrim = true
+end
+
+function RelapseUI.TakeGlassSwap()
+	local swap = RelapseUI._GlassSwap
+	RelapseUI._GlassSwap = nil
+	return swap
+end
+
+function RelapseUI.SwapGlass()
+	local plates = RelapseUI._ScrimPlates
+	if not plates then
+		return false
+	end
+	for pnl in pairs(plates) do
+		if IsValid(pnl) and pnl:IsVisible() and not pnl._RelapseClosing then
+			local pw, ph = pnl:GetWide(), pnl:GetTall()
+			if pw >= 2 and ph >= 2 and (pw < ScrW() - 1 or ph < ScrH() - 1) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function RelapseUI.SetMenuVisible(panel, vis)
+	if not IsValid(panel) then return end
+	panel:SetVisible(vis)
+	local host = panel.RelapseScrim
+	if IsValid(host) then
+		host:SetVisible(vis)
+	end
+	if vis then
+		RelapseUI.HoldMenuScrim(panel)
+	else
+		RelapseUI.ReleaseMenuScrim(panel)
+	end
+end
+
+function RelapseUI.FadeOpenMenu(panel)
+	if not IsValid(panel) then return end
+	local host = RelapseUI.MenuHost(panel)
+	local swap = RelapseUI.TakeGlassSwap()
+	panel._RelapseClosing = nil
+	panel:SetVisible(true)
+	panel:SetMouseInputEnabled(true)
+	if host ~= panel then
+		host._RelapseClosing = nil
+		host:SetVisible(true)
+		host:SetAlpha(255)
+		host:SetMouseInputEnabled(true)
+	end
+	if swap then
+		ClearFade(panel)
+		panel:SetAlpha(255)
+		RelapseUI.HoldMenuScrim(panel)
+		return
+	end
+	panel:SetAlpha(0)
+	RelapseUI.FadeOpen(panel)
+	RelapseUI.HoldMenuScrim(panel)
+end
+
+function RelapseUI.FadeCloseMenu(panel, instant, onGone)
+	if not IsValid(panel) then return end
+	RelapseUI.ReleaseMenuScrim(panel, instant)
+	RelapseUI.FadeClose(panel, instant, function(pnl)
+		if IsValid(pnl) then
+			pnl._RelapseClosing = nil
+		end
+		if onGone then
+			onGone(pnl)
+		end
+	end)
+end
+
+function RelapseUI.FadeOpenOverlay(panel)
+	if not IsValid(panel) then return end
+	RelapseUI._GlassSwap = nil
+	RelapseUI.HoldMenuScrim(panel)
+	RelapseUI.FadeOpen(panel)
 end
 
 function RelapseUI.TabStrip(sheet)
@@ -1654,8 +2371,10 @@ end
 
 RelapseUI.Shadow = 3
 RelapseUI.ShadowAngle = 120 -- 0° up, clockwise
+RelapseUI.ShadowOn = false -- trial: HUD/sigil/crosshair stamp off
 
 function RelapseUI.EachShadow(fn, n)
+	if not RelapseUI.ShadowOn then return end
 	n = n or RelapseUI.Shadow
 	local rad = math.rad(RelapseUI.ShadowAngle)
 	local dx, dy = math.sin(rad), -math.cos(rad)
@@ -1945,6 +2664,9 @@ function RelapseUI.PinViewerToItems(frame, sheet)
 	if IsValid(viewer.m_Title) then
 		viewer.m_Title:InvalidateLayout(true)
 	end
+	if viewer.RelapsePlayerView then
+		RelapseUI.LayoutViewerPlayerModel(viewer)
+	end
 	RelapseUI.LayoutViewerAmmo(viewer)
 	RelapseUI.LayoutViewerStats(viewer)
 end
@@ -2166,23 +2888,37 @@ function RelapseUI.PlaceShopTitle(title, L)
 end
 
 function RelapseUI.HideOtherShops(kind)
-	if kind ~= "worth" and pWorth and pWorth:IsValid() then
-		pWorth:SetVisible(false)
+	if kind ~= "worth" and pWorth and pWorth:IsValid() and pWorth:IsVisible() then
+		RelapseUI.MarkGlassSwap()
+		RelapseUI.SetMenuVisible(pWorth, false)
 	end
 	if kind ~= "points" then
 		local ars = GAMEMODE and GAMEMODE.ArsenalInterface
-		if IsValid(ars) then
-			ars:SetVisible(false)
+		if IsValid(ars) and ars:IsVisible() then
+			RelapseUI.MarkGlassSwap()
+			RelapseUI.SetMenuVisible(ars, false)
 		end
 	end
 end
 
 function RelapseUI.ShowShopFrame(frame)
 	if not IsValid(frame) then return end
+	local host = RelapseUI.MenuHost(frame)
+	if not RelapseUI._GlassSwap then
+		frame:SetAlpha(0)
+	end
+	host:SetVisible(true)
 	frame:SetVisible(true)
-	frame:MakePopup()
-	frame:MoveToFront()
-	RelapseUI.FadeOpen(frame)
+	host:MakePopup()
+	host:MoveToFront()
+	if host ~= frame then
+		frame:MoveToFront()
+	end
+	if not RelapseUI._GlassSwap then
+		frame:SetAlpha(0)
+	end
+	BindLetMove(host)
+	RelapseUI.FadeOpenMenu(frame)
 end
 
 function RelapseUI.OpenShop(kind)
@@ -2254,7 +2990,7 @@ local function PaintShopSwitch(self, w, h)
 	return true
 end
 
-local function MakeShopSwitch(frame, dir, target, current)
+function RelapseUI.MakeDirSwitch(frame, dir, current, onClick)
 	local btn = vgui.Create("DButton", frame)
 	btn:SetText("")
 	btn:SetFont(ShopSwitchFont())
@@ -2263,15 +2999,24 @@ local function MakeShopSwitch(frame, dir, target, current)
 	btn.ApplySchemeSettings = function() end
 	btn:SetCursor(current and "arrow" or "hand")
 	btn.RelapseDir = dir
-	btn.RelapseTarget = target
 	btn.RelapseCurrent = current
 	SizeShopSwitch(btn)
 	btn.Paint = PaintShopSwitch
 	btn.DoClick = function(me)
 		if me.RelapseCurrent then return end
 		surface.PlaySound("buttons/button14.wav")
-		RelapseUI.OpenShop(me.RelapseTarget)
+		if onClick then
+			onClick(me)
+		end
 	end
+	return btn
+end
+
+local function MakeShopSwitch(frame, dir, target, current)
+	local btn = RelapseUI.MakeDirSwitch(frame, dir, current, function(me)
+		RelapseUI.OpenShop(me.RelapseTarget)
+	end)
+	btn.RelapseTarget = target
 	return btn
 end
 
@@ -2282,7 +3027,8 @@ function RelapseUI.BuildShopFrame(titleKey, opts)
 	local m = L.m
 	local pad = L.pad
 
-	local frame = vgui.Create("DFrame")
+	local scrim = RelapseUI.CreateMenuScrim()
+	local frame = vgui.Create("DFrame", scrim)
 	frame:SetSize(L.wid, L.hei)
 	frame:SetDeleteOnClose(opts.deleteOnClose ~= false)
 	frame:SetKeyboardInputEnabled(false)
@@ -2293,17 +3039,31 @@ function RelapseUI.BuildShopFrame(titleKey, opts)
 	frame.RelapseLayout = L
 	frame.RelapseShop = opts.shop
 	frame.Paint = RelapseUI.PaintWindow
+	frame:SetAlpha(0)
 	RelapseUI.HideChrome(frame)
+	RelapseUI.LinkMenuScrim(frame, scrim)
 	frame.Close = function(me, instant)
-		RelapseUI.FadeClose(me, instant, function(pnl)
+		RelapseUI.FadeCloseMenu(me, instant, function(pnl)
+			if not IsValid(pnl) then return end
 			pnl:SetVisible(false)
 			if pnl.OnClose then
 				pnl:OnClose()
 			end
+			local host = RelapseUI.MenuHost(pnl)
 			if pnl:GetDeleteOnClose() then
-				pnl:Remove()
+				if IsValid(host) and host ~= pnl then
+					pnl.RelapseScrim = nil
+					host._RelapseDead = true
+					host.RelapseWindow = nil
+					host:Remove()
+				else
+					pnl:Remove()
+				end
 			else
-				pnl:SetAlpha(0)
+				if IsValid(host) and host ~= pnl then
+					host:SetVisible(false)
+					host:SetAlpha(0)
+				end
 			end
 		end)
 	end
@@ -2466,8 +3226,7 @@ end
 function RelapseUI.FinishShopFrame(frame, propertysheet)
 	RelapseUI.WarmPropertySheet(propertysheet)
 	frame:Center()
-	frame:MakePopup()
-	RelapseUI.FadeOpen(frame)
+	RelapseUI.ShowShopFrame(frame)
 	return frame
 end
 
@@ -2485,6 +3244,45 @@ function RelapseUI.PaintMenuRow(self, w, h)
 		surface.DrawRect(0, h, w, thick)
 	end
 	DisableClipping(false)
+	return true
+end
+
+-- ESC pause: Relapse30. 30px (Grid15(2)) between ink, no rules.
+-- Relapse30 cell sits ~6px above caps and ~6px under the baseline.
+function RelapseUI.PauseRowMetrics(font)
+	font = font or "Relapse30"
+	surface.SetFont(font)
+	local _, cellH = surface.GetTextSize("Ay")
+	if not cellH or cellH < 1 then
+		cellH = RelapseUI.sPx(30)
+	end
+	local capNudge = RelapseUI.sPx(6)
+	local botNudge = RelapseUI.sPx(6)
+	local inkH = math.max(1, cellH - capNudge - botNudge)
+	local gap = RelapseUI.Grid15(2)
+	return {
+		cellH = cellH,
+		gap = gap,
+		inkH = inkH,
+		rowH = inkH + gap,
+		textY = -capNudge
+	}
+end
+
+function RelapseUI.PaintPauseRow(self, w, h)
+	local text = self.GetText and self:GetText() or ""
+	local c = RelapseUI.Col
+	local font = self:GetFont() or "Relapse30"
+	local col = c.Muted
+	if self.Hovered or self.RelapsePrimary then
+		col = c.Text
+	end
+	if text ~= "" then
+		local met = RelapseUI.PauseRowMetrics(font)
+		DisableClipping(true)
+		RelapseUI.HudText(text, font, 0, met.textY, col, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, RelapseUI.Shadow)
+		DisableClipping(false)
+	end
 	return true
 end
 
@@ -2514,7 +3312,16 @@ end
 function RelapseUI.PaintMenuScrim(self, w, h)
 	local c = RelapseUI.Col.Scrim
 	surface.SetDrawColor(c.r, c.g, c.b, c.a or 160)
-	surface.DrawRect(0, 0, w, h)
+	local x, y, hw, hh, cover = MenuScrimHole(self, w, h)
+	if not x or cover >= 0.995 then
+		surface.DrawRect(0, 0, w, h)
+		return true
+	end
+	DrawDimExcept(w, h, x, y, hw, hh)
+	if cover > 0 then
+		surface.SetDrawColor(c.r, c.g, c.b, math.floor((c.a or 160) * cover + 0.5))
+		FillRoundRect(x, y, hw, hh, RelapseUI.RadPx("Window"))
+	end
 	return true
 end
 
@@ -2529,7 +3336,7 @@ function RelapseUI.BuildMenuFrame()
 	frame:SetDraggable(false)
 	frame:SetSizable(false)
 	frame:DockPadding(0, 0, 0, 0)
-	frame.Paint = RelapseUI.PaintMenuScrim
+	frame.Paint = RelapseUI.PaintBlank
 	RelapseUI.HideChrome(frame)
 	frame.OnMousePressed = function(me)
 		me:Close()
@@ -2537,11 +3344,10 @@ function RelapseUI.BuildMenuFrame()
 	frame.OnKeyCodePressed = function(me, key)
 		if key == KEY_ESCAPE then
 			GAMEMODE:CloseHelpMenu(true)
-		elseif key == KEY_F1 then
-			GAMEMODE:CloseHelpMenu()
 		end
 	end
 	frame.Close = function(me, instant)
+		RelapseUI.ReleaseMenuScrim(me, instant)
 		RelapseUI.FadeClose(me, instant)
 	end
 	return frame
@@ -2555,6 +3361,44 @@ function RelapseUI.MakeMenuButton(parent, text, onClick)
 	btn:SetPaintBackground(false)
 	btn:SetTall(RelapseUI.Grid15(4))
 	btn.Paint = RelapseUI.PaintMenuRow
+	btn.DoClick = onClick
+	return btn
+end
+
+function RelapseUI.BuildPauseFrame()
+	RelapseUI.CreateFonts()
+	local frame = vgui.Create("DFrame")
+	frame:SetSize(ScrW(), ScrH())
+	frame:SetPos(0, 0)
+	frame:SetDeleteOnClose(true)
+	frame:SetKeyboardInputEnabled(false)
+	frame:SetTitle("")
+	frame:SetDraggable(false)
+	frame:SetSizable(false)
+	frame:DockPadding(0, 0, 0, 0)
+	frame.Paint = RelapseUI.PaintBlank
+	RelapseUI.HideChrome(frame)
+	frame.OnMousePressed = function()
+		if GAMEMODE and GAMEMODE.ClosePauseMenu then
+			GAMEMODE:ClosePauseMenu()
+		end
+	end
+	frame.Close = function(me, instant)
+		RelapseUI.ReleaseMenuScrim(me, instant)
+		RelapseUI.FadeClose(me, instant)
+	end
+	return frame
+end
+
+function RelapseUI.MakePauseButton(parent, text, onClick)
+	local btn = vgui.Create("DButton", parent)
+	btn:SetText(text)
+	btn:SetFont("Relapse30")
+	btn:SetTextColor(Color(0, 0, 0, 0))
+	btn:SetPaintBackground(false)
+	btn:SetCursor("hand")
+	btn:SetTall(RelapseUI.PauseRowMetrics("Relapse30").rowH)
+	btn.Paint = RelapseUI.PaintPauseRow
 	btn.DoClick = onClick
 	return btn
 end
@@ -2656,6 +3500,61 @@ function RelapseUI.OptionsCaption(parent, text)
 	lab:DockMargin(0, 0, 0, RelapseUI.Grid15(2))
 	lab:SetTall(RelapseUI.sPx(20))
 	return lab
+end
+
+function RelapseUI.CreditsTitleGap()
+	return RelapseUI.sPx(75)
+end
+
+-- Relapse30 optical bottom of the window title → Relapse20 capital of the first section.
+function RelapseUI.PadCreditsScroll(scroll, frame, L)
+	local title = frame and frame.RelapseTitle
+	if not (IsValid(scroll) and IsValid(title) and L) then
+		return
+	end
+	local _, titleY = title:GetPos()
+	local firstCapY = titleY + title:GetTall() - RelapseUI.sPx(6) + RelapseUI.CreditsTitleGap()
+	local top = math.max(0, firstCapY - L.headerh - RelapseUI.sPx(5))
+	local canvas = scroll:GetCanvas()
+	if IsValid(canvas) then
+		canvas:DockPadding(0, top, RelapseUI.Grid5(23), RelapseUI.Grid15())
+	end
+	local bar = scroll:GetVBar()
+	if IsValid(bar) then
+		bar:DockMargin(0, top, 0, RelapseUI.Grid15())
+	end
+end
+
+function RelapseUI.CreditsSection(parent, text, first)
+	local lab = RelapseUI.OptionsCaption(parent, text)
+	local top = first and 0 or RelapseUI.Grid15(3)
+	lab:DockMargin(0, top, 0, RelapseUI.Grid15(2))
+	return lab
+end
+
+function RelapseUI.PaintCreditsRow(self, w, h)
+	local c = RelapseUI.Col
+	local name = self.RelapseName or ""
+	draw.SimpleText(name, "Relapse20", 0, 0, c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	local role = self.RelapseRole or ""
+	if role ~= "" then
+		surface.SetFont("Relapse20")
+		local nw = surface.GetTextSize(name)
+		draw.SimpleText(role, "Relapse20", nw + RelapseUI.Grid15(2), 0, c.Muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	end
+	return true
+end
+
+function RelapseUI.CreditsRow(parent, name, role)
+	local row = vgui.Create("DPanel", parent)
+	row:SetTall(RelapseUI.sPx(20))
+	row:Dock(TOP)
+	row:DockMargin(0, 0, 0, RelapseUI.OptionsCheckGap())
+	row:SetPaintBackground(false)
+	row.RelapseName = name or ""
+	row.RelapseRole = role or ""
+	row.Paint = RelapseUI.PaintCreditsRow
+	return row
 end
 
 function RelapseUI.OptionsSlider(parent, text, cvar, min, max, decimals)

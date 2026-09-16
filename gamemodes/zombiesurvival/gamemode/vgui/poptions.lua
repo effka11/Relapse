@@ -2,6 +2,9 @@
 -- Hidden rows: documents/options-hidden.md
 
 function MakepOptions()
+	if GAMEMODE.CloseOtherOverlays then
+		GAMEMODE:CloseOtherOverlays("options")
+	end
 	PlayMenuOpenSound()
 
 	if pOptions and pOptions:IsValid() then

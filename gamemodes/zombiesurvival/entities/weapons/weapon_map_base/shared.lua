@@ -60,7 +60,7 @@ function SWEP:Deploy()
 		if GAMEMODE.ZombieEscape then
 			owner:SelectWeapon("weapon_zs_zeknife")
 		else
-			owner:SelectWeapon("weapon_zs_fists")
+			owner:SelectWeapon(GAMEMODE.HumanUnarmedWeapon or "mg_fists")
 		end
 	end
 	return true

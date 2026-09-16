@@ -1,5 +1,5 @@
 -- Relapse TAB scoreboard: 5/15 grid, shop glass, two team columns.
--- Size and fade follow RelapseUI; JetBoom credits stay in F1.
+-- Size and fade follow RelapseUI; JetBoom credits stay in ESC.
 
 local ScoreBoard
 
@@ -155,18 +155,40 @@ local function PaintClassSplit(originX, cy, remortLeft, classA, classB)
 	DrawClassIcon(classB, cx + plusW * 0.5 + gapB, cy - szB * 0.5, szB, ink)
 end
 
+function GM:IsScoreboardOpen()
+	return IsValid(ScoreBoard) and (ScoreBoard:IsVisible() or ScoreBoard._RelapseClosing)
+end
+
+function GM:CloseScoreboard(fromEsc, instant)
+	if not self:IsScoreboardOpen() then
+		return false
+	end
+	self:ScoreboardHide(instant)
+	if fromEsc then
+		self.ScoreboardBlockPause = true
+		gui.HideGameUI()
+	end
+	return true
+end
+
 function GM:ScoreboardShow()
+	if self.CloseOtherOverlays then
+		self:CloseOtherOverlays("scoreboard")
+	end
 	gui.EnableScreenClicker(true)
 	PlayMenuOpenSound()
 	RelapseUI.CreateFonts()
 
 	if not IsValid(ScoreBoard) then
-		ScoreBoard = vgui.Create("ZSScoreBoard")
+		local scrim = RelapseUI.CreateMenuScrim({ class = "DPanel" })
+		scrim:SetVisible(false)
+		scrim:SetAlpha(0)
+		ScoreBoard = vgui.Create("ZSScoreBoard", scrim)
+		RelapseUI.LinkMenuScrim(ScoreBoard, scrim, { closeOnClick = false })
 	end
 
 	ScoreBoard:ApplyLayout()
-	ScoreBoard:SetVisible(true)
-	RelapseUI.FadeOpen(ScoreBoard)
+	RelapseUI.FadeOpenMenu(ScoreBoard)
 end
 
 function GM:ScoreboardRebuild()
@@ -182,16 +204,25 @@ function GM:ScoreboardRebuild()
 	end
 end
 
-function GM:ScoreboardHide()
+function GM:ScoreboardHide(instant)
 	gui.EnableScreenClicker(false)
-	if not (IsValid(ScoreBoard) and ScoreBoard:IsVisible()) then return end
-	if ScoreBoard._RelapseClosing then return end
-	PlayMenuCloseSound()
-	RelapseUI.FadeClose(ScoreBoard, false, function(pnl)
+	if not IsValid(ScoreBoard) then return end
+	if not ScoreBoard:IsVisible() and not ScoreBoard._RelapseClosing then return end
+	if ScoreBoard._RelapseClosing and not instant then return end
+	if not instant then
+		PlayMenuCloseSound()
+	end
+	RelapseUI.FadeCloseMenu(ScoreBoard, instant, function(pnl)
 		if not IsValid(pnl) then return end
 		pnl:SetVisible(false)
-		pnl:SetAlpha(0)
+		pnl:SetAlpha(255)
 		pnl:SetMouseInputEnabled(true)
+		local host = RelapseUI.MenuHost(pnl)
+		if IsValid(host) and host ~= pnl then
+			host:SetVisible(false)
+			host:SetAlpha(0)
+			host:SetMouseInputEnabled(true)
+		end
 	end)
 end
 
@@ -246,6 +277,11 @@ function PANEL:ApplyLayout()
 	RelapseUI.CreateFonts()
 	local L = RelapseUI.ScoreboardWindowSize()
 	self.RelapseLayout = L
+	local scrim = self.RelapseScrim
+	if IsValid(scrim) then
+		scrim:SetSize(ScrW(), ScrH())
+		scrim:SetPos(0, 0)
+	end
 	self:SetSize(L.wid, L.hei)
 	self:Center()
 	for _, panel in pairs(self.PlayerPanels or {}) do

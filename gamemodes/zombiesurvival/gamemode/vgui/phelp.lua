@@ -16,76 +16,86 @@ Content = "help_cont_being_a_zombie"}
 }
 
 function MakepCredits()
+	if GAMEMODE.CloseOtherOverlays then
+		GAMEMODE:CloseOtherOverlays("credits")
+	end
 	PlayMenuOpenSound()
 
-	local wid = math.min(ScrW(), 750)
-
-	local y = 8
-
-	local frame = vgui.Create("DEXRoundedFrame")
-	frame:SetColorAlpha(230)
-	frame:SetWide(wid)
-	frame:SetTitle(" ")
-	frame:SetKeyboardInputEnabled(false)
-
-	local label = EasyLabel(frame, GAMEMODE.Name.." Credits", "ZSHUDFontNS", color_white)
-	label:AlignTop(y)
-	label:CenterHorizontal()
-	y = y + label:GetTall() + 8
-
-	for authorindex, authortab in ipairs(GAMEMODE.Credits) do
-		local lineleft = EasyLabel(frame, string.Replace(authortab[1], "@", "(at)"), "ZSHUDFontSmallestNS", color_white)
-		local linemid = EasyLabel(frame, "-", "ZSHUDFontSmallestNS", color_white)
-		local lineright = EasyLabel(frame, authortab[3], "ZSHUDFontSmallestNS", color_white)
-		local linesub
-		if authortab[2] then
-			linesub = EasyLabel(frame, authortab[2], "DefaultFont", color_white)
-		end
-
-		lineleft:AlignLeft(8)
-		lineleft:AlignTop(y)
-		lineright:AlignRight(8)
-		lineright:AlignTop(y)
-		linemid:CenterHorizontal()
-		linemid:AlignTop(y)
-
-		y = y + lineleft:GetTall()
-		if linesub then
-			linesub:AlignTop(y)
-			linesub:AlignLeft(8)
-			y = y + linesub:GetTall()
-		end
-		y = y + 10
+	if pCredits and pCredits:IsValid() then
+		RelapseUI.ShowShopFrame(pCredits)
+		return
 	end
 
-	frame:SetTall(y + 8)
-	frame:Center()
-	frame:SetAlpha(0)
-	frame:AlphaTo(255, 0.15, 0)
-	frame:MakePopup()
+	RelapseUI.CreateFonts()
+
+	local frame, L, _, bottomspace, propertysheet = RelapseUI.BuildShopFrame("menu_credits", {
+		deleteOnClose = false
+	})
+	pCredits = frame
+	if IsValid(bottomspace) then
+		bottomspace:SetVisible(false)
+	end
+	if IsValid(propertysheet) then
+		propertysheet:SetVisible(false)
+		propertysheet:SetMouseInputEnabled(false)
+	end
+
+	local scroll = RelapseUI.MakeOptionsScroll(frame)
+	scroll:SetSize(L.innerW, L.hei - L.headerh - RelapseUI.Grid15(3))
+	scroll:SetPos(L.pad, L.headerh)
+	RelapseUI.PadCreditsScroll(scroll, frame, L)
+
+	local sections = GAMEMODE.RelapseCreditSections
+	for i, section in ipairs(sections or {}) do
+		RelapseUI.CreditsSection(scroll, RelapseUI.T(section.Title), i == 1)
+		for _, person in ipairs(section.People or {}) do
+			local role = person[2]
+			if role and role ~= "" then
+				role = RelapseUI.T(role)
+			else
+				role = ""
+			end
+			RelapseUI.CreditsRow(scroll, person[1], role)
+		end
+	end
+
+	RelapseUI.FinishShopFrame(frame, propertysheet)
 end
 
 function MakepHelp()
 	PlayMenuOpenSound()
 
-	if pHelp then
-		pHelp:SetAlpha(0)
-		pHelp:AlphaTo(255, 0.15, 0)
-		pHelp:SetVisible(true)
-		pHelp:MakePopup()
+	if IsValid(pHelp) then
+		RelapseUI.ShowShopFrame(pHelp)
 		return
 	end
 
 	local wide, tall = 500, 480
 
-	local Window = vgui.Create("DFrame")
+	local scrim = RelapseUI.CreateMenuScrim()
+	local Window = vgui.Create("DFrame", scrim)
+	Window:SetParent(scrim)
+	if Window.SetFocusTopLevel then
+		Window:SetFocusTopLevel(false)
+	end
 	Window:SetSize(wide, tall)
-	Window:Center()
 	Window:SetTitle(" ")
 	Window:SetDraggable(false)
 	Window:SetDeleteOnClose(false)
 	Window:SetKeyboardInputEnabled(false)
 	Window:SetCursor("pointer")
+	RelapseUI.LinkMenuScrim(Window, scrim)
+	Window.Close = function(me, instant)
+		RelapseUI.FadeCloseMenu(me, instant, function(pnl)
+			if not IsValid(pnl) then return end
+			pnl:SetVisible(false)
+			local host = RelapseUI.MenuHost(pnl)
+			if IsValid(host) and host ~= pnl then
+				host:SetVisible(false)
+				host:SetAlpha(0)
+			end
+		end)
+	end
 	pHelp = Window
 
 	local label = EasyLabel(Window, "Help", "ZSHUDFont", color_white)
@@ -135,18 +145,20 @@ function MakepHelp()
 	end
 
 	Window:Center()
-	Window:MakePopup()
 
 	local button = EasyButton(Window, "Credits", 8, 4)
 	button:SetPos(wide - button:GetWide() - 12, tall - button:GetTall() - 12)
 	button:SetText("Credits")
-	button.DoClick = function(btn) MakepCredits() end
+	button.DoClick = function()
+		if IsValid(pHelp) then
+			pHelp:Close(true)
+		end
+		MakepCredits()
+	end
 
 	gamemode.Call("BuildHelpMenu", Window, propertysheet)
 
-	Window:SetAlpha(0)
-	Window:AlphaTo(255, 0.15, 0)
-	Window:MakePopup()
+	RelapseUI.ShowShopFrame(Window)
 end
 
 function GM:BuildHelpMenu(window, propertysheet)

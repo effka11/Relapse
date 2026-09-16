@@ -31,6 +31,10 @@ AddCSLuaFile("sh_reconnect.lua")
 AddCSLuaFile("sh_usefulness.lua")
 AddCSLuaFile("sh_usefulness_model.lua")
 AddCSLuaFile("sh_relapse_tabclass.lua")
+AddCSLuaFile("sh_relapse_inventory.lua")
+AddCSLuaFile("sh_relapse_scars.lua")
+AddCSLuaFile("sh_cycle_grid.lua")
+AddCSLuaFile("sh_relapse_wmpose.lua")
 
 AddCSLuaFile("vault/shared.lua")
 
@@ -45,10 +49,13 @@ AddCSLuaFile("cl_deathnotice.lua")
 AddCSLuaFile("cl_floatingscore.lua")
 AddCSLuaFile("cl_dermaskin.lua")
 AddCSLuaFile("cl_hint.lua")
+AddCSLuaFile("cl_relapse_hints.lua")
 AddCSLuaFile("cl_thirdperson.lua")
 AddCSLuaFile("cl_voicesets.lua")
 AddCSLuaFile("cl_relapse_carry_holster.lua")
 AddCSLuaFile("cl_relapse_freecam.lua")
+AddCSLuaFile("cl_relapse_wmpose.lua")
+AddCSLuaFile("cl_relapse_inventory.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -80,6 +87,8 @@ AddCSLuaFile("vgui/dexchanginglabel.lua")
 AddCSLuaFile("vgui/mainmenu.lua")
 AddCSLuaFile("vgui/pmainmenu.lua")
 AddCSLuaFile("vgui/poptions.lua")
+AddCSLuaFile("vgui/pinventory.lua")
+AddCSLuaFile("vgui/pcharacter.lua")
 AddCSLuaFile("vgui/phelp.lua")
 AddCSLuaFile("vgui/pclassselect.lua")
 AddCSLuaFile("vgui/pendboard.lua")
@@ -111,10 +120,13 @@ include("sv_concommands.lua")
 include("sv_reconnect.lua")
 include("sv_relapse_prop_push.lua")
 include("sv_relapse_freecam.lua")
+include("sv_relapse_wmpose.lua")
+include("sv_relapse_inventory.lua")
 
 include("itemstocks/sv_stock.lua")
 
 include("vault/server.lua")
+include("sv_relapse_scars.lua")
 
 include("skillweb/sv_registry.lua")
 include("skillweb/sv_skillweb.lua")
@@ -420,6 +432,9 @@ function GM:AddResources()
 	resource.AddWorkshop("2459723892") -- Modern Warfare 2019 SWEPs - Pistols
 	resource.AddWorkshop("2685550699") -- Random's Spetsnaz Ground Forces (Airborne Spetsnaz 2)
 	resource.AddWorkshop("2816381632") -- Random's Spetsnaz Content Pack 2 (airborne textures)
+	resource.AddWorkshop("2904144632") -- COD BO1 Undercover Spetsnaz
+	resource.AddWorkshop("3486238431") -- Alvaro's Shared Textures
+	resource.AddWorkshop("3571846979") -- Wuchang Fallen Feathers playermodel
 	resource.AddWorkshop("3739488356") -- [RE2: Remake] Zombies Ragdolls
 end
 
@@ -531,6 +546,9 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_skills_nextreset")
 	util.AddNetworkString("zs_skills_notify")
 	util.AddNetworkString("zs_skills_refunded")
+	util.AddNetworkString("zs_scars_sync")
+	util.AddNetworkString("zs_scars_take")
+	util.AddNetworkString("zs_scars_request")
 
 	util.AddNetworkString("zs_crow_kill_crow")
 	util.AddNetworkString("zs_pl_kill_pl")
@@ -569,12 +587,12 @@ end
 GM.TopNotify = GM.TopNotifyAll
 
 function GM:ShowHelp(pl)
-	pl:SendLua("GAMEMODE:ShowHelp()")
+	pl:SendLua("GAMEMODE:ToggleRelapseInventory()")
 end
 
 function GM:ShowTeam(pl)
 	if pl:Team() == TEAM_HUMAN and not self.ZombieEscape then
-		pl:SendLua(self:GetWave() > 0 and "GAMEMODE:OpenArsenalMenu()" or "MakepWorth()")
+		pl:SendLua("GAMEMODE:ToggleShopMenu()")
 	end
 end
 
@@ -582,16 +600,13 @@ function GM:ShowSpare1(pl)
 	if pl:Team() == TEAM_UNDEAD then
 		if self:ShouldUseAlternateDynamicSpawn() then
 			pl:CenterNotify(COLOR_RED, translate.ClientGet(pl, "no_class_switch_in_this_mode"))
-		else
-			pl:SendLua("GAMEMODE:OpenClassSelect()")
 		end
-	elseif pl:Team() == TEAM_HUMAN then
-		pl:SendLua("GAMEMODE:ToggleSkillWeb()")
 	end
+	pl:SendLua("GAMEMODE:ToggleCharacterSheet()")
 end
 
 function GM:ShowSpare2(pl)
-	pl:SendLua("MakepOptions()")
+	pl:SendLua("GAMEMODE:ToggleOptionsMenu()")
 end
 
 function GM:SetupSpawnPoints()
@@ -2092,6 +2107,12 @@ function GM:PlayerReady(pl)
 	gamemode.Call("PlayerReadyRound", pl)
 
 	self:PlayerReadyVault(pl)
+	if self.SyncRelapseInventory then
+		self:SyncRelapseInventory(pl)
+	end
+	if self.SendRelapseScars then
+		self:SendRelapseScars(pl)
+	end
 
 	pl.PlayerReady = true
 end
@@ -2275,6 +2296,10 @@ function GM:PlayerInitialSpawnRound(pl)
 
 	pl.ZSFriends = {}
 
+	if self.ResetRelapseScarMap then
+		self:ResetRelapseScarMap(pl)
+	end
+
 	pl.LifeBarricadeDamage = 0
 	pl.LifeHumanDamage = 0
 	pl.LifeBrainsEaten = 0
@@ -2414,6 +2439,9 @@ function GM:PlayerDisconnected(pl)
 	end
 
 	self:SaveVault(pl)
+	if self.SaveRelapseInventory then
+		self:SaveRelapseInventory(pl)
+	end
 
 	gamemode.Call("CalculateInfliction")
 end
@@ -3393,8 +3421,14 @@ function GM:KeyPress(pl, key)
 			if pl:IsCarrying() then
 				pl.status_human_holding:OnRemove() -- No idea...
 				pl.status_human_holding:RemoveNextFrame()
-			else
+			elseif not (self.RelapseLadderTakesUse and self:RelapseLadderTakesUse(pl)) then
 				self:TryHumanPickup(pl, pl:TraceLine(64).Entity)
+				if not pl:IsHolding() then
+					local use = pl.GetUseEntity and pl:GetUseEntity()
+					if IsValid(use) then
+						self:TryHumanPickup(pl, use)
+					end
+				end
 			end
 		end
 	elseif key == IN_SPEED then
@@ -3420,7 +3454,13 @@ function GM:KeyPress(pl, key)
 		end
 	elseif key == IN_ZOOM then
 		if pl:Team() == TEAM_HUMAN and pl:Alive() and not self.ZombieEscape then
-			if pl:IsOnGround() then
+			if pl.RelapseLadderHold then
+				pl.LastGhostFailureVelocity = nil
+				pl.RelapseLadderGhosting = true
+				pl.FirstGhostThink = false
+				pl:SetNW2Bool("RelapseLadderGhosting", true)
+				pl:SetBarricadeGhosting(true)
+			elseif pl:IsOnGround() then
 				pl.LastGhostFailureVelocity = nil
 				pl:SetBarricadeGhosting(true)
 			else
@@ -3501,7 +3541,8 @@ function GM:PlayerUse(pl, ent)
 		elseif pl:IsSkillActive(SKILL_D_FRAIL) and pl:Health() >= math.floor(pl:GetMaxHealth() * 0.25) then
 			return false
 		end
-	elseif pl:Team() == TEAM_HUMAN and not pl:IsCarrying() and pl:KeyPressed(IN_USE) then
+	elseif pl:Team() == TEAM_HUMAN and not pl:IsCarrying() and pl:KeyPressed(IN_USE)
+		and not (self.RelapseLadderTakesUse and self:RelapseLadderTakesUse(pl)) then
 		self:TryHumanPickup(pl, ent)
 	end
 
@@ -3592,6 +3633,9 @@ function GM:HumanKilledZombie(pl, attacker, inflictor, dmginfo, headshot, suicid
 		local tabclass = self:GetTabClassForDamage(attacker, inflictor)
 		if tabclass then
 			self:CreditTabClass(attacker, tabclass, fin)
+		end
+		if self.CreditRelapseScarLastHit then
+			self:CreditRelapseScarLastHit(attacker, pl)
 		end
 	end
 
@@ -4042,11 +4086,8 @@ function GM:PlayerSpawn(pl)
 		if classtab.Model then
 			pl:SetModel(classtab.Model)
 		elseif classtab.UsePlayerModel then
-			local mdl = player_manager.TranslatePlayerModel(pl:GetInfo("cl_playermodel"))
-			if table.HasValue(self.RestrictedModels, mdl) then
-				pl:SelectRandomPlayerModel()
-			else
-				pl:SetModel(mdl)
+			if self.ApplyRelapsePlayermodel then
+				self:ApplyRelapsePlayermodel(pl, false)
 			end
 		elseif classtab.UsePreviousModel then
 			local curmodel = string.lower(pl:GetModel())
@@ -4125,23 +4166,10 @@ function GM:PlayerSpawn(pl)
 		pl:SetDTFloat(DT_PLAYER_FLOAT_EXTRAWEIGHT, 0)
 		pl:ClearUselessDamage()
 
-		local desiredname = pl:GetInfo("cl_playermodel")
-		local modelname = player_manager.TranslatePlayerModel(#desiredname == 0 and self.RandomPlayerModels[math.random(#self.RandomPlayerModels)] or desiredname)
-		local lowermodelname = string.lower(modelname)
-		if table.HasValue(self.RestrictedModels, lowermodelname) then
-			modelname = "models/player/alyx.mdl"
-			lowermodelname = modelname
+		if self.ApplyRelapsePlayermodel then
+			self:ApplyRelapsePlayermodel(pl, false)
 		end
-		pl:SetModel(modelname)
-
-		-- Cache the voice set.
-		if VoiceSetTranslate[lowermodelname] then
-			pl:SetDTInt(DT_PLAYER_INT_VOICESET, VoiceSetTranslate[lowermodelname])
-		elseif string.find(lowermodelname, "female", 1, true) then
-			pl:SetDTInt(DT_PLAYER_INT_VOICESET, VOICESET_FEMALE)
-		else
-			pl:SetDTInt(DT_PLAYER_INT_VOICESET, VOICESET_MALE)
-		end
+		pl:DoHulls()
 
 		--pl.HumanSpeedAdder = nil
 
@@ -4193,7 +4221,7 @@ function GM:PlayerSpawn(pl)
 				func(pl, start)
 			end
 
-			pl:Give("weapon_zs_fists")
+			pl:Give(self.HumanUnarmedWeapon)
 
 			if self.StartingLoadout then
 				self:GiveStartingLoadout(pl)

@@ -13,6 +13,10 @@ function GM:ShouldSaveVault(pl)
 		return true
 	end
 
+	if self.HasRelapseScarVault and self:HasRelapseScarVault(pl) then
+		return true
+	end
+
 	return false
 end
 
@@ -39,35 +43,39 @@ end
 function GM:InitializeVault(pl)
 	pl.PointsVault = 0
 	pl:SetZSXP(0)
+	if self.InitRelapseScars then
+		self:InitRelapseScars(pl, true)
+	end
 end
 
 function GM:LoadVault(pl)
 	if not self:ShouldLoadVault(pl) then return end
 
 	local filename = self:GetVaultFile(pl)
+	local data
 	if file.Exists(filename, "DATA") then
 		local contents = file.Read(filename, "DATA")
 		if contents and #contents > 0 then
-			contents = Deserialize(contents)
-			if contents then
-				pl.PointsVault = contents.Points
+			data = Deserialize(contents)
+			if data then
+				pl.PointsVault = data.Points
 
-				if contents.RemortLevel then
-					pl:SetZSRemortLevel(contents.RemortLevel)
+				if data.RemortLevel then
+					pl:SetZSRemortLevel(data.RemortLevel)
 				end
-				if contents.XP then
-					pl:SetZSXP(contents.XP)
+				if data.XP then
+					pl:SetZSXP(data.XP)
 				end
-				if contents.UnlockedSkills then
-					pl:SetUnlockedSkills(util.DecompressBitTable(contents.UnlockedSkills), true)
+				if data.UnlockedSkills then
+					pl:SetUnlockedSkills(util.DecompressBitTable(data.UnlockedSkills), true)
 				end
-				if contents.DesiredActiveSkills then
-					pl:SetDesiredActiveSkills(util.DecompressBitTable(contents.DesiredActiveSkills), true)
+				if data.DesiredActiveSkills then
+					pl:SetDesiredActiveSkills(util.DecompressBitTable(data.DesiredActiveSkills), true)
 				end
-				if contents.NextSkillReset then
-					pl.NextSkillReset = contents.NextSkillReset
+				if data.NextSkillReset then
+					pl.NextSkillReset = data.NextSkillReset
 				end
-				if not contents.Version or contents.Version < self.SkillTreeVersion then
+				if not data.Version or data.Version < self.SkillTreeVersion then
 					pl:SkillsReset()
 					pl.SkillsRefunded = true
 				end
@@ -75,6 +83,12 @@ function GM:LoadVault(pl)
 				pl.SkillVersion = self.SkillTreeVersion
 			end
 		end
+	end
+
+	if self.ReadRelapseScarVault and data then
+		self:ReadRelapseScarVault(pl, data)
+	elseif self.InitRelapseScars then
+		self:InitRelapseScars(pl)
 	end
 
 	pl.PointsVault = pl.PointsVault or 0
@@ -129,6 +143,10 @@ function GM:SaveVault(pl)
 
 	if tosave.Points and self.PointSavingLimit > 0 and tosave.Points > self.PointSavingLimit then
 		tosave.Points = self.PointSavingLimit
+	end
+
+	if self.WriteRelapseScarVault then
+		self:WriteRelapseScarVault(pl, tosave)
 	end
 
 	local filename = self:GetVaultFile(pl)

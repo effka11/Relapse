@@ -16,7 +16,7 @@ function ENT:AcceptInput(name, activator, caller, args)
 				local weps = activator:GetWeapons()
 				for k, v in pairs(weps) do
 					local weaponclass = v:GetClass()
-					if weaponclass ~= "weapon_zs_fists" then activator:StripWeapon(weaponclass) end
+					if not GAMEMODE:IsHumanUnarmedWeapon(weaponclass) then activator:StripWeapon(weaponclass) end
 				end
 			else
 				activator:StripWeapons(args)

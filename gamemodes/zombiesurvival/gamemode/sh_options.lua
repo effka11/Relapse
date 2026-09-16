@@ -193,6 +193,9 @@ item.Tier = 2
 item =
 GM:AddPointShopItem("m19",				ITEMCAT_GUNS,			45,				"mg_p320", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_p320") end)
 item.Tier = 2
+item =
+GM:AddPointShopItem("machete",			ITEMCAT_MELEE,			45,				"mg_me_t9machete", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9machete") end)
+item.Tier = 2
 -- Tier 3
 item =
 GM:AddPointShopItem("ak47",				ITEMCAT_GUNS,			75,				"mg_akilo47", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_akilo47") end)
@@ -219,6 +222,9 @@ GM:AddPointShopItem("scar",				ITEMCAT_GUNS,			175,				"mg_scharlie", nil, nil, 
 item.Tier = 5
 item =
 GM:AddPointShopItem("pkm",				ITEMCAT_GUNS,			175,				"mg_pkilo", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_pkilo") end)
+item.Tier = 5
+item =
+GM:AddPointShopItem("fal",				ITEMCAT_GUNS,			175,				"mg_falima", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_falima") end)
 item.Tier = 5
 
 GM:AddPointShopItem("smgammo",			ITEMCAT_AMMO,			9,				nil,							"36 SMG ammo",					nil,									"ammo_smg",							function(pl) pl:GiveAmmo(36, "smg1", true) end)
