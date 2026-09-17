@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Relapse иконки шопа
 
-Эталон — `weapon_zs_makarov.png`. Карточка: `RelapseUI.MakeSilhouetteIcon` (белый `SetImageColor` на альфе).
+Эталон файла — `weapon_zs_makarov.png`. Направление — MP5 / 1911. Карточка: `RelapseUI.MakeSilhouetteIcon` (белый `SetImageColor` на альфе).
 
 ## Файл
 
@@ -18,7 +18,7 @@ alwaysApply: false
 | Край | альфа 0 или 255, без SSAA / Gaussian |
 | В Lua | путь **с** `.png` |
 
-Профиль сбоку. Дырка скобы курка — ок. Высота силуэта как у Макарова (~102 px, pad y ~77).
+Профиль сбоку. Дуло **вправо**, приклад / рукоять влево. CAC Viper часто влево — после конверта отзеркалить. Дырка скобы курка — ок. Высота силуэта как у Макарова (~102 px, pad y ~77).
 
 ```lua
 -- ❌ CAC / entity spawnicon (дыры или голубой квадрат)

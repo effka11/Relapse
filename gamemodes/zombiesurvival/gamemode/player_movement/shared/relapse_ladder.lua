@@ -9,6 +9,12 @@ local PAD_NEAR = 48
 local STAND_OFF = 24
 local USE_RADIUS = 104
 local HINT_FULL = 40
+-- CLIP_BAND (40) is server-only, below the client return. Climb still has to
+-- cross one skipped floor cell (~40u) on the same U-strip.
+local CLIP_GAP = 48
+local CLIP_STRIP_XY = 16
+local CLIP_STRIP_XY_SQR = CLIP_STRIP_XY * CLIP_STRIP_XY
+local CLIP_INWARD_DOT = 0.9
 GM.RelapseLadderUseRadius = USE_RADIUS
 
 -- Flat ladders get a long oval; square shafts stay near-round.
@@ -34,8 +40,23 @@ local BOT_PAD = 24
 local COOLDOWN = 0.5
 -- Hammer 1u = 1 in. A bit quicker than scale-matched real climb (~36).
 -- Down is faster: gravity and skipping rungs.
-local CLIMB_SPEED_UP = 45
-local CLIMB_SPEED_DOWN = 62
+-- Shift is not ground sprint (240/95). Sprint-up matches walk-down.
+GM.HumanClimbSpeed = 52
+GM.HumanClimbSpeedDown = 72
+GM.HumanClimbSprintMul = GM.HumanClimbSpeedDown / GM.HumanClimbSpeed
+local CLIMB_SPEED_UP = GM.HumanClimbSpeed
+local CLIMB_SPEED_DOWN = GM.HumanClimbSpeedDown
+
+function GM:GetHumanClimbSpeed(pl, down, sprint)
+	local speed = down and (self.HumanClimbSpeedDown or 72) or (self.HumanClimbSpeed or 52)
+	if IsValid(pl) and self.GetUpgradePercentMul then
+		speed = speed * self:GetUpgradePercentMul(pl, "Climb")
+	end
+	if sprint then
+		speed = speed * (self.HumanClimbSprintMul or (72 / 52))
+	end
+	return speed
+end
 -- Hybrid: horizon keeps W = up. Commit to view-follow only when looking
 -- clearly down; stay there until the look returns near the horizon.
 local CLIMB_PITCH_ENTER = 45
@@ -164,14 +185,74 @@ local function ClipWorldBox(clip)
 	return pos + clip:GetBoxMins(), pos + clip:GetBoxMaxs()
 end
 
-local function SeatFromClip(clip, z, extra)
-	local pos = clip:GetPos()
-	local out = Outward(clip)
+-- Same U-column: NW inward is quantized, next column is ~20-40u away.
+function GM.RelapseLadderSameStrip(a, b)
+	if not IsValid(a) or not IsValid(b) then return false end
+	if a == b then return true end
+	local ia = a.GetInward and a:GetInward()
+	local ib = b.GetInward and b:GetInward()
+	if not ia or not ib then return false end
+	if ia:LengthSqr() < 0.01 or ib:LengthSqr() < 0.01 then return false end
+	ia = Vector(ia.x, ia.y, 0)
+	ib = Vector(ib.x, ib.y, 0)
+	ia:Normalize()
+	ib:Normalize()
+	if ia:Dot(ib) < CLIP_INWARD_DOT then return false end
+	local pa, pb = a:GetPos(), b:GetPos()
+	local dx, dy = pa.x - pb.x, pa.y - pb.y
+	return dx * dx + dy * dy <= CLIP_STRIP_XY_SQR
+end
+
+local function ClipZRange(clip)
 	local wmins, wmaxs = ClipWorldBox(clip)
-	local off = STAND_OFF + (extra or 0)
 	local zmin, zmax = wmins.z, wmaxs.z - 2
 	if zmax < zmin then zmax = zmin end
-	return Vector(pos.x + out.x * off, pos.y + out.y * off, math.Clamp(z, zmin, zmax)), zmin, zmax
+	return zmin, zmax
+end
+
+local function SeatXY(clip, extra)
+	local pos = clip:GetPos()
+	local out = Outward(clip)
+	local off = STAND_OFF + (extra or 0)
+	return pos.x + out.x * off, pos.y + out.y * off
+end
+
+local function SeatFromClip(clip, z, extra)
+	local x, y = SeatXY(clip, extra)
+	local zmin, zmax = ClipZRange(clip)
+	return Vector(x, y, math.Clamp(z, zmin, zmax)), zmin, zmax
+end
+
+-- zmin/zmax of this strip, including floor-cell gaps of one CLIP_GAP.
+local function ClimbZRange(clip)
+	local zmin, zmax = ClipZRange(clip)
+	local list = ents.FindByClass("relapse_ladder_clip")
+	local seen = {[clip] = true}
+	local added = true
+	while added do
+		added = false
+		for i = 1, #list do
+			local other = list[i]
+			if IsValid(other) and not seen[other] and GM.RelapseLadderSameStrip(clip, other) then
+				local oz0, oz1 = ClipZRange(other)
+				local gap
+				if oz1 < zmin then
+					gap = zmin - oz1
+				elseif oz0 > zmax then
+					gap = oz0 - zmax
+				else
+					gap = 0
+				end
+				if gap <= CLIP_GAP then
+					seen[other] = true
+					if oz0 < zmin then zmin = oz0 end
+					if oz1 > zmax then zmax = oz1 end
+					added = true
+				end
+			end
+		end
+	end
+	return zmin, zmax
 end
 
 local function ClipNearest(clip, pos)
@@ -288,12 +369,15 @@ local function KickOff(pl)
 	end
 end
 
+-- FLY still collides with world: embed depth = stronger unstick. Hold uses
+-- NOCLIP so the engine does not depenetrate hatches. Admin RelapseNoclip
+-- is left alone.
 local function SetClimbing(pl, on)
 	if not IsValid(pl) then return end
-	if pl:GetMoveType() == NOCLIP then return end
+	if pl.RelapseNoclip then return end
 	if on then
-		if pl:GetMoveType() ~= FLY then
-			pl:SetMoveType(FLY)
+		if pl:GetMoveType() ~= NOCLIP then
+			pl:SetMoveType(NOCLIP)
 		end
 		if pl.SetGroundEntity then
 			pl:SetGroundEntity(NULL)
@@ -301,7 +385,7 @@ local function SetClimbing(pl, on)
 		if pl.RemoveFlags then
 			pl:RemoveFlags(FL_ONGROUND)
 		end
-	elseif pl:GetMoveType() == FLY or pl:GetMoveType() == LADDER then
+	elseif pl:GetMoveType() == NOCLIP or pl:GetMoveType() == FLY or pl:GetMoveType() == LADDER then
 		pl:SetMoveType(WALK)
 	end
 end
@@ -414,6 +498,7 @@ function GM:RelapseLadderRelease(pl)
 	SetHold(pl, false)
 	pl.RelapseLadderWish = 0
 	pl.RelapseLadderViewFlip = false
+	pl.RelapseLadderSeatExtra = nil
 	pl.RelapseLadderCooldown = CurTime() + COOLDOWN
 	SetClimbing(pl, false)
 	KickOff(pl)
@@ -483,11 +568,8 @@ local function ClimbMoveFilter(pl, throughProps)
 	end
 end
 
-local function HullTrace(pl, start, dest, throughProps)
-	local mins, maxs
-	if pl.Crouching and pl:Crouching() then
-		mins, maxs = pl:GetHullDuck()
-	else
+local function HullTrace(pl, start, dest, throughProps, mins, maxs)
+	if not mins or not maxs then
 		mins, maxs = pl:GetHull()
 	end
 	return util.TraceHull({
@@ -498,6 +580,64 @@ local function HullTrace(pl, start, dest, throughProps)
 		filter = ClimbMoveFilter(pl, throughProps),
 		mask = MASK_PLAYERSOLID,
 	})
+end
+
+local function PlayerHulls(pl)
+	local sm, sx = pl:GetHull()
+	if pl.GetHullDuck then
+		return sm, sx, pl:GetHullDuck()
+	end
+	return sm, sx, sm, sx
+end
+
+local function SweepTo(pl, from, dest, ghost, mins, maxs)
+	local tr = HullTrace(pl, from, dest, ghost, mins, maxs)
+	if not ghost and tr.StartSolid and IsGhostableProp(tr.Entity) then
+		EnableLadderGhost(pl)
+		ghost = true
+		tr = HullTrace(pl, from, dest, true, mins, maxs)
+	end
+	return tr, ghost
+end
+
+local function DepenetrateOutward(pl, origin, clip, ghost, mins, maxs)
+	local tr
+	tr, ghost = SweepTo(pl, origin, origin, ghost, mins, maxs)
+	if not tr.StartSolid then return origin, ghost end
+	if not IsValid(clip) then return origin, ghost end
+	local out = Outward(clip)
+	if out:LengthSqr() < 0.01 then return origin, ghost end
+	for d = 2, 16, 2 do
+		local try = Vector(origin.x + out.x * d, origin.y + out.y * d, origin.z)
+		local t
+		t, ghost = SweepTo(pl, try, try, ghost, mins, maxs)
+		if not t.StartSolid then return try, ghost end
+	end
+	return origin, ghost
+end
+
+-- Keep mount XY. Floors do not stop Z. Extra stays whatever TrySeat set.
+local function ClimbSqueeze(pl, clip, origin, destZ, ghost)
+	return Vector(origin.x, origin.y, destZ), ghost
+end
+
+local function UnstickForLeave(pl, origin, clip)
+	if not origin then return origin end
+	local sm, sx, dm, dx = PlayerHulls(pl)
+	origin = DepenetrateOutward(pl, origin, clip, true, sm, sx)
+	if not HullTrace(pl, origin, origin, true, sm, sx).StartSolid then return origin end
+	origin = DepenetrateOutward(pl, origin, clip, true, dm, dx)
+	if not HullTrace(pl, origin, origin, true, dm, dx).StartSolid then return origin end
+	if not IsValid(clip) then return origin end
+	for _, extra in ipairs({0, 8, 16}) do
+		local x, y = SeatXY(clip, extra)
+		local try = Vector(x, y, origin.z)
+		local tr = HullTrace(pl, try, try, true, sm, sx)
+		if not tr.StartSolid then return try end
+		tr = HullTrace(pl, try, try, true, dm, dx)
+		if not tr.StartSolid then return try end
+	end
+	return origin
 end
 
 -- Frozen VPHYSICS is not a world wall: the controller sinks a few units.
@@ -581,13 +721,22 @@ local function ClipMoveAgainstProps(pl, mv)
 end
 
 local function TrySeat(pl, clip, z)
-	for _, extra in ipairs({0, 8, 16}) do
+	local sm, sx, dm, dx = PlayerHulls(pl)
+	local function try(extra, mins, maxs)
 		local seat = SeatFromClip(clip, z, extra)
-		local tr = HullTrace(pl, seat, seat, true)
+		local tr = HullTrace(pl, seat, seat, true, mins, maxs)
 		if not tr.StartSolid then
+			pl.RelapseLadderSeatExtra = extra ~= 0 and extra or nil
 			return seat
 		end
 	end
+	local extras = {0, 8, 16}
+	for i = 1, #extras do
+		local extra = extras[i]
+		local seat = try(extra, sm, sx) or try(extra, dm, dx)
+		if seat then return seat end
+	end
+	pl.RelapseLadderSeatExtra = 16
 	return SeatFromClip(clip, z, 16)
 end
 
@@ -734,6 +883,7 @@ hook.Add("PlayerSpawn", "RelapseLadder", function(pl)
 	pl.RelapseLadderCooldown = 0
 	pl.RelapseLadderUseDown = false
 	pl.RelapseLadderJumpDown = false
+	pl.RelapseLadderSeatExtra = nil
 	if SERVER then
 		pl.RelapseLadderCanStep = false
 		pl:SetNW2Bool("RelapseLadderCanStep", false)
@@ -769,7 +919,12 @@ local function JumpOffVelocity(pl, cmd)
 		hx, hy = hx / hlen, hy / hlen
 	end
 	local jp = DEFAULT_JUMP_POWER or 185
-	jp = jp * (pl.JumpPowerMul or 1)
+	local gm = GAMEMODE or GM
+	if gm and gm.GetJumpPercentMul then
+		jp = jp * gm:GetJumpPercentMul(pl)
+	else
+		jp = jp * (pl.JumpPowerMul or 1)
+	end
 	return Vector(hx * JUMP_OFF_XY, hy * JUMP_OFF_XY, jp * JUMP_OFF_Z)
 end
 
@@ -797,6 +952,8 @@ local function JumpOff(pl, mv, cmd)
 	pl.RelapseLadderGhostHop = CurTime() + 0.45
 	pl.RelapseLadderPropClipUntil = CurTime() + 1
 	pl.FirstGhostThink = false
+	local origin = UnstickForLeave(pl, mv:GetOrigin(), GetClip(pl))
+	mv:SetOrigin(origin)
 	if not (pl.IsBot and pl:IsBot()) then
 		local vel = JumpOffVelocity(pl, cmd)
 		Release(pl)
@@ -818,7 +975,7 @@ end
 
 hook.Add("SetupMove", "RelapseLadder", function(pl, mv, cmd)
 	if not pl:Alive() then return end
-	if pl:GetMoveType() == NOCLIP then return end
+	if pl:GetMoveType() == NOCLIP and not Holding(pl) then return end
 
 	local now = CurTime()
 	local pos = mv:GetOrigin() or pl:GetPos()
@@ -835,6 +992,7 @@ hook.Add("SetupMove", "RelapseLadder", function(pl, mv, cmd)
 
 	local wish = ClimbWishFromInput(pl, cmd:GetButtons(), cmd:GetForwardMove(), cmd:GetViewAngles().p, hold)
 	pl.RelapseLadderWish = wish
+	pl.RelapseLadderSprint = hold and bit.band(cmd:GetButtons(), IN_SPEED) ~= 0
 
 	if hold then
 		cmd:RemoveKey(IN_DUCK)
@@ -910,7 +1068,7 @@ end)
 function GM:RelapseLadderClimb(pl, mv)
 	if not Holding(pl) then return false end
 	if not pl:Alive() then return false end
-	if pl:GetMoveType() == NOCLIP then return false end
+	if pl.RelapseNoclip then return false end
 
 	local clip = GetClip(pl)
 	if not IsValid(clip) then
@@ -939,7 +1097,7 @@ function GM:RelapseLadderClimb(pl, mv)
 		end
 	end
 	]]
-	local seat, zmin, zmax = SeatFromClip(clip, pos.z, 0)
+	local zmin, zmax = ClimbZRange(clip)
 	local pitch = (mv.GetAngles and mv:GetAngles().p) or (pl.EyeAngles and pl:EyeAngles().p) or 0
 	local wish = pl.RelapseLadderWish or 0
 	if wish == 0 then
@@ -948,27 +1106,26 @@ function GM:RelapseLadderClimb(pl, mv)
 
 	local dt = FrameTime()
 	if dt <= 0 then dt = engine.TickInterval() end
-	local speed = wish < 0 and CLIMB_SPEED_DOWN or CLIMB_SPEED_UP
-	local z = math.Clamp(pos.z + wish * speed * dt, zmin, zmax)
-	local dest = Vector(seat.x, seat.y, z)
-	local ghost = LadderGhostOn(pl)
-	local from = Vector(seat.x, seat.y, pos.z)
-	local tr = HullTrace(pl, from, dest, ghost)
-	if not ghost then
-		if tr.StartSolid and IsGhostableProp(tr.Entity) then
-			EnableLadderGhost(pl)
-			tr = HullTrace(pl, from, dest, true)
-		elseif tr.Hit and not tr.StartSolid then
-			dest = tr.HitPos
-		end
-	elseif tr.Hit and not tr.StartSolid then
-		dest = tr.HitPos
+	local gm = GAMEMODE or GM
+	local sprint = pl.RelapseLadderSprint
+	if sprint == nil then
+		sprint = bit.band(mv:GetButtons() or 0, IN_SPEED) ~= 0
 	end
+	local speed
+	if gm.GetHumanClimbSpeed then
+		speed = gm:GetHumanClimbSpeed(pl, wish < 0, sprint)
+	else
+		speed = wish < 0 and CLIMB_SPEED_DOWN or CLIMB_SPEED_UP
+	end
+	local _, hx = pl:GetHull()
+	local pad = math.max(CLIP_GAP, (hx and hx.z) or CLIP_GAP)
+	local z = math.Clamp(pos.z + wish * speed * dt, zmin - pad, zmax + pad)
+	local ghost = LadderGhostOn(pl)
+	local dest = ClimbSqueeze(pl, clip, pos, z, ghost)
 
 	if CurTime() > (pl.RelapseLadderMountedAt or 0) + 0.15 then
-		if wish > 0 and dest.z >= zmax - 0.5 then
-			Release(pl)
-		elseif wish < 0 and dest.z <= zmin + 0.5 then
+		local atEnd = (wish > 0 and dest.z >= zmax - 0.5) or (wish < 0 and dest.z <= zmin + 0.5)
+		if atEnd and not HullTrace(pl, dest, dest, ghost).StartSolid then
 			Release(pl)
 		end
 	end

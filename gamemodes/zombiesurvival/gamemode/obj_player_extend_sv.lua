@@ -640,7 +640,11 @@ function meta:Give(weptype, noammo)
 	local ret = OldGive(self, weptype, noammo)
 
 	if autoswitch then
-		self:SelectWeapon(weptype)
+		if GAMEMODE.RelapseSelectWeapon then
+			GAMEMODE:RelapseSelectWeapon(self, weptype)
+		else
+			self:SelectWeapon(weptype)
+		end
 	end
 
 	return ret

@@ -27,7 +27,7 @@ SWEP.RelapsePreviewCamScale = 1.0
 SWEP.RelapseMeleeCameraScale = 0.10
 
 SWEP.PrintName = "Нож"
-SWEP.Description = "A service knife. Issued with the kit: it reaches the one in the doorway, not the one behind him."
+SWEP.Description = "A service knife. It reaches the one in the doorway, not the one behind him."
 SWEP.TranslationName = "wep_cwknife"
 SWEP.TranslationDescription = "wep_cwknife_desc"
 SWEP.Category = "Black Ops: Cold War"
@@ -35,7 +35,7 @@ SWEP.SubCategory = "Melees"
 SWEP.Spawnable = true
 SWEP.VModel = Model("models/easy/cw/weapons/vm_me_t9loadout.mdl")
 SWEP.WorldModel = Model("models/easy/cw/weapons/wm_me_t9loadout.mdl")
-SWEP.Purpose = "A service knife. Issued with the kit: it reaches the one in the doorway, not the one behind him."
+SWEP.Purpose = "A service knife. It reaches the one in the doorway, not the one behind him."
 SWEP.Author = "easy4115"
 
 SWEP.Slot = 0
@@ -45,11 +45,11 @@ SWEP.IsMelee = true
 -- Relapse combat stats. Source of truth for melee usefulness and the shop UI.
 -- Damage is per swing. Delay is time between swings. Swing is windup before the trace.
 -- Stopping is knockback. Range is hull trace hu. Weight is kilograms (Ka-Bar ~0.32 kg).
--- Below crowbar 35: short slash, not CoD 45.
+-- Seven hits on 225, not CoD 45. Fast slash: the doorway, not six cuts and not the cane's wait.
 SWEP.Relapse = {
 	Melee = true,
 	Type = "slash",
-	Damage = 24,
+	Damage = 33,
 	Delay = 0.55,
 	Swing = 0.20,
 	Stopping = 40,

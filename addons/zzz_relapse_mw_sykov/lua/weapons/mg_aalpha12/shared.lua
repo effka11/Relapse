@@ -155,7 +155,8 @@ SWEP.Recoil = {
 }
 
 SWEP.Bullet = {
-    Damage = {R.Damage, farDamage},
+    -- MW divides Damage by NumBullets. Relapse.Damage is per pellet.
+    Damage = {R.Damage * R.Pellets, farDamage * R.Pellets},
     DropOffStartRange = 15,
     EffectiveRange = 20,
     Range = 40,

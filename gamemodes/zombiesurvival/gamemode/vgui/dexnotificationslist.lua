@@ -14,21 +14,38 @@ end
 
 local matGrad = Material("VGUI/gradient-r")
 function PANEL:Paint()
+	local parent = self:GetParent()
+	local align = parent.GetAlign and parent:GetAlign()
+	if align == CENTER then return true end
+
 	surface.SetMaterial(matGrad)
 	surface.SetDrawColor(0, 0, 0, 180)
 
-	local align = self:GetParent():GetAlign()
 	if align == RIGHT then
 		surface.DrawTexturedRect(self:GetWide() * 0.25, 0, self:GetWide(), self:GetTall())
-	elseif align == CENTER then
-		surface.DrawTexturedRect(self:GetWide() * 0.25, 0, self:GetWide() * 0.25, self:GetTall())
-		surface.DrawTexturedRectRotated(self:GetWide() * 0.625, self:GetTall() / 2, self:GetWide() * 0.25, self:GetTall(), 180)
 	else
 		surface.DrawTexturedRectRotated(self:GetWide() * 0.25, self:GetTall() / 2, self:GetWide() / 2, self:GetTall(), 180)
 	end
 end
 
+local function CenterFont(font)
+	if font == "ZSHUDFont" or font == "ZSHUDFontBig" then return "Relapse30" end
+	if font == "ZSHUDFontSmall" or font == "ZSHUDFontSmaller" then return "Relapse20" end
+	if not font or font == "" or font == "ZSHUDFontSmallest" or font == "ZSHUDFontTiny" then
+		return "Relapse20"
+	end
+	return font
+end
+
 function PANEL:AddLabel(text, col, font, extramargin)
+	local parent = self:GetParent()
+	if parent.GetAlign and parent:GetAlign() == CENTER and RelapseUI and RelapseUI.CreateFonts then
+		RelapseUI.CreateFonts()
+		font = CenterFont(font)
+		if col == COLOR_RED and RelapseUI.Col then
+			col = RelapseUI.Col.Text
+		end
+	end
 	local label = vgui.Create("DLabel", self)
 	label:SetText(text)
 	label:SetFont(font or DefaultFont)
@@ -147,7 +164,12 @@ end
 
 function PANEL:AddNotification(...)
 	local notif = vgui.Create("DEXNotification", self)
-	notif:SetTall(BetterScreenScale() * self:GetMessageHeight())
+	if self:GetAlign() == CENTER and RelapseUI and RelapseUI.Grid15 then
+		RelapseUI.CreateFonts()
+		notif:SetTall(RelapseUI.Grid15(3))
+	else
+		notif:SetTall(BetterScreenScale() * self:GetMessageHeight())
+	end
 	notif:SetNotification(...)
 	local w = 0
 	for _, p in pairs(notif:GetChildren()) do

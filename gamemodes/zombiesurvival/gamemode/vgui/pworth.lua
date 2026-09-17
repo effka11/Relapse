@@ -114,6 +114,15 @@ function MakepWorth()
 	for catid in ipairs(GAMEMODE.ItemCategories) do
 		if catid == ITEMCAT_OTHER then continue end
 
+		local hasItems = false
+		for _, tab in ipairs(GAMEMODE.Items) do
+			if tab.WorthShop and tab.Category == catid then
+				hasItems = true
+				break
+			end
+		end
+		if not hasItems then continue end
+
 		local itemframe = vgui.Create("DScrollPanel", propertysheet)
 		itemframe.Paint = function() return true end
 		RelapseUI.StyleScroll(itemframe)

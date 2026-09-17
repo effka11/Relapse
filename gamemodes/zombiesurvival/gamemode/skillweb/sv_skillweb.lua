@@ -1,65 +1,16 @@
-net.Receive("zs_skill_is_desired", function(length, pl)
-	local skillid = net.ReadUInt(16)
-	local desired = net.ReadBool()
-
-	pl:SetSkillDesired(skillid, desired)
+net.Receive("zs_skill_is_desired", function()
 end)
 
-net.Receive("zs_skills_desired", function(length, pl)
-	local desired = {}
-
-	for skillid in pairs(GAMEMODE.Skills) do
-		if net.ReadBool() then
-			table.insert(desired, skillid)
-		end
-	end
-	pl:SetDesiredActiveSkills(desired)
+net.Receive("zs_skills_desired", function()
 end)
 
-net.Receive("zs_skills_all_desired", function(length, pl)
-	if net.ReadBool() then
-		pl:SetDesiredActiveSkills(table.Copy(pl:GetUnlockedSkills()))
-	else
-		local desired = {}
-		for _, id in pairs(pl:GetUnlockedSkills()) do
-			if GAMEMODE.Skills[id] and GAMEMODE.Skills[id].AlwaysActive then
-				desired[#desired + 1] = id
-			end
-		end
-
-		pl:SetDesiredActiveSkills(desired)
-	end
+net.Receive("zs_skills_all_desired", function()
 end)
 
-net.Receive("zs_skill_set_desired", function(length, pl)
-	local skillset = net.ReadTable()
-	local assoc = table.ToAssoc(skillset)
-
-	local desired = {}
-	for _, id in pairs(pl:GetUnlockedSkills()) do
-		if GAMEMODE.Skills[id] and (GAMEMODE.Skills[id].AlwaysActive or assoc[id]) then
-			desired[#desired + 1] = id
-		end
-	end
-	pl:SetDesiredActiveSkills(desired)
+net.Receive("zs_skill_set_desired", function()
 end)
 
-net.Receive("zs_skill_is_unlocked", function(length, pl)
-	local skillid = net.ReadUInt(16)
-	local activate = net.ReadBool()
-	local skill = GAMEMODE.Skills[skillid]
-
-	if skill and not pl:IsSkillUnlocked(skillid) and pl:GetZSSPRemaining() >= 1 and pl:SkillCanUnlock(skillid) and not skill.Disabled then
-		pl:SetSkillUnlocked(skillid, true)
-
-		local msg = "You've unlocked a skill: "..skill.Name
-		pl:CenterNotify(msg)
-		pl:PrintMessage(HUD_PRINTTALK, msg)
-
-		if activate then
-			pl:SetSkillDesired(skillid, true)
-		end
-	end
+net.Receive("zs_skill_is_unlocked", function()
 end)
 
 net.Receive("zs_skills_remort", function(length, pl)
@@ -68,23 +19,7 @@ net.Receive("zs_skills_remort", function(length, pl)
 	end
 end)
 
-net.Receive("zs_skills_reset", function(length, pl)
-	if pl:GetZSLevel() < 10 then
-		pl:SkillNotify("You must be level 10 to reset your skills.")
-		return
-	end
-
-	local time = os.time()
-	if pl.NextSkillReset and time < pl.NextSkillReset then
-		pl:SkillNotify("You must wait before resetting your skills again.")
-		return
-	end
-
-	pl:SkillsReset()
-
-	net.Start("zs_skills_nextreset")
-		net.WriteUInt(pl.NextSkillReset - time, 32)
-	net.Send(pl)
+net.Receive("zs_skills_reset", function()
 end)
 
 net.Receive("zs_skills_refunded", function(length, pl)
@@ -248,11 +183,27 @@ function meta:SkillsRemort()
 	self:SetDesiredActiveSkills({})
 	self.NextSkillReset = nil
 
+	if GAMEMODE.ClearCycleGrid then
+		GAMEMODE:ClearCycleGrid(self)
+	end
+
+	if self:Alive() and self:Team() == TEAM_HUMAN then
+		self:ApplySkills()
+	end
+
 	if GAMEMODE.GrantRelapseScarPick then
 		GAMEMODE:GrantRelapseScarPick(self)
 	end
 
+	local marks = 0
+	if GAMEMODE.GrantRelapseMarks then
+		marks = GAMEMODE:GrantRelapseMarks(self)
+	end
+
 	self:CenterNotify(COLOR_CYAN, translate.ClientFormat(self, "you_have_remorted_now_rl_x", rl))
+	if marks > 0 then
+		self:CenterNotify(COLOR_YELLOW, translate.ClientFormat(self, "you_gained_x_marks", marks))
+	end
 	self:CenterNotify(COLOR_YELLOW, translate.ClientFormat(self, "you_have_relapse_picks", self.RelapseScarPicks or 1))
 	for _, pl in pairs(player.GetAll()) do
 		if pl ~= self then

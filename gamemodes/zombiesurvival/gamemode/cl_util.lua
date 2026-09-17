@@ -6,23 +6,11 @@ concommand.Add("printdxinfo", function()
 	print("Supports Vertex Shaders 2.0: "..tostring(render.SupportsVertexShaders_2_0()))
 end)
 
-local ammonames = {
-	["pistol"] = "pistolammo",
-	["buckshot"] = "shotgunammo",
-	["smg1"] = "smgammo",
-	["ar2"] = "assaultrifleammo",
-	["357"] = "rifleammo",
-	["pulse"] = "pulseammo",
-	["battery"] = "50mkit",
-	["xbowbolt"] = "crossbowammo",
-	["impactmine"] = "impactmine",
-	["chemical"] = "chemical",
-	["gaussenergy"] = "nail"
-}
-
 concommand.Add("zs_quickbuyammo", function()
-	if ammonames[GAMEMODE.CachedResupplyAmmoType] then
-		RunConsoleCommand("zs_pointsshopbuy", "ps_"..ammonames[GAMEMODE.CachedResupplyAmmoType])
+	local ammo = GAMEMODE.CachedResupplyAmmoType
+	local sig = GAMEMODE.GetAmmoPurchaseSignature and GAMEMODE:GetAmmoPurchaseSignature(ammo)
+	if sig then
+		RunConsoleCommand("zs_pointsshopbuy", "ps_"..sig)
 	end
 end)
 

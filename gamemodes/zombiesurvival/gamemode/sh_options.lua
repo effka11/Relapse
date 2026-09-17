@@ -128,7 +128,7 @@ GM.AmmoCache["turret_buckshot"]				= 1
 GM.AmmoCache["turret_assault"]				= 1
 GM.AmmoCache["scrap"]						= 3
 
-GM.AmmoResupply = table.ToAssoc({"ar2", "pistol", "smg1", "357", "xbowbolt", "buckshot", "battery", "pulse", "impactmine", "chemical", "gaussenergy", "scrap"})
+GM.AmmoResupply = table.ToAssoc({"battery", "gaussenergy", "scrap"})
 GM:BindRelapseAmmoTables()
 
 -----------
@@ -141,20 +141,11 @@ GM:AddStartingItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357")
 GM:AddStartingItem("uzi",				ITEMCAT_GUNS,			15,				"mg_uzulu")
 GM:AddStartingItem("m680",				ITEMCAT_GUNS,			15,				"mg_romeo870")
 GM:AddStartingItem("sks",				ITEMCAT_GUNS,			15,				"mg_sksierra")
-GM:AddStartingItem("cwknife",			ITEMCAT_MELEE,			15,				"mg_me_t9loadout")
+GM:AddStartingItem("cwcane",			ITEMCAT_MELEE,			15,				"mg_me_t9cane")
+GM:AddStartingItem("cinderblock",		ITEMCAT_MELEE,			15,				"mg_cinderblock")
 
 GM:RegisterRelapseAmmoShopItems()
 
-GM:AddStartingItem("2smgcp",			ITEMCAT_AMMO,			15,				nil,			"72 SMG ammo",					nil,		"ammo_smg",				function(pl) pl:GiveAmmo(72, "smg1", true) end)
-GM:AddStartingItem("3smgcp",			ITEMCAT_AMMO,			20,				nil,			"108 SMG ammo",					nil,		"ammo_smg",				function(pl) pl:GiveAmmo(108, "smg1", true) end)
-GM:AddStartingItem("2arcp",				ITEMCAT_AMMO,			15,				nil,			"64 assault rifle ammo",		nil,		"ammo_assault",			function(pl) pl:GiveAmmo(64, "ar2", true) end)
-GM:AddStartingItem("3arcp",				ITEMCAT_AMMO,			20,				nil,			"96 assault rifle ammo",		nil,		"ammo_assault",			function(pl) pl:GiveAmmo(96, "ar2", true) end)
-GM:AddStartingItem("2pls",				ITEMCAT_AMMO,			15,				nil,			"60 pulse ammo",				nil,		"ammo_pulse",			function(pl) pl:GiveAmmo(60, "pulse", true) end)
-GM:AddStartingItem("3pls",				ITEMCAT_AMMO,			20,				nil,			"90 pulse ammo",				nil,		"ammo_pulse",			function(pl) pl:GiveAmmo(90, "pulse", true) end)
-GM:AddStartingItem("xbow1",				ITEMCAT_AMMO,			15,				nil,			"16 crossbow bolts",			nil,		"ammo_bolts",			function(pl) pl:GiveAmmo(16, "XBowBolt", true) end)
-GM:AddStartingItem("xbow2",				ITEMCAT_AMMO,			20,				nil,			"24 crossbow bolts",			nil,		"ammo_bolts",			function(pl) pl:GiveAmmo(24, "XBowBolt", true) end)
-GM:AddStartingItem("4mines",			ITEMCAT_AMMO,			15,				nil,			"6 explosives",					nil,		"ammo_explosive",		function(pl) pl:GiveAmmo(6, "impactmine", true) end)
-GM:AddStartingItem("6mines",			ITEMCAT_AMMO,			20,				nil,			"9 explosives",					nil,		"ammo_explosive",		function(pl) pl:GiveAmmo(9, "impactmine", true) end)
 GM:AddStartingItem("8nails",			ITEMCAT_AMMO,			15,				nil,			"8 nails",						nil, 		"ammo_nail", 			function(pl) pl:GiveAmmo(8, "GaussEnergy", true) end)
 GM:AddStartingItem("12nails",			ITEMCAT_AMMO,			20,				nil,			"12 nails",						nil, 		"ammo_nail", 			function(pl) pl:GiveAmmo(12, "GaussEnergy", true) end)
 GM:AddStartingItem("60mkit",			ITEMCAT_AMMO,			15,				nil,			"60 medical power",				nil,		"ammo_medpower",		function(pl) pl:GiveAmmo(60, "Battery", true) end)
@@ -182,7 +173,8 @@ GM:AddPointShopItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357", nil, nil, n
 GM:AddPointShopItem("uzi",				ITEMCAT_GUNS,			15,				"mg_uzulu", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_uzulu") end)
 GM:AddPointShopItem("m680",				ITEMCAT_GUNS,			15,				"mg_romeo870", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_romeo870") end)
 GM:AddPointShopItem("sks",				ITEMCAT_GUNS,			15,				"mg_sksierra", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sksierra") end)
-GM:AddPointShopItem("cwknife",			ITEMCAT_MELEE,			15,				"mg_me_t9loadout", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9loadout") end)
+GM:AddPointShopItem("cwcane",			ITEMCAT_MELEE,			15,				"mg_me_t9cane", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9cane") end)
+GM:AddPointShopItem("cinderblock",		ITEMCAT_MELEE,			15,				"mg_cinderblock", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_cinderblock") end)
 -- Tier 2
 item =
 GM:AddPointShopItem("mp5",				ITEMCAT_GUNS,			45,				"mg_mpapa5", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mpapa5") end)
@@ -194,7 +186,16 @@ item =
 GM:AddPointShopItem("m19",				ITEMCAT_GUNS,			45,				"mg_p320", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_p320") end)
 item.Tier = 2
 item =
-GM:AddPointShopItem("machete",			ITEMCAT_MELEE,			45,				"mg_me_t9machete", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9machete") end)
+GM:AddPointShopItem("mk2",				ITEMCAT_GUNS,			45,				"mg_sbeta", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sbeta") end)
+item.Tier = 2
+item =
+GM:AddPointShopItem("cwknife",			ITEMCAT_MELEE,			45,				"mg_me_t9loadout", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9loadout") end)
+item.Tier = 2
+item =
+GM:AddPointShopItem("cwbat",			ITEMCAT_MELEE,			45,				"mg_me_t9bat", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9bat") end)
+item.Tier = 2
+item =
+GM:AddPointShopItem("cwetool",			ITEMCAT_MELEE,			45,				"mg_me_t9etool", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9etool") end)
 item.Tier = 2
 -- Tier 3
 item =
@@ -206,6 +207,9 @@ item.Tier = 3
 item =
 GM:AddPointShopItem("m4a1",				ITEMCAT_GUNS,			75,				"mg_mike4", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mike4") end)
 item.Tier = 3
+item =
+GM:AddPointShopItem("machete",			ITEMCAT_MELEE,			75,				"mg_me_t9machete", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9machete") end)
+item.Tier = 3
 -- Tier 4
 item =
 GM:AddPointShopItem("asval",			ITEMCAT_GUNS,			115,				"mg_valpha", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_valpha") end)
@@ -215,6 +219,9 @@ GM:AddPointShopItem("finn",				ITEMCAT_GUNS,			115,				"mg_sierrax", nil, nil, n
 item.Tier = 4
 item =
 GM:AddPointShopItem("jak12",			ITEMCAT_GUNS,			115,				"mg_aalpha12", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_aalpha12") end)
+item.Tier = 4
+item =
+GM:AddPointShopItem("cwwakizashi",		ITEMCAT_MELEE,			115,				"mg_me_t9wakizashi", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9wakizashi") end)
 item.Tier = 4
 -- Tier 5
 item =
@@ -226,13 +233,16 @@ item.Tier = 5
 item =
 GM:AddPointShopItem("fal",				ITEMCAT_GUNS,			175,				"mg_falima", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_falima") end)
 item.Tier = 5
+item =
+GM:AddPointShopItem("ax50",				ITEMCAT_GUNS,			175,				"mg_alpha50", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_alpha50") end)
+item.Tier = 5
+item =
+GM:AddPointShopItem("cwscythe",			ITEMCAT_MELEE,			175,				"mg_me_t9scythe", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9scythe") end)
+item.Tier = 5
+item =
+GM:AddPointShopItem("cwsledge",			ITEMCAT_MELEE,			175,				"mg_me_t9sledgehammer", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9sledgehammer") end)
+item.Tier = 5
 
-GM:AddPointShopItem("smgammo",			ITEMCAT_AMMO,			9,				nil,							"36 SMG ammo",					nil,									"ammo_smg",							function(pl) pl:GiveAmmo(36, "smg1", true) end)
-GM:AddPointShopItem("crossbowammo",		ITEMCAT_AMMO,			9,				nil,							"8 crossbow bolts",				nil,									"ammo_bolts",						function(pl) pl:GiveAmmo(8,	"XBowBolt",	true) end)
-GM:AddPointShopItem("assaultrifleammo",	ITEMCAT_AMMO,			9,				nil,							"32 assault rifle ammo",		nil,									"ammo_assault",						function(pl) pl:GiveAmmo(32, "ar2", true) end)
-GM:AddPointShopItem("pulseammo",		ITEMCAT_AMMO,			9,				nil,							"30 pulse ammo",				nil,									"ammo_pulse",						function(pl) pl:GiveAmmo(30, "pulse", true) end)
-GM:AddPointShopItem("impactmine",		ITEMCAT_AMMO,			9,				nil,							"3 explosives",					nil,									"ammo_explosive",					function(pl) pl:GiveAmmo(3, "impactmine", true) end)
-GM:AddPointShopItem("chemical",			ITEMCAT_AMMO,			9,				nil,							"20 chemical vials",			nil,									"ammo_chemical",					function(pl) pl:GiveAmmo(20, "chemical", true) end)
 item =
 GM:AddPointShopItem("25mkit",			ITEMCAT_AMMO,			15,				nil,							"25 Medical Kit power",			"25 extra power for the Medical Kit.",	"ammo_medpower",					function(pl) pl:GiveAmmo(25, "Battery", true) end)
 item.CanMakeFromScrap = true

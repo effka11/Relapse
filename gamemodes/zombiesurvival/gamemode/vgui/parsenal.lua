@@ -312,9 +312,9 @@ function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
 		viewer.m_AmmoType:SizeToContents()
 		viewer.m_AmmoType:PerformLayout()
 
-		local ki = lower and self.AmmoIcons[lower] and killicon.Get(self.AmmoIcons[lower])
-		if istable(ki) and ki[1] then
-			viewer.m_AmmoIcon:SetImage(ki[1])
+		local ki = lower and RelapseUI.AmmoIconPath(lower)
+		if ki then
+			viewer.m_AmmoIcon:SetImage(ki)
 			viewer.m_AmmoIcon:SetImageColor(RelapseUI.Col.Text)
 			viewer.m_AmmoIcon:SetVisible(true)
 		else
@@ -647,7 +647,6 @@ function GM:CreateItemViewerGenericElems(viewer)
 	local descRight = RelapseUI.sPx(15)
 
 	-- Relapse20 cell sits ~5px above caps; y is to the capital, not the em-box.
-	local titleTop = RelapseUI.sPx(15) - RelapseUI.sPx(5)
 	local titleH = RelapseUI.sPx(20)
 	local vtitle = EasyLabel(viewer, "", "Relapse20", RelapseUI.Col.Text)
 	vtitle:SetContentAlignment(7)
@@ -655,9 +654,10 @@ function GM:CreateItemViewerGenericElems(viewer)
 	vtitle.ApplySchemeSettings = function() end
 	vtitle.PerformLayout = function(me)
 		local host = me:GetParent()
-		local bw = IsValid(host) and host:GetWide() or viewer:GetWide()
+		if not IsValid(host) then host = viewer end
+		local bw = host:GetWide()
 		me:SetSize(math.max(1, bw - descLeft - descRight), titleH)
-		me:SetPos(descLeft, titleTop)
+		me:SetPos(descLeft, RelapseUI.ViewerTitleTop(host))
 	end
 	vtitle.Paint = function(me, w, h)
 		local t = me:GetText() or ""
@@ -1041,7 +1041,9 @@ local function ArsenalThink(self)
 	if not IsValid(MySelf) then return end
 	if MySelf:Team() ~= TEAM_HUMAN then
 		self:Close()
+		return
 	end
+	RelapseUI.SyncPointsChip(self.WorthLab)
 end
 
 function GM:OpenArsenalMenu()
@@ -1051,6 +1053,7 @@ function GM:OpenArsenalMenu()
 	RelapseUI.HideOtherShops("points")
 	if self.ArsenalInterface and self.ArsenalInterface:IsValid() then
 		RelapseUI.ShowShopFrame(self.ArsenalInterface)
+		RelapseUI.SyncPointsChip(self.ArsenalInterface.WorthLab)
 		return
 	end
 
@@ -1065,14 +1068,7 @@ function GM:OpenArsenalMenu()
 	local chip, _, pointslab = RelapseUI.CreateShopChip(bottomspace, RelapseUI.T("shop_points_label"), IsValid(MySelf) and MySelf:GetPoints() or 0)
 	frame.WorthLab = pointslab
 	frame.WorthChip = chip
-	pointslab.Think = function(me)
-		if not IsValid(MySelf) then return end
-		local points = MySelf:GetPoints()
-		if me.m_LastPoints ~= points then
-			me.m_LastPoints = points
-			RelapseUI.UpdateWorthLabel(me, points)
-		end
-	end
+	RelapseUI.SyncPointsChip(pointslab)
 
 	local buy = vgui.Create("DButton", bottomspace)
 	buy:SetFont("Relapse20")
@@ -1112,6 +1108,15 @@ function GM:OpenArsenalMenu()
 
 	for catid in ipairs(GAMEMODE.ItemCategories) do
 		if catid == ITEMCAT_OTHER then continue end
+
+		local hasItems = false
+		for _, tab in ipairs(GAMEMODE.Items) do
+			if tab.PointShop and tab.Category == catid then
+				hasItems = true
+				break
+			end
+		end
+		if not hasItems then continue end
 
 		local trinkets = catid == ITEMCAT_TRINKETS
 		local usecats = catid == ITEMCAT_GUNS or catid == ITEMCAT_MELEE

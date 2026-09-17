@@ -62,11 +62,11 @@ end
 
 local fw, sd, pt, vel, mul, phase
 function GM:Move(pl, move)
-	if pl:GetMoveType() == MOVETYPE_NOCLIP then return end
-
 	if self.RelapseLadderClimb and self:RelapseLadderClimb(pl, move) then
 		return true
 	end
+
+	if pl:GetMoveType() == MOVETYPE_NOCLIP then return end
 
 	pt = E_GetTable(pl)
 

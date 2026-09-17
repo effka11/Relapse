@@ -1,6 +1,20 @@
 -- Overlay Relapse identity onto MW guns and melee after weapons register.
 -- Workshop SWEPs can win the file; the shop still needs Relapse on GetStored.
 
+-- MW BulletCallbackInternal does damage / NumBullets. Relapse.Damage is per pellet.
+local function ApplyRelapsePellets(wep, R)
+	if not (istable(wep) and istable(R) and R.Pellets) then return end
+	local pellets = math.max(1, tonumber(R.Pellets) or 1)
+	wep.Primary = wep.Primary or {}
+	wep.Primary.NumShots = pellets
+	if wep.Bullet then
+		local far = math.max(1, (R.Damage or 0) * (1 - math.Clamp(R.Kinetic or 0, 0, 1)))
+		wep.Bullet.NumBullets = pellets
+		wep.Bullet.Damage = {(R.Damage or 0) * pellets, far * pellets}
+		wep.Projectile = nil
+	end
+end
+
 local function ApplyOne(class, def)
 	local wep = weapons.GetStored(class)
 	if not wep then return end
@@ -94,16 +108,14 @@ local function ApplyOne(class, def)
 	if R.Automatic ~= nil then
 		wep.Primary.Automatic = R.Automatic
 	end
+	if R.Hitscan then
+		wep.Projectile = nil
+	end
 	if wep.Bullet then
 		local far = math.max(1, R.Damage * (1 - math.Clamp(R.Kinetic or 0, 0, 1)))
 		wep.Bullet.Damage = {R.Damage, far}
-		if R.Pellets then
-			wep.Bullet.NumBullets = R.Pellets
-		end
 	end
-	if R.Pellets then
-		wep.Primary.NumShots = R.Pellets
-	end
+	ApplyRelapsePellets(wep, R)
 	wep.ReloadTime = R.Reload
 	wep.ConeMin = R.Accuracy * 0.5
 	wep.ConeMax = R.Accuracy * 1.5
@@ -133,6 +145,7 @@ local function ApplyOne(class, def)
 		wep.Initialize = function(self, ...)
 			oldInit(self, ...)
 			self.m_bInitialized = true
+			ApplyRelapsePellets(self, self.Relapse)
 			if istable(self.Cone) and self.Cone.Ads ~= nil then
 				self.Cone.Hip = self.Cone.Ads
 			end
@@ -200,14 +213,117 @@ local function WrapMWCallback(wep)
 	end
 end
 
+-- Empty clip fails engine SelectWeapon. MW Holster returns false until
+-- CanSwitch, which cancels 1-9 and leaves Deploy uncalled (no viewmodel).
+local function WrapMWSelect(wep)
+	if not istable(wep) or wep.RelapseSelectWrapped then return end
+	if not isfunction(wep.AddFlag) or not isfunction(wep.Holster) then return end
+
+	wep.RelapseSelectWrapped = true
+	wep.HasAnyAmmo = function()
+		return true
+	end
+
+	local oldHolster = wep.Holster
+	wep.Holster = function(self, weapon)
+		if isfunction(oldHolster) then
+			oldHolster(self, weapon)
+		end
+		return true
+	end
+end
+
+-- MW reload duration is seq.Fps / 30 via GetAnimation (task timer + VM).
+local function IsReloadAnim(seqIndex)
+	if not isstring(seqIndex) then
+		return false
+	end
+	local low = string.lower(seqIndex)
+	if string.find(low, "inspect", 1, true) then
+		return false
+	end
+	return string.find(low, "reload", 1, true) ~= nil
+end
+
+local function WrapReloadAnim(wep)
+	if not istable(wep) or wep.RelapseReloadAnimWrap then
+		return
+	end
+	if not isfunction(wep.GetAnimation) then
+		return
+	end
+	wep.RelapseReloadAnimWrap = true
+	local old = wep.GetAnimation
+	wep.GetAnimation = function(self, seqIndex)
+		local seq = old(self, seqIndex)
+		if not seq or not IsReloadAnim(seqIndex) then
+			return seq
+		end
+		local gm = GAMEMODE or GM
+		local owner = self.GetOwner and self:GetOwner()
+		local mul = 1
+		if gm and gm.GetReloadPercentMul and IsValid(owner) then
+			mul = gm:GetReloadPercentMul(owner)
+		end
+		if mul == 1 then
+			return seq
+		end
+		seq = table.Copy(seq)
+		seq.Fps = (seq.Fps or 30) * mul
+		return seq
+	end
+end
+
+local function IsMWMelee(self)
+	if not istable(self) then
+		return false
+	end
+	if self.Melee or self.IsMelee then
+		return true
+	end
+	local R = self.Relapse
+	return istable(R) and R.Melee
+end
+
+-- MW punch is CalculateRecoil * GetRecoilMultiplier (bipod 0.1, else 1).
+local function WrapRecoilMul(wep)
+	if not istable(wep) or wep.RelapseRecoilMulWrap then
+		return
+	end
+	if not isfunction(wep.GetRecoilMultiplier) then
+		return
+	end
+	wep.RelapseRecoilMulWrap = true
+	local old = wep.GetRecoilMultiplier
+	wep.GetRecoilMultiplier = function(self)
+		local mul = old(self)
+		if IsMWMelee(self) then
+			return mul
+		end
+		local gm = GAMEMODE or GM
+		local owner = self.GetOwner and self:GetOwner()
+		if gm and gm.GetUpgradePercentMul and IsValid(owner) then
+			return mul * gm:GetUpgradePercentMul(owner, "Recoil")
+		end
+		return mul
+	end
+end
+
 local function WrapMWHitgroups()
 	WrapMWCallback(weapons.GetStored("mg_base"))
+	WrapMWSelect(weapons.GetStored("mg_base"))
+	WrapReloadAnim(weapons.GetStored("mg_base"))
+	WrapRecoilMul(weapons.GetStored("mg_base"))
 	local list = weapons.GetList()
 	if not list then return end
 	for i = 1, #list do
 		local class = list[i].ClassName
 		if class then
-			WrapMWCallback(weapons.GetStored(class))
+			local stored = weapons.GetStored(class)
+			WrapMWCallback(stored)
+			WrapMWSelect(stored)
+			WrapReloadAnim(stored)
+			WrapRecoilMul(stored)
 		end
 	end
 end

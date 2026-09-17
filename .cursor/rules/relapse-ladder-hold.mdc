@@ -1,0 +1,35 @@
+---
+description: Relapse ladder hold — world hatch is engine unstick, not a trace problem. NOCLIP on hold.
+globs: gamemodes/zombiesurvival/gamemode/player_movement/**/*ladder*,gamemodes/zombiesurvival/gamemode/player_movement/shared/player_movement.lua,gamemodes/zombiesurvival/entities/entities/relapse_ladder_clip.lua
+alwaysApply: true
+---
+
+# Relapse лестница: hold сквозь люк
+
+Кастомный клип, не `MOVETYPE_LADDER`. `Move` true не отменяет столкновение **мира** у `FLY`: корпус чуть входит в плиту — движок выталкивает. Чем глубже, тем сильнее. Спринт чуть дальше, пройти нельзя.
+
+Так выглядит **engine unstick**, не `PullHitPos`. Не лечить hop / duck hull / extra 8 / `FloorUnder` 12×12 / snap `SeatXY(0)`.
+
+Код: `SetClimbing` / `RelapseLadderClimb` в `relapse_ladder.lua`. `GM:Move` зовёт climb **до** early-out по noclip.
+
+| | |
+|---|---|
+| Hold | `MOVETYPE_NOCLIP` (не `FLY`) |
+| XY | как посадил `TrySeat`, только Z |
+| Leave | край `ClimbZRange` и stand hull не `StartSolid` |
+| Space/E | `UnstickForLeave` |
+| Клип для ходьбы | стена. `OpenFaceSlabs`, `STAND_OFF` 24, `IN_DUCK` не трогать |
+| Ghost | только пропы. Админский `RelapseNoclip` не перехватывать |
+
+```lua
+-- ❌ FLY + трасса «рим vs стена». Move true, мир всё равно выталкивает
+pl:SetMoveType(MOVETYPE_FLY)
+origin = PullHitPos(...)
+
+-- ✅ hold без коллизии мира; XY не двигать
+pl:SetMoveType(MOVETYPE_NOCLIP)
+dest = Vector(origin.x, origin.y, destZ)
+-- leave только если не HullTrace(dest).StartSolid
+```
+
+`changelevel`, не `restart`.

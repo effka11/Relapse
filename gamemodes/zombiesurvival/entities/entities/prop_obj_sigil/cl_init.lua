@@ -1,6 +1,6 @@
 INC_CLIENT()
 
--- Relapse sigil world draw. Colours from RelapseUI.Col (Fog live, Wine corrupt).
+-- Relapse sigil world draw. Colours from RelapseUI.Col (Fog live, Gray hurt, Wine corrupt).
 
 ENT.RenderGroup = RENDERGROUP_TRANSLUCENT
 

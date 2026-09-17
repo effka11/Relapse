@@ -1,6 +1,6 @@
--- Cycle grid skeleton. Catalog of skills is empty; slots are places.
+-- Cycle grid skeleton.
 -- Law: documents/cycle-grid.md
--- Free angles, a turn every hop, no segment crossings. Eight trees grow together.
+-- Nine bushes in outward lanes. Free angles, a turn every hop, no crossings.
 
 GM.CycleGridSlots = 15
 GM.CycleGridUnit = 20
@@ -12,25 +12,22 @@ GM.CycleGridTrees = {
 	{ id = "ranged", nameKey = "grid_tree_ranged" },
 	{ id = "melee", nameKey = "grid_tree_melee" },
 	{ id = "build", nameKey = "grid_tree_build" },
-	{ id = "shadow", nameKey = "grid_tree_shadow" }
+	{ id = "shadow", nameKey = "grid_tree_shadow" },
+	{ id = "agility", nameKey = "grid_tree_agility" }
 }
 
-local ARMS = {
-	{ outX = 0, outY = 1 },
-	{ outX = 1, outY = 1 },
-	{ outX = 1, outY = 0 },
-	{ outX = 1, outY = -1 },
-	{ outX = 0, outY = -1 },
-	{ outX = -1, outY = -1 },
-	{ outX = -1, outY = 0 },
-	{ outX = -1, outY = 1 }
-}
+local function MakeArms(n)
+	local arms = {}
+	for i = 0, n - 1 do
+		local a = math.rad(90 - i * (360 / n))
+		arms[i + 1] = { outX = math.cos(a), outY = math.sin(a) }
+	end
+	return arms
+end
 
-local MIN_TURN = 42
-local MAX_TURN = 118
-local MIN_SEP = 0.68
-local CORE_R = 0.92
-local HALF_DEG = 30
+local MIN_TURN = 17
+local MIN_SEP = 0.70
+local CORE_R = 0.94
 
 local function SeedRand(seed)
 	local s = math.floor(seed % 2147483647)
@@ -52,19 +49,26 @@ local function AngleDiff(a, b)
 	return math.AngleDifference(math.deg(a), math.deg(b))
 end
 
-local function InSector(x, y, arm, halfDeg)
-	if x == 0 and y == 0 then
-		return false
-	end
-	local ang = math.atan2(y, x)
-	local center = math.atan2(arm.outY, arm.outX)
-	return math.abs(AngleDiff(ang, center)) <= halfDeg
+local function ArmAxes(arm)
+	local ox, oy = arm.outX, arm.outY
+	local len = math.sqrt(ox * ox + oy * oy)
+	ox, oy = ox / len, oy / len
+	return ox, oy, -oy, ox
 end
 
 local function ArmDot(x, y, arm)
-	local ox, oy = arm.outX, arm.outY
-	local len = math.sqrt(ox * ox + oy * oy)
-	return (x * ox + y * oy) / len
+	local ox, oy = ArmAxes(arm)
+	return x * ox + y * oy
+end
+
+local function InBush(x, y, arm, pad, cone)
+	local ox, oy, rx, ry = ArmAxes(arm)
+	local par = x * ox + y * oy
+	if par < 0.88 or par > 7.2 then
+		return false
+	end
+	local perp = math.abs(x * rx + y * ry)
+	return perp <= 0.58 + par * cone + (pad or 0)
 end
 
 local function Near(ax, ay, bx, by)
@@ -97,20 +101,23 @@ local function SegDist2(px, py, ax, ay, bx, by)
 	return Dist2(px, py, qx, qy)
 end
 
-local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs)
+local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs, cone)
 	local nSlots = GAMEMODE.CycleGridSlots
 	local nodes = {}
 	local childCount = {}
+	local spine = {}
 	local lean = (rnd() < 0.5) and 1 or -1
 	local center = math.atan2(arm.outY, arm.outX)
-	local halfDeg = HALF_DEG
+	local pad = 0
+	local sep = MIN_SEP
+	local spineN = (rnd() < 0.5) and 5 or 6
 
 	local function tooClose(x, y, skip)
 		if Dist2(x, y, 0, 0) < CORE_R * CORE_R then
 			return true
 		end
 		for _, n in ipairs(allNodes) do
-			if n ~= skip and Dist2(x, y, n.x, n.y) < MIN_SEP * MIN_SEP then
+			if n ~= skip and Dist2(x, y, n.x, n.y) < sep * sep then
 				return true
 			end
 		end
@@ -123,7 +130,7 @@ local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs)
 				return true
 			end
 		end
-		local lim = 0.32 * 0.32
+		local lim = 0.28 * 0.28
 		for _, n in ipairs(allNodes) do
 			if n ~= skipNode and SegDist2(n.x, n.y, ax, ay, bx, by) < lim then
 				return true
@@ -132,7 +139,7 @@ local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs)
 		return false
 	end
 
-	local function addNode(x, y, parent, ang)
+	local function addNode(x, y, parent, ang, kind)
 		local dx, dy = math.cos(ang), math.sin(ang)
 		local node = {
 			tree = treeIndex,
@@ -142,6 +149,7 @@ local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs)
 			y = y,
 			parent = parent,
 			ang = ang,
+			kind = kind,
 			inx = dx,
 			iny = dy
 		}
@@ -156,45 +164,78 @@ local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs)
 		return node
 	end
 
-	local function score(parent, x, y, ang)
-		local out = ArmDot(x, y, arm)
-		local pout = ArmDot(parent.x, parent.y, arm)
-		local s = rnd() * 3.2
-		if out > pout then
-			s = s + 4.5
-		else
-			s = s - 4
+	local function sample(parent, mode)
+		local ox, oy, rx, ry = ArmAxes(arm)
+		local radial = math.atan2(oy, ox)
+		local pr = math.sqrt(parent.x * parent.x + parent.y * parent.y)
+		local prevLen = pr
+		if parent.parent then
+			prevLen = math.sqrt(Dist2(parent.x, parent.y, parent.parent.x, parent.parent.y))
 		end
-		local turn = math.abs(AngleDiff(ang, parent.ang))
-		if turn < 50 then
-			s = s - 1.5
-		elseif turn > 95 then
-			s = s + 0.8
-		end
-		s = s - math.abs(AngleDiff(math.atan2(y, x), center)) * 0.04
-		return s
-	end
-
-	local function tryFrom(parent, ignoreCap)
-		if not ignoreCap and (childCount[parent] or 0) >= 3 then
-			return nil
-		end
+		local tip = spine[#spine]
 		local cands = {}
-		for k = 1, 22 do
+		for k = 1, 41 do
 			local sign = lean
 			if k % 2 == 0 then
 				sign = -lean
 			end
-			if rnd() < 0.22 then
+			if mode == "twig" then
+				if k % 3 == 0 then
+					sign = lean
+				else
+					sign = -lean
+				end
+			end
+			if rnd() < 0.12 then
 				sign = -sign
 			end
-			local turn = math.rad(MIN_TURN + rnd() * (MAX_TURN - MIN_TURN))
-			local ang = parent.ang + sign * turn
-			local len = 0.92 + rnd() * 0.62
+			local turn, len, band = 0, 0, rnd()
+			if mode == "spine" then
+				turn = 18 + rnd() * 24
+				if band < 0.34 then
+					len = 0.74 + rnd() * 0.16
+				elseif band < 0.70 then
+					len = 0.98 + rnd() * 0.22
+				else
+					len = 1.24 + rnd() * 0.28
+				end
+			else
+				turn = 26 + rnd() * 34
+				if band < 0.40 then
+					len = 0.72 + rnd() * 0.16
+				elseif band < 0.74 then
+					len = 0.92 + rnd() * 0.22
+				else
+					len = 1.18 + rnd() * 0.30
+				end
+			end
+			local ang = radial + sign * math.rad(turn)
+			if math.abs(AngleDiff(ang, parent.ang)) < MIN_TURN then
+				ang = parent.ang + sign * math.rad(MIN_TURN + 7 + rnd() * 14)
+			end
 			local x = parent.x + math.cos(ang) * len
 			local y = parent.y + math.sin(ang) * len
-			if InSector(x, y, arm, halfDeg) and not tooClose(x, y, parent) and not edgeBlocked(parent.x, parent.y, x, y, parent) then
-				cands[#cands + 1] = { x = x, y = y, ang = ang, s = score(parent, x, y, ang) }
+			local r = math.sqrt(x * x + y * y)
+			local ok = true
+			if mode == "spine" and r < pr + 0.12 then
+				ok = false
+			end
+			if ok and InBush(x, y, arm, pad, cone) and not tooClose(x, y, parent) and not edgeBlocked(parent.x, parent.y, x, y, parent) then
+				local par = x * ox + y * oy
+				local perp = math.abs(x * rx + y * ry)
+				local s = rnd() * 1.7 + math.abs(len - prevLen) * 1.8
+				if mode == "spine" then
+					s = s - perp * 0.8
+					if r > pr then
+						s = s + 1.1
+					end
+				else
+					s = s + perp * 1.6 + (3.1 - math.abs(par - 2.8)) * 0.5
+					if parent == tip then
+						s = s - 2.2
+					end
+				end
+				cands[#cands + 1] = { x = x, y = y, ang = ang, s = s }
 			end
 		end
 		if #cands == 0 then
@@ -204,52 +245,83 @@ local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs)
 			return a.s > b.s
 		end)
 		local pick = cands[1]
-		if #cands >= 2 and rnd() < 0.6 then
-			pick = cands[1 + math.floor(rnd() * math.min(4, #cands))]
+		if #cands >= 2 and rnd() < 0.38 then
+			pick = cands[1 + math.floor(rnd() * math.min(3, #cands))]
 		end
-		return addNode(pick.x, pick.y, parent, pick.ang)
+		return pick
 	end
 
-	local function pickParent()
-		local roll = rnd()
-		if roll < 0.38 then
-			return nodes[#nodes]
+	local function growFrom(parent, mode)
+		local pick = sample(parent, mode)
+		if not pick then
+			return nil
 		end
-		if roll < 0.76 then
-			return nodes[1 + math.floor(rnd() * #nodes)]
-		end
-		local best, bestN
-		for _, n in ipairs(nodes) do
-			local c = childCount[n] or 0
-			if c < 3 and (not bestN or c < bestN) then
-				best, bestN = n, c
+		local n = addNode(pick.x, pick.y, parent, pick.ang, mode)
+		if mode == "spine" then
+			spine[#spine + 1] = n
+			if rnd() < 0.82 then
+				lean = -lean
 			end
 		end
-		return best or nodes[#nodes]
+		return n
 	end
 
 	local grower = { nodes = nodes, treeIndex = treeIndex, arm = arm }
 
 	function grower.PlaceGate()
-		local jitter = (rnd() - 0.5) * 0.16
+		local jitter = (rnd() - 0.5) * 0.12
 		local ang = center + jitter
-		local rad = 1.12 + rnd() * 0.22
+		local rad = 0.98 + rnd() * 0.40
 		local x, y = math.cos(ang) * rad, math.sin(ang) * rad
 		if tooClose(x, y, nil) then
-			x, y = math.cos(center) * 1.2, math.sin(center) * 1.2
+			ang = center
+			rad = 1.18
+			x, y = math.cos(ang) * rad, math.sin(ang) * rad
 		end
-		addNode(x, y, nil, ang)
+		local n = addNode(x, y, nil, ang, "gate")
+		spine[#spine + 1] = n
 	end
 
-	function grower.Step(ignoreCap)
+	function grower.StepSpine()
+		if #nodes >= nSlots or #spine >= spineN then
+			return false
+		end
+		if growFrom(spine[#spine], "spine") then
+			return true
+		end
+		for i = #spine, 1, -1 do
+			if growFrom(spine[i], "spine") then
+				return true
+			end
+		end
+		return false
+	end
+
+	function grower.StepTwig()
 		if #nodes >= nSlots then
 			return false
 		end
-		if tryFrom(pickParent(), ignoreCap) then
-			return true
+		local ranked = {}
+		local tip = spine[#spine]
+		for _, n in ipairs(nodes) do
+			local cc = childCount[n] or 0
+			local cap = (n.kind == "twig") and 1 or 2
+			if cc < cap then
+				local s = rnd() * 2.2 - cc * 3.5
+				if n == tip then
+					s = s - 2.8
+				end
+				if n.kind == "gate" then
+					s = s - 0.8
+				end
+				ranked[#ranked + 1] = { s = s, n = n }
+			end
 		end
-		for i = #nodes, 1, -1 do
-			if tryFrom(nodes[i], ignoreCap) then
+		table.sort(ranked, function(a, b)
+			return a.s > b.s
+		end)
+		for _, row in ipairs(ranked) do
+			if growFrom(row.n, "twig") then
 				return true
 			end
 		end
@@ -257,7 +329,8 @@ local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs)
 	end
 
 	function grower.Widen()
-		halfDeg = math.min(40, halfDeg + 5)
+		pad = math.min(0.55, pad + 0.12)
+		sep = math.max(0.60, sep - 0.03)
 	end
 
 	return grower
@@ -273,14 +346,17 @@ function GM:GetCycleGridLayout()
 	local allNodes = {}
 	local segs = {}
 	local growers = {}
+	local nTrees = #self.CycleGridTrees
+	local arms = MakeArms(nTrees)
+	local cone = math.tan(math.pi / nTrees * 0.85)
 
 	for i, tree in ipairs(self.CycleGridTrees) do
-		local rnd = SeedRand(41117 + i * 13063)
-		growers[i] = NewGrower(i, tree, ARMS[i], rnd, allNodes, segs)
+		local rnd = SeedRand(9041 + i * 7919)
+		growers[i] = NewGrower(i, tree, arms[i], rnd, allNodes, segs, cone)
 		growers[i].PlaceGate()
 	end
 
-	local function GrowRound(ignoreCap)
+	local function GrowRound(kind, allowWiden)
 		local order = {}
 		for i, g in ipairs(growers) do
 			order[i] = g
@@ -293,11 +369,22 @@ function GM:GetCycleGridLayout()
 		end)
 		local moved = false
 		for _, g in ipairs(order) do
-			if g.Step(ignoreCap) then
+			local ok = false
+			if kind == "spine" then
+				ok = g.StepSpine()
+			else
+				ok = g.StepTwig() or g.StepSpine()
+			end
+			if ok then
 				moved = true
-			elseif #g.nodes < self.CycleGridSlots then
+			elseif allowWiden and #g.nodes < self.CycleGridSlots then
 				g.Widen()
-				if g.Step(ignoreCap) then
+				if kind == "spine" then
+					ok = g.StepSpine()
+				else
+					ok = g.StepTwig() or g.StepSpine()
+				end
+				if ok then
 					moved = true
 				end
 			end
@@ -307,14 +394,14 @@ function GM:GetCycleGridLayout()
 
 	local moved = true
 	local guard = 0
-	while moved and guard < 80 do
-		moved = GrowRound(false)
+	while moved and guard < 40 do
+		moved = GrowRound("spine", false)
 		guard = guard + 1
 	end
 	moved = true
 	guard = 0
 	while moved and guard < 80 do
-		moved = GrowRound(true)
+		moved = GrowRound("twig", true)
 		guard = guard + 1
 	end
 
@@ -341,12 +428,13 @@ function GM:GetCycleGridLayout()
 				far, farD = n, d
 			end
 		end
+		local ux, uy = ArmAxes(g.arm)
 		labels[#labels + 1] = {
 			tree = i,
 			treeId = self.CycleGridTrees[i].id,
 			nameKey = self.CycleGridTrees[i].nameKey,
-			x = far.x,
-			y = far.y
+			x = far.x + ux * 0.7,
+			y = far.y + uy * 0.7
 		}
 	end
 
@@ -358,4 +446,285 @@ function GM:GetCycleGridLayout()
 		byTree = byTree
 	}
 	return self.CycleGridLayout
+end
+
+-- Catalog. Law: documents/cycle-grid.md
+GM.CycleGridCatalog = {
+	vitality_1 = {
+		tree = "vitality",
+		slot = 0,
+		nameKey = "grid_skill_vitality_1",
+		descKey = "grid_skill_vitality_1_desc",
+		U = 20,
+		Health = 3
+	},
+	agility_1 = {
+		tree = "agility",
+		slot = 0,
+		nameKey = "grid_skill_agility_1",
+		descKey = "grid_skill_agility_1_desc",
+		U = 20,
+		RunSpeed = 0.03
+	},
+	agility_2 = {
+		tree = "agility",
+		slot = 1,
+		nameKey = "grid_skill_agility_2",
+		descKey = "grid_skill_agility_2_desc",
+		U = 20,
+		Jump = 0.02,
+		Climb = 0.02
+	},
+	agility_3 = {
+		tree = "agility",
+		slot = 2,
+		nameKey = "grid_skill_agility_3",
+		descKey = "grid_skill_agility_3_desc",
+		U = 20,
+		RunSpeed = 0.03
+	},
+	ranged_1 = {
+		tree = "ranged",
+		slot = 0,
+		nameKey = "grid_skill_ranged_1",
+		descKey = "grid_skill_ranged_1_desc",
+		U = 20,
+		Reload = 0.03
+	},
+	ranged_2 = {
+		tree = "ranged",
+		slot = 1,
+		nameKey = "grid_skill_ranged_2",
+		descKey = "grid_skill_ranged_2_desc",
+		U = 20,
+		Recoil = -0.03
+	},
+	vitality_2 = {
+		tree = "vitality",
+		slot = 1,
+		nameKey = "grid_skill_vitality_2",
+		descKey = "grid_skill_vitality_2_desc",
+		U = 20,
+		Blood = 2
+	},
+	vitality_3 = {
+		tree = "vitality",
+		slot = 2,
+		nameKey = "grid_skill_vitality_3",
+		descKey = "grid_skill_vitality_3_desc",
+		U = 20,
+		Health = 3
+	}
+}
+
+GM.CycleGridByTreeSlot = {}
+for id, skill in pairs(GM.CycleGridCatalog) do
+	skill.id = id
+	GM.CycleGridByTreeSlot[skill.tree] = GM.CycleGridByTreeSlot[skill.tree] or {}
+	GM.CycleGridByTreeSlot[skill.tree][skill.slot] = skill
+end
+
+function GM:GetCycleGridSkill(treeId, slot)
+	local byTree = treeId and self.CycleGridByTreeSlot[treeId]
+	if not byTree then
+		return nil
+	end
+	return byTree[slot]
+end
+
+function GM:GetCycleGridSkillById(id)
+	return id and self.CycleGridCatalog[id] or nil
+end
+
+function GM:GetCycleGridTreeIndex(treeId)
+	if not treeId then
+		return nil
+	end
+	for i, tree in ipairs(self.CycleGridTrees) do
+		if tree.id == treeId then
+			return i
+		end
+	end
+end
+
+function GM:GetCycleGridNode(treeId, slot)
+	local idx = self:GetCycleGridTreeIndex(treeId)
+	if not idx then
+		return nil
+	end
+	local tnodes = self:GetCycleGridLayout().byTree[idx]
+	if not tnodes then
+		return nil
+	end
+	for _, n in ipairs(tnodes) do
+		if n.slot == slot then
+			return n
+		end
+	end
+end
+
+function GM:InitCycleGrid(pl, wipe)
+	if not IsValid(pl) then
+		return
+	end
+	if wipe or not pl.CycleGridTaken then
+		pl.CycleGridTaken = {}
+	end
+end
+
+function GM:HasCycleGridSkill(pl, id)
+	return IsValid(pl) and id and pl.CycleGridTaken and pl.CycleGridTaken[id] == true
+end
+
+function GM:CycleGridSlotTaken(pl, treeId, slot)
+	local skill = self:GetCycleGridSkill(treeId, slot)
+	if not skill then
+		return false
+	end
+	return self:HasCycleGridSkill(pl, skill.id)
+end
+
+function GM:CycleGridTakenCount(pl)
+	if not IsValid(pl) or not pl.CycleGridTaken then
+		return 0
+	end
+	local n = 0
+	for id in pairs(pl.CycleGridTaken) do
+		if self.CycleGridCatalog[id] then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+function GM:GetCycleGridSPTotal(pl)
+	if not IsValid(pl) then
+		return 0
+	end
+	local level = pl.GetZSLevel and pl:GetZSLevel() or 1
+	local remort = pl.GetZSRemortLevel and pl:GetZSRemortLevel() or 0
+	return math.max(0, level - 1) + remort
+end
+
+function GM:GetCycleGridSPUsed(pl)
+	return self:CycleGridTakenCount(pl)
+end
+
+function GM:GetCycleGridSPRemaining(pl)
+	return math.max(0, self:GetCycleGridSPTotal(pl) - self:GetCycleGridSPUsed(pl))
+end
+
+function GM:HasCycleGridVault(pl)
+	return self:CycleGridTakenCount(pl) > 0
+end
+
+function GM:CycleGridNeighborOk(pl, treeId, slot)
+	if slot == 0 then
+		return true
+	end
+	local node = self:GetCycleGridNode(treeId, slot)
+	if not node or not node.parent then
+		return false
+	end
+	return self:CycleGridSlotTaken(pl, treeId, node.parent.slot)
+end
+
+function GM:CycleGridIsOffered(pl, treeId, slot)
+	if not IsValid(pl) then
+		return false
+	end
+	local skill = self:GetCycleGridSkill(treeId, slot)
+	if not skill then
+		return false
+	end
+	if self:HasCycleGridSkill(pl, skill.id) then
+		return false
+	end
+	return self:CycleGridNeighborOk(pl, treeId, slot)
+end
+
+function GM:CycleGridCanUnlock(pl, treeId, slot)
+	return self:CycleGridIsOffered(pl, treeId, slot) and self:GetCycleGridSPRemaining(pl) >= 1
+end
+
+local GRID_SKILL_META = {
+	tree = true,
+	slot = true,
+	nameKey = true,
+	descKey = true,
+	U = true,
+	id = true
+}
+
+function GM:GetCycleGridStatAdd(pl, field)
+	if not IsValid(pl) or not pl.CycleGridTaken or not field then
+		return 0
+	end
+	local add = 0
+	for id in pairs(pl.CycleGridTaken) do
+		local skill = self.CycleGridCatalog[id]
+		local v = skill and skill[field]
+		if isnumber(v) then
+			add = add + v
+		end
+	end
+	return add
+end
+
+function GM:GetCycleGridHealthAdd(pl)
+	return self:GetCycleGridStatAdd(pl, "Health")
+end
+
+function GM:GetCycleGridBloodAdd(pl)
+	return self:GetCycleGridStatAdd(pl, "Blood")
+end
+
+function GM:GetHumanBloodArmorMax(pl)
+	local base = (self.ZombieEscape and 0) or (self.HumanBloodArmor or 15)
+	if IsValid(pl) and isnumber(pl.MaxBloodArmor) then
+		base = pl.MaxBloodArmor
+	end
+	if CLIENT then
+		base = base + self:GetCycleGridBloodAdd(pl)
+	end
+	return math.max(0, base)
+end
+
+function GM:GetCycleGridStatAdds(pl)
+	local adds = {}
+	if not IsValid(pl) or not pl.CycleGridTaken then
+		return adds
+	end
+	for id in pairs(pl.CycleGridTaken) do
+		local skill = self.CycleGridCatalog[id]
+		if not skill then continue end
+		for k, v in pairs(skill) do
+			if not GRID_SKILL_META[k] and isnumber(v) and v ~= 0 then
+				adds[k] = (adds[k] or 0) + v
+			end
+		end
+	end
+	return adds
+end
+
+function GM:ApplyCycleGridModifiers(pl)
+	if not SERVER or not IsValid(pl) or pl:Team() ~= TEAM_HUMAN then
+		return
+	end
+	local add = self:GetCycleGridHealthAdd(pl)
+	if add ~= 0 then
+		local current = math.max(1, pl:GetMaxHealth())
+		local new = current + add
+		pl:SetMaxHealth(new)
+		pl:SetHealth(math.max(1, math.floor(pl:Health() / current * new + 0.5)))
+	end
+	local blood = self:GetCycleGridBloodAdd(pl)
+	if blood ~= 0 then
+		local current = math.max(1, pl.MaxBloodArmor or self.HumanBloodArmor or 15)
+		local new = current + blood
+		pl.MaxBloodArmor = new
+		pl:SetBloodArmor(math.max(0, math.floor(pl:GetBloodArmor() / current * new + 0.5)))
+	end
+	pl:ResetSpeed()
+	pl:ResetJumpPower()
 end

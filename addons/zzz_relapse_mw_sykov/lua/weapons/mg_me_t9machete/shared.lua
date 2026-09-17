@@ -6,11 +6,11 @@ include("mg_melee_shared.lua")
 include("animations.lua")
 
 if CLIENT then
-	killicon.Add("mg_me_t9machete", "zombiesurvival/killicons/weapon_zs_cwmachete.png", Color(255, 255, 255))
-	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwmachete.png")
+	killicon.Add("mg_me_t9machete", "zombiesurvival/killicons/weapon_zs_cwmachete2.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwmachete2.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwmachete.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwmachete2.png"
 -- WM already has the machete mesh (hull along +Z). No default attachments.
 SWEP.RelapsePreviewBoneMerge = true
 SWEP.RelapsePreviewHullBounds = true
@@ -48,11 +48,11 @@ SWEP.IsMelee = true
 -- Relapse combat stats. Source of truth for melee usefulness and the shop UI.
 -- Damage is per swing. Delay is time between swings. Swing is windup before the trace.
 -- Stopping is knockback. Range is hull trace hu. Weight is kilograms (18" machete ~0.65 kg).
--- Longer slash than the kit knife: six hits on 225, not CoD 90.
+-- Five hits on 225, not CoD 90. Longer slash than the T2 knife: behind the doorway, not seven cuts.
 SWEP.Relapse = {
 	Melee = true,
 	Type = "slash",
-	Damage = 38,
+	Damage = 45,
 	Delay = 0.70,
 	Swing = 0.28,
 	Stopping = 75,

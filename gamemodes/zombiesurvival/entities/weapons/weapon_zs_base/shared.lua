@@ -307,7 +307,11 @@ function SWEP:GetReloadSpeedMultiplier()
 		extramulti = GAMEMODE.WeaponQualities[self.QualityTier][2]
 	end
 
-	return self:GetOwner():GetTotalAdditiveModifier("ReloadSpeedMultiplier", reloadspecmulti) * (owner:GetStatus("frost") and 0.7 or 1) * extramulti
+	local total = owner:GetTotalAdditiveModifier("ReloadSpeedMultiplier", reloadspecmulti)
+	if GAMEMODE and GAMEMODE.GetUpgradePercent then
+		total = total + GAMEMODE:GetUpgradePercent(owner, "Reload")
+	end
+	return total * (owner:GetStatus("frost") and 0.7 or 1) * extramulti
 end
 
 function SWEP:ProcessReloadEndTime()
@@ -330,7 +334,11 @@ function SWEP:ShootBullets(dmg, numbul, cone)
 	owner:DoAttackEvent()
 	if self.Recoil > 0 then
 		local r = math.Rand(0.8, 1)
-		owner:ViewPunch(Angle(r * -self.Recoil, 0, (1 - r) * (math.random(2) == 1 and -1 or 1) * self.Recoil))
+		local kick = self.Recoil
+		if GAMEMODE and GAMEMODE.GetUpgradePercentMul then
+			kick = kick * GAMEMODE:GetUpgradePercentMul(owner, "Recoil")
+		end
+		owner:ViewPunch(Angle(r * -kick, 0, (1 - r) * (math.random(2) == 1 and -1 or 1) * kick))
 	end
 
 	if self.PointsMultiplier then

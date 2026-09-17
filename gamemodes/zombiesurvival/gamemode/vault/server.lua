@@ -17,6 +17,10 @@ function GM:ShouldSaveVault(pl)
 		return true
 	end
 
+	if self.HasCycleGridVault and self:HasCycleGridVault(pl) then
+		return true
+	end
+
 	return false
 end
 
@@ -46,6 +50,9 @@ function GM:InitializeVault(pl)
 	if self.InitRelapseScars then
 		self:InitRelapseScars(pl, true)
 	end
+	if self.InitCycleGrid then
+		self:InitCycleGrid(pl, true)
+	end
 end
 
 function GM:LoadVault(pl)
@@ -66,20 +73,8 @@ function GM:LoadVault(pl)
 				if data.XP then
 					pl:SetZSXP(data.XP)
 				end
-				if data.UnlockedSkills then
-					pl:SetUnlockedSkills(util.DecompressBitTable(data.UnlockedSkills), true)
-				end
-				if data.DesiredActiveSkills then
-					pl:SetDesiredActiveSkills(util.DecompressBitTable(data.DesiredActiveSkills), true)
-				end
-				if data.NextSkillReset then
-					pl.NextSkillReset = data.NextSkillReset
-				end
-				if not data.Version or data.Version < self.SkillTreeVersion then
-					pl:SkillsReset()
-					pl.SkillsRefunded = true
-				end
-
+				pl:SetUnlockedSkills({}, true)
+				pl:SetDesiredActiveSkills({}, true)
 				pl.SkillVersion = self.SkillTreeVersion
 			end
 		end
@@ -89,6 +84,12 @@ function GM:LoadVault(pl)
 		self:ReadRelapseScarVault(pl, data)
 	elseif self.InitRelapseScars then
 		self:InitRelapseScars(pl)
+	end
+
+	if self.ReadCycleGridVault and data then
+		self:ReadCycleGridVault(pl, data)
+	elseif self.InitCycleGrid then
+		self:InitCycleGrid(pl)
 	end
 
 	pl.PointsVault = pl.PointsVault or 0
@@ -132,8 +133,8 @@ function GM:SaveVault(pl)
 		Points = math.floor(pl.PointsVault),
 		XP = pl:GetZSXP(),
 		RemortLevel = pl:GetZSRemortLevel(),
-		DesiredActiveSkills = util.CompressBitTable(pl:GetDesiredActiveSkills()),
-		UnlockedSkills = util.CompressBitTable(pl:GetUnlockedSkills()),
+		DesiredActiveSkills = util.CompressBitTable({}),
+		UnlockedSkills = util.CompressBitTable({}),
 		Version = pl.SkillVersion or self.SkillTreeVersion
 	}
 
@@ -147,6 +148,10 @@ function GM:SaveVault(pl)
 
 	if self.WriteRelapseScarVault then
 		self:WriteRelapseScarVault(pl, tosave)
+	end
+
+	if self.WriteCycleGridVault then
+		self:WriteCycleGridVault(pl, tosave)
 	end
 
 	local filename = self:GetVaultFile(pl)

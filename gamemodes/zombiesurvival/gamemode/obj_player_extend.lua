@@ -356,12 +356,14 @@ function meta:GetExtraWeight()
 	return self:GetExtraWeightBase() + self:GetWeaponCarryWeight()
 end
 
-function meta:GetCarrySpeedMul()
+-- loadScale 1 = sprint. Walk passes HumanCarryWalkLoadMul so step barely cares.
+function meta:GetCarrySpeedMul(loadScale)
 	local extra = self:GetExtraWeight()
 	if extra <= 0 then return 1 end
 
 	local body = GAMEMODE.HumanBodyMass or 75
-	local load = extra * math.max(0, self.WeaponWeightSlowMul or 1)
+	local load = extra * math.max(0, self.WeaponWeightSlowMul or 1) * math.max(0, loadScale or 1)
+	if load <= 0 then return 1 end
 
 	return body / (body + load)
 end
@@ -579,8 +581,16 @@ function meta:SetSpeed(speed)
 	local runspeed = speed
 
 	if P_Team(self) == TEAM_HUMAN then
+		local walkLoad = GAMEMODE.HumanCarryWalkLoadMul
+		if walkLoad == nil then walkLoad = 0.2 end
+		local walkMul = self:GetCarrySpeedMul(walkLoad)
+		local runMul = self:GetCarrySpeedMul(1)
 		local mul = GAMEMODE.ZombieEscape and (GAMEMODE.ZombieEscapeSprintMultiplier or 1.2) or (GAMEMODE.HumanSprintMultiplier or (240 / 95))
-		runspeed = speed * mul
+		runspeed = speed * mul * runMul
+		speed = speed * walkMul
+		if GAMEMODE.GetUpgradePercentMul then
+			runspeed = runspeed * GAMEMODE:GetUpgradePercentMul(self, "RunSpeed")
+		end
 
 		if self:GetBloodArmor() > 0 and self:IsSkillActive(SKILL_CARDIOTONIC) then
 			runspeed = runspeed + 40
@@ -644,10 +654,6 @@ function meta:ResetSpeed(noset, health)
 		speed = speed + 6
 	end
 
-	if P_Team(self) == TEAM_HUMAN then
-		speed = speed * self:GetCarrySpeedMul()
-	end
-
 	speed = math.max(1, speed)
 
 	if 32 < speed and not GAMEMODE.ZombieEscape then
@@ -676,7 +682,11 @@ function meta:ResetJumpPower(noset)
 			power = classtab.JumpPower
 		end
 	else
-		power = power * (self.JumpPowerMul or 1)
+		if GAMEMODE.GetJumpPercentMul then
+			power = power * GAMEMODE:GetJumpPercentMul(self)
+		else
+			power = power * (self.JumpPowerMul or 1)
+		end
 
 		if self:GetBarricadeGhosting() then
 			power = power * 0.25

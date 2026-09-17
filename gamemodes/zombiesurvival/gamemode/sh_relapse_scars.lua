@@ -9,6 +9,7 @@ GM.RelapseScarCatalog = {
 		Feed = "last_hit",
 		K1 = 12,
 		KInf = 3,
+		Stat = { Kind = "k", Dec = 1 },
 		Icon = "zombiesurvival/killicons/weapon_zs_ak47_side.png"
 	},
 	headhunter = {
@@ -16,6 +17,9 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 20,
 		Feed = "last_hit",
+		K1 = 8,
+		KInf = 2,
+		Stat = { Kind = "k", Dec = 1 },
 		Icon = "zombiesurvival/killicons/zs_headshot"
 	},
 	carver = {
@@ -23,6 +27,9 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 25,
 		Feed = "last_hit",
+		K1 = 6,
+		KInf = 2,
+		Stat = { Kind = "k", Dec = 1 },
 		Icon = "zombiesurvival/killicons/weapon_zs_cwknife2.png"
 	},
 	surgeon = {
@@ -30,6 +37,7 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 750,
 		Feed = "heal",
+		Stat = { Kind = "p", Inf = 6, Dec = 1 },
 		Icon = "zombiesurvival/killicons/weapon_zs_medkit"
 	},
 	orderly = {
@@ -37,6 +45,7 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 6,
 		Feed = "heal",
+		Stat = { Kind = "on" },
 		Icon = "zombiesurvival/killicons/weapon_zs_medicgun2"
 	},
 	foreman = {
@@ -44,6 +53,9 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 10000,
 		Feed = "cade",
+		K1 = 8,
+		KInf = 2,
+		Stat = { Kind = "kmul", Mul = 200, Dec = 0 },
 		Icon = "zombiesurvival/killicons/weapon_zs_hammer2"
 	},
 	landlord = {
@@ -51,6 +63,9 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 10000,
 		Feed = "cade",
+		K1 = 6,
+		KInf = 2,
+		Stat = { Kind = "kmul", Mul = 400, Dec = 0 },
 		Icon = "zombiesurvival/killicons/weapon_zs_plank"
 	},
 	spark = {
@@ -58,6 +73,7 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 15000,
 		Feed = "deploy",
+		Stat = { Kind = "p", Inf = 2, Dec = 1 },
 		Icon = "zombiesurvival/killicons/weapon_zs_zapper"
 	},
 	quartermaster = {
@@ -65,6 +81,7 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 15,
 		Feed = "deploy",
+		Stat = { Kind = "p", Inf = 20, Dec = 1 },
 		Icon = "zombiesurvival/killicons/weapon_zs_resupplybox"
 	},
 	nailer = {
@@ -72,6 +89,7 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 20,
 		Feed = "cade",
+		Stat = { Kind = "p", Inf = 20, Dec = 1 },
 		Icon = "zombiesurvival/killicons/nail_ammo_icon_2"
 	},
 	rot = {
@@ -79,6 +97,7 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 12000,
 		Feed = "undead",
+		Stat = { Kind = "p", Inf = 25, Dec = 1 },
 		Icon = "zombiesurvival/killicons/zombie"
 	},
 	zero = {
@@ -86,6 +105,7 @@ GM.RelapseScarCatalog = {
 		InPool = false,
 		Pace = 2,
 		Feed = "undead",
+		Stat = { Kind = "p", Inf = 4, Dec = 1 },
 		Icon = "zombiesurvival/killicons/fresh_dead"
 	}
 }
@@ -141,6 +161,58 @@ function GM:RelapseScarK(n, k1, kInf)
 	k1 = k1 or 12
 	kInf = kInf or 3
 	return kInf + (k1 - kInf) / (1 + 0.18 * (n - 1))
+end
+
+function GM:RelapseScarP(n, pInf, p0)
+	n = math.floor(tonumber(n) or 0)
+	if n < 1 then
+		return 0
+	end
+	return (p0 or 0) + (pInf or 0) * n / (n + 8)
+end
+
+function GM:RelapseScarStatValue(id, n)
+	local scar = self:GetRelapseScar(id)
+	if not scar then
+		return 0
+	end
+	n = math.floor(tonumber(n) or 0)
+	if n < 1 then
+		return 0
+	end
+	local st = scar.Stat or {}
+	local kind = st.Kind
+	if kind == "k" then
+		return self:RelapseScarK(n, scar.K1, scar.KInf)
+	end
+	if kind == "kmul" then
+		return self:RelapseScarK(n, scar.K1, scar.KInf) * (st.Mul or 1)
+	end
+	if kind == "p" then
+		return self:RelapseScarP(n, st.Inf, st.Floor)
+	end
+	if kind == "on" then
+		return 1
+	end
+	return 0
+end
+
+function GM:RelapseScarStatText(id, n)
+	local scar = self:GetRelapseScar(id)
+	local st = scar and scar.Stat or {}
+	local v = self:RelapseScarStatValue(id, n)
+	local dec = st.Dec
+	if dec == nil then
+		if st.Kind == "k" or st.Kind == "kmul" or st.Kind == "p" then
+			dec = 1
+		else
+			dec = 0
+		end
+	end
+	if dec <= 0 then
+		return tostring(math.floor(v + 0.5))
+	end
+	return string.format("%." .. tostring(dec) .. "f", v)
 end
 
 function GM:RelapseScarPool()

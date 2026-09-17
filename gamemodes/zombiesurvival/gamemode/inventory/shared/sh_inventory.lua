@@ -91,6 +91,11 @@ GM.Assemblies["trinket_projguide"]								= {"comp_cpuparts",			"trinket_targeti
 GM.Assemblies["trinket_projwei"]								= {"comp_busthead",			"trinket_projguide"}
 GM.Assemblies["trinket_controlplat"]							= {"comp_cpuparts",			"trinket_mainsuite"}
 
+-- Relapse does not sell the old ZS crafts. Keep item data so leftover inventory
+-- does not error; recipes themselves are retired.
+GM.Assemblies = {}
+GM.Breakdowns = {}
+
 GM:AddInventoryItemData("comp_modbarrel",		"Modular Barrel",			"A modular barrel suited for pairing up with another gun barrel.",								"models/props_c17/trappropeller_lever.mdl")
 GM:AddInventoryItemData("comp_burstmech",		"Burst Fire Mechanism",		"A mechanism that could be used to make a gun burst fire.",										"models/props_c17/trappropeller_lever.mdl")
 GM:AddInventoryItemData("comp_basicecore",		"Basic Energy Core",		"A small energy core. Needs a weapon with a cylinder mechanism to contain the energy output.",	"models/Items/combine_rifle_cartridge01.mdl")

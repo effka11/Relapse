@@ -1,0 +1,24 @@
+---
+description: Relapse percent upgrades stack additively, never multiply
+alwaysApply: true
+---
+
+# Relapse проценты — сумма, не произведение
+
+`+3%` и `+5%` к одному стату = **+8%**, не `1.03 × 1.05`. Сетка, шрамы, будущие баффы — одна сумма.
+
+Код: `GetUpgradePercent` / `GetUpgradePercentMul` / `StackPercentMul` в `sh_relapse_percent.lua`. Каталог хранит долю: `RunSpeed = 0.03`.
+
+```lua
+-- ❌ второй множитель, +3% и +5% дают +8.15%
+run = run * 1.03 * 1.05
+pl.RunSpeedMul = (pl.RunSpeedMul or 1) * 1.03
+
+-- ✅ доли в одну кучу, потом один раз на базу
+run = run * GAMEMODE:GetUpgradePercentMul(pl, "RunSpeed")
+-- 1 + 0.03 + 0.05 = 1.08
+```
+
+Новый `%` — поле каталога + вклад в `GetUpgradePercent`, не свой `× (1+p)` сбоку. Плоские штуки (`Health = 2`) не через этот хелпер.
+
+Статусы (мороз, ноги, ghost) — не апгрейды, их множители не трогать. Вес ствола сидит в беге (`GetCarrySpeedMul(1)`), шаг почти не трогает (`HumanCarryWalkLoadMul`). `%` бега — на итоговый `RunSpeed`.

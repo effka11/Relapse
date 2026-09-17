@@ -72,7 +72,13 @@ function PANEL:Paint(w, h)
 
 	if self._ShowArmor then
 		local armor = lp:GetBloodArmor()
-		local maxarmor = math.max(lp.MaxBloodArmor or 10, 1)
+		local maxarmor = 15
+		if GAMEMODE.GetHumanBloodArmorMax then
+			maxarmor = GAMEMODE:GetHumanBloodArmorMax(lp)
+		elseif isnumber(lp.MaxBloodArmor) then
+			maxarmor = lp.MaxBloodArmor
+		end
+		maxarmor = math.max(maxarmor, 1)
 		self.LerpArmor = Lerp(FrameTime() * 10, self.LerpArmor or math.Clamp(armor / maxarmor, 0, 1), math.Clamp(armor / maxarmor, 0, 1))
 
 		local ax = pad

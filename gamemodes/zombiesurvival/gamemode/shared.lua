@@ -83,8 +83,10 @@ include("sh_usefulness.lua")
 include("sh_usefulness_model.lua")
 include("sh_relapse_tabclass.lua")
 include("sh_relapse_inventory.lua")
+include("sh_relapse_loadout.lua")
 include("sh_relapse_scars.lua")
 include("sh_cycle_grid.lua")
+include("sh_relapse_percent.lua")
 include("sh_relapse_wmpose.lua")
 
 include("noxapi/noxapi.lua")
@@ -313,6 +315,12 @@ function GM:ValidMenuLockOnTarget(pl, ent)
 end
 
 function GM:GetHandsModel(pl)
+	if self.GetRelapseHandsInfo then
+		local info = self:GetRelapseHandsInfo(pl)
+		if info then
+			return info
+		end
+	end
 	return player_manager.TranslatePlayerHands(player_manager.TranslateToPlayerModelName(pl:GetModel()))
 end
 

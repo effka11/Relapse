@@ -96,6 +96,43 @@ function RelapseUI.ViewerW()
 	return RelapseUI.sPx(300)
 end
 
+-- Inventory presentation column. Grid15(24) minus 5px width and 5px side inset.
+function RelapseUI.InvViewerW()
+	return RelapseUI.Grid15(24) - RelapseUI.Grid5()
+end
+
+function RelapseUI.InvViewerInnerW()
+	local side = RelapseUI.Grid15(2) - RelapseUI.Grid5()
+	return RelapseUI.InvViewerW() - side * 2
+end
+
+-- Relapse20 hang sPx(5). Inventory chrome uses RelapseInvTitleGap (45px visual).
+function RelapseUI.ViewerTitleTop(viewer)
+	local hang = RelapseUI.sPx(5)
+	local visual = RelapseUI.sPx(15)
+	if IsValid(viewer) and viewer.RelapseInvTitleGap then
+		visual = viewer.RelapseInvTitleGap
+	end
+	return visual - hang
+end
+
+-- Full weapon presentation: title, ammo, model, desc, six stat rows, pad.
+function RelapseUI.ViewerH()
+	local titleTop = RelapseUI.sPx(45) - RelapseUI.sPx(5)
+	local titleH = RelapseUI.sPx(20)
+	local ammoY = titleTop + titleH + RelapseUI.sPx(15)
+	local visualTop = ammoY + RelapseUI.ViewerModelH() + RelapseUI.Grid15()
+	local firstY = visualTop + RelapseUI.ViewerDescH() + RelapseUI.Grid15(2) + RelapseUI.Grid5()
+	local barH = RelapseUI.Grid5(2)
+	local barGap = RelapseUI.Grid15(2)
+	local n = RelapseUI.ViewerStatMax()
+	local statsBottom = firstY
+	if n > 0 then
+		statsBottom = firstY + n * barH + (n - 1) * barGap
+	end
+	return statsBottom + RelapseUI.M().pad
+end
+
 -- Universal shop preview: wide enough for rifles, short enough to sit beside ammo.
 function RelapseUI.ViewerModelW()
 	return RelapseUI.Grid15(11)
@@ -157,6 +194,22 @@ function RelapseUI.CardIconPath(tab)
 	return nil
 end
 
+function RelapseUI.AmmoIconPath(ammoId)
+	if not isstring(ammoId) or ammoId == "" then return nil end
+	local id = string.lower(ammoId)
+	local gm = GAMEMODE
+	local name = gm and gm.AmmoIcons and gm.AmmoIcons[id]
+	if not name and gm and gm.RelapseAmmo and gm.RelapseAmmo[id] then
+		name = gm.RelapseAmmo[id].Icon
+	end
+	if not name then return nil end
+	local ki = killicon.Get(name)
+	if istable(ki) and #ki == 2 and isstring(ki[1]) then
+		return ki[1]
+	end
+	return nil
+end
+
 function RelapseUI.FitIcon(img, maximgx, maximgy)
 	if not IsValid(img) then return end
 	if img.SizeToContents then
@@ -182,6 +235,84 @@ function RelapseUI.MakeSilhouetteIcon(parent, path)
 	img:SetImageColor(RelapseUI.Col.Text)
 	img:SizeToContents()
 	return img
+end
+
+-- Inventory / HUD 1-9: shop silhouettes face right. Mirror, then tilt muzzle up-left.
+RelapseUI.InvSlotIconZoom = {
+	mg_uzulu = 1.12,
+	mg_m1911 = 1.12,
+	mg_sksierra = 1.40,
+	mg_romeo870 = 1.30,
+	weapon_zs_hammer = 0.8,
+	weapon_zs_wrench = 0.90,
+	mg_357 = 1.15,
+	mg_makarov = 1.4,
+	mg_me_t9cane = 1.4,
+}
+-- Extra-grid px, +x is right, +y is down.
+RelapseUI.InvSlotIconShift = {
+	mg_uzulu = { -4, 1 },
+	mg_m1911 = { -4, 1 },
+	mg_sksierra = { -3, 0 },
+	mg_romeo870 = { -3, 0 },
+	mg_cinderblock = { -3, 0 },
+	weapon_zs_wrench = { -1, 0 },
+	mg_357 = { -2, 2 },
+	mg_makarov = { -4, 1 },
+	mg_me_t9cane = { -1, 2 },
+}
+
+function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
+	if not mat or mat:IsError() then return end
+	col = col or RelapseUI.Col.Text
+	local pad = RelapseUI.Grid5()
+	local tw, th = mat:Width(), mat:Height()
+	if tw < 1 then tw = 1 end
+	if th < 1 then th = 1 end
+	local maxs = math.max(1, w - pad * 2)
+	local tilt = 45
+	local ac, as = math.abs(math.cos(math.rad(tilt))), math.abs(math.sin(math.rad(tilt)))
+	local scale = math.min(maxs / math.max(1, tw * ac + th * as), maxs / math.max(1, th * ac + tw * as))
+	scale = scale * ((class and RelapseUI.InvSlotIconZoom[class]) or 1)
+	local iw, ih = tw * scale, th * scale
+	local shift = (class and RelapseUI.InvSlotIconShift[class]) or 0
+	local sx, sy = 0, 0
+	if istable(shift) then
+		sx, sy = shift[1] or 0, shift[2] or 0
+	else
+		sx = shift
+	end
+	local cx, cy = w * 0.5 + RelapseUI.sPx(sx), h * 0.5 + RelapseUI.sPx(sy)
+	local hw, hh = iw * 0.5, ih * 0.5
+	local ang = math.rad(tilt)
+	local c, s = math.cos(ang), math.sin(ang)
+	local function xf(lx, ly)
+		return cx + lx * c - ly * s, cy + lx * s + ly * c
+	end
+	local x1, y1 = xf(-hw, -hh)
+	local x2, y2 = xf(hw, -hh)
+	local x3, y3 = xf(hw, hh)
+	local x4, y4 = xf(-hw, hh)
+	surface.SetMaterial(mat)
+	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
+	local v1 = { x = x1, y = y1, u = 1, v = 0 }
+	local v2 = { x = x2, y = y2, u = 0, v = 0 }
+	local v3 = { x = x3, y = y3, u = 0, v = 1 }
+	local v4 = { x = x4, y = y4, u = 1, v = 1 }
+	surface.DrawPoly({ v1, v2, v3 })
+	surface.DrawPoly({ v1, v3, v4 })
+end
+
+-- 1-9: glyph 10px from the right and top of the square (Manrope cell is larger than the ink).
+function RelapseUI.DrawInvSlotIndex(w, h, n, col)
+	col = col or RelapseUI.Col.Muted
+	local text = tostring(n)
+	local pad = RelapseUI.sPx(10)
+	surface.SetFont("Relapse15")
+	local _, fontH = surface.GetTextSize(text)
+	local _, rsb = RelapseUI.ManropeDigitEdges(text, fontH, false)
+	-- Relapse15 cell sits ~5px above caps.
+	draw.SimpleText(text, "Relapse15", w - pad + rsb, pad - RelapseUI.sPx(5), col, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
 end
 
 function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
@@ -455,6 +586,18 @@ function RelapseUI.LayoutViewerAmmo(viewer)
 		end
 	end
 	RelapseUI.LayoutViewerModel(viewer)
+end
+
+function RelapseUI.SetViewerAmmoIcon(viewer, ammoId)
+	if not IsValid(viewer) or not IsValid(viewer.m_AmmoIcon) then return end
+	local path = RelapseUI.AmmoIconPath(ammoId)
+	if path then
+		viewer.m_AmmoIcon:SetImage(path)
+		viewer.m_AmmoIcon:SetImageColor(RelapseUI.Col.Text)
+		viewer.m_AmmoIcon:SetVisible(true)
+	else
+		viewer.m_AmmoIcon:SetVisible(false)
+	end
 end
 
 function RelapseUI.ShopPreviewParts(sweptable)
@@ -2492,7 +2635,7 @@ end
 local colWorldText = Color(0, 0, 0, 255)
 local matWorldSigil
 
--- Through-wall sigil: grayscale photo of the post, Fog/Wine multiply, 120° shadow.
+-- Through-wall sigil: grayscale photo of the post, Fog/Gray/Wine multiply, 120° shadow.
 function RelapseUI.PaintWorldSigil(letter, frac, col, alpha)
 	RelapseUI.CreateWorldFonts()
 	if not matWorldSigil then
@@ -2803,6 +2946,14 @@ function RelapseUI.UpdateWorthLabel(lab, remaining, starting)
 	lab:InvalidateLayout()
 end
 
+function RelapseUI.SyncPointsChip(lab)
+	if not IsValid(lab) or not IsValid(MySelf) then return end
+	local points = MySelf:GetPoints() or 0
+	if lab.m_LastPoints == points then return end
+	lab.m_LastPoints = points
+	RelapseUI.UpdateWorthLabel(lab, points)
+end
+
 function RelapseUI.FrameSize(maxCols, maxRows)
 	local m = RelapseUI.M()
 	local cols = math.min(math.floor((ScrW() - 2 * m.pad) / m.step), maxCols)
@@ -2836,6 +2987,47 @@ function RelapseUI.ShopWindowSize()
 		tabGap = m.tabGap,
 		innerW = wid - 2 * m.pad,
 		sheetH = hei - m.header - m.footer
+	}
+end
+
+function RelapseUI.InvWindowSize()
+	local m = RelapseUI.M()
+	local cell = RelapseUI.Grid15(4)
+	local gap = RelapseUI.Grid15()
+	local pad = m.pad
+	local bagCols, bagRows = 9, 3
+	local hotN = 9
+	local bagW = bagCols * cell + (bagCols - 1) * gap
+	local bagH = bagRows * cell + (bagRows - 1) * gap
+	local hotW = hotN * cell + (hotN - 1) * gap
+	-- Relapse30 cell hangs sPx(6) under ink. 45px from ink to the card top.
+	local titleY = RelapseUI.Grid15(2)
+	surface.SetFont("Relapse30")
+	local _, titleCell = surface.GetTextSize("Ay")
+	if not titleCell or titleCell < 1 then
+		titleCell = RelapseUI.sPx(30)
+	end
+	local header = titleY + titleCell - RelapseUI.sPx(6) + RelapseUI.sPx(45)
+	local split = RelapseUI.Grid15(2)
+	return {
+		m = m,
+		cell = cell,
+		gap = gap,
+		pad = pad,
+		titleY = titleY,
+		header = header,
+		split = split,
+		bagCols = bagCols,
+		bagRows = bagRows,
+		bagN = 27,
+		hotN = hotN,
+		bagW = bagW,
+		bagH = bagH,
+		hotW = hotW,
+		wid = pad + hotW + pad,
+		hei = header + bagH + split + cell + pad,
+		viewerGap = RelapseUI.sPx(30),
+		actionGap = RelapseUI.sPx(30)
 	}
 end
 
@@ -2887,18 +3079,28 @@ function RelapseUI.PlaceShopTitle(title, L)
 	RelapseUI.PlaceShopSwitch(title:GetParent())
 end
 
+function RelapseUI.ShopSwitchPair(kind)
+	if kind == "worth" or kind == "points" then
+		return { "worth", "points" }
+	end
+	if kind == "inventory" or kind == "invshop" then
+		return { "inventory", "invshop" }
+	end
+end
+
+local function HideShopSibling(kind, name, panel)
+	if kind == name or not IsValid(panel) or not panel:IsVisible() then
+		return
+	end
+	RelapseUI.MarkGlassSwap()
+	RelapseUI.SetMenuVisible(panel, false)
+end
+
 function RelapseUI.HideOtherShops(kind)
-	if kind ~= "worth" and pWorth and pWorth:IsValid() and pWorth:IsVisible() then
-		RelapseUI.MarkGlassSwap()
-		RelapseUI.SetMenuVisible(pWorth, false)
-	end
-	if kind ~= "points" then
-		local ars = GAMEMODE and GAMEMODE.ArsenalInterface
-		if IsValid(ars) and ars:IsVisible() then
-			RelapseUI.MarkGlassSwap()
-			RelapseUI.SetMenuVisible(ars, false)
-		end
-	end
+	HideShopSibling(kind, "worth", pWorth)
+	HideShopSibling(kind, "points", GAMEMODE and GAMEMODE.ArsenalInterface)
+	HideShopSibling(kind, "inventory", GAMEMODE and GAMEMODE.RelapseInventoryInterface)
+	HideShopSibling(kind, "invshop", GAMEMODE and GAMEMODE.RelapseInvShopInterface)
 end
 
 function RelapseUI.ShowShopFrame(frame)
@@ -2925,6 +3127,18 @@ function RelapseUI.OpenShop(kind)
 	if kind == "points" then
 		if GAMEMODE and GAMEMODE.OpenArsenalMenu then
 			GAMEMODE:OpenArsenalMenu()
+		end
+		return
+	end
+	if kind == "inventory" then
+		if GAMEMODE and GAMEMODE.OpenRelapseInventory then
+			GAMEMODE:OpenRelapseInventory()
+		end
+		return
+	end
+	if kind == "invshop" then
+		if GAMEMODE and GAMEMODE.OpenRelapseInvShop then
+			GAMEMODE:OpenRelapseInvShop()
 		end
 		return
 	end
@@ -3072,9 +3286,10 @@ function RelapseUI.BuildShopFrame(titleKey, opts)
 	title:SetContentAlignment(4)
 	title:SizeToContents()
 	frame.RelapseTitle = title
-	if opts.shop then
-		frame.RelapseShopPrev = MakeShopSwitch(frame, -1, "worth", opts.shop == "worth")
-		frame.RelapseShopNext = MakeShopSwitch(frame, 1, "points", opts.shop == "points")
+	local shopPair = RelapseUI.ShopSwitchPair(opts.shop)
+	if shopPair then
+		frame.RelapseShopPrev = MakeShopSwitch(frame, -1, shopPair[1], opts.shop == shopPair[1])
+		frame.RelapseShopNext = MakeShopSwitch(frame, 1, shopPair[2], opts.shop == shopPair[2])
 	end
 	RelapseUI.PlaceShopTitle(title, L)
 
@@ -3311,7 +3526,7 @@ end
 
 function RelapseUI.PaintMenuScrim(self, w, h)
 	local c = RelapseUI.Col.Scrim
-	surface.SetDrawColor(c.r, c.g, c.b, c.a or 160)
+	surface.SetDrawColor(c.r, c.g, c.b, c.a or 100)
 	local x, y, hw, hh, cover = MenuScrimHole(self, w, h)
 	if not x or cover >= 0.995 then
 		surface.DrawRect(0, 0, w, h)
@@ -3319,7 +3534,7 @@ function RelapseUI.PaintMenuScrim(self, w, h)
 	end
 	DrawDimExcept(w, h, x, y, hw, hh)
 	if cover > 0 then
-		surface.SetDrawColor(c.r, c.g, c.b, math.floor((c.a or 160) * cover + 0.5))
+		surface.SetDrawColor(c.r, c.g, c.b, math.floor((c.a or 100) * cover + 0.5))
 		FillRoundRect(x, y, hw, hh, RelapseUI.RadPx("Window"))
 	end
 	return true

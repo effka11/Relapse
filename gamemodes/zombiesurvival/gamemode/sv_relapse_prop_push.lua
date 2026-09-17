@@ -1,5 +1,6 @@
--- Relapse: unnailed props stay solid, but the HL2 player-controller cannot
--- shove them. Pickup, nailing, shade grab, throws and damage still move them.
+-- Relapse: unnailed physics props stay solid so the HL2 player-controller
+-- cannot shove them. Other props and physboxes still move them; pickup, nails,
+-- shade, throws and explosions thaw the pile.
 
 local meta = FindMetaTable("Entity")
 
@@ -13,6 +14,16 @@ local SLOW_ANG_SQR = 20 * 20
 -- Resting phys objects sit on contact or a millimetre of penetration. Anything
 -- larger is a hang (player crawled out, door opened, the crate underneath moved).
 local SUPPORT_DROP = 8
+local CONTACT_DIST_SQR = SUPPORT_DROP * SUPPORT_DROP
+local LIFT_TRACE = Vector(0, 0, 1)
+
+local BLAST_FORCE = bit.bor(
+	DMG_BLAST,
+	DMG_BLAST_SURFACE,
+	DMG_BURN,
+	DMG_SLOWBURN,
+	DMG_ALWAYSGIB
+)
 
 ---------------------------------------------------------------------------
 -- Candidates
@@ -38,6 +49,17 @@ end
 
 local function IsPhysicsProp(ent)
 	return string.sub(ent:GetClass(), 1, 12) == "prop_physics"
+end
+
+local function IsFuncPhysbox(ent)
+	return string.sub(ent:GetClass(), 1, 12) == "func_physbox"
+end
+
+-- Props and map physboxes may thaw a frozen crate. Manhacks / drones do not.
+local function IsPhysActor(ent)
+	if not ent:IsValid() or ent:IsWorld() or ent:IsPlayer() then return false end
+	if ent:GetMoveType() ~= MOVETYPE_VPHYSICS then return false end
+	return IsPhysicsProp(ent) or IsFuncPhysbox(ent)
 end
 
 local function IsShadeGrabbed(ent)
@@ -95,8 +117,124 @@ function meta:IsRelapseMoveable()
 end
 
 ---------------------------------------------------------------------------
+-- Contact
+---------------------------------------------------------------------------
+
+local function NearestDistSqr(a, b)
+	local p1 = a:NearestPoint(b:WorldSpaceCenter())
+	local p2 = b:NearestPoint(p1)
+	return p1:DistToSqr(p2)
+end
+
+-- Held / shade, or a moving prop/physbox, close enough that freeze would
+-- turn a live shove back into a wall.
+local function TouchesLivePhys(ent)
+	local rad = ent:BoundingRadius() + SUPPORT_DROP
+	for _, other in ipairs(ents.FindInSphere(ent:WorldSpaceCenter(), rad)) do
+		if other == ent then continue end
+		if not IsHeldByGameplay(other) then
+			if not IsPhysActor(other) or other.m_RelapsePushFrozen then continue end
+			local ophys = other:GetPhysicsObject()
+			if not ophys:IsValid() or not ophys:IsMoveable() then continue end
+			if ophys:GetVelocity():LengthSqr() < SLOW_VEL_SQR then continue end
+		end
+		if NearestDistSqr(ent, other) < CONTACT_DIST_SQR then
+			return true
+		end
+	end
+	return false
+end
+
+---------------------------------------------------------------------------
+-- Two-body
+--
+-- Collision already resolved against infinite mass. Replace both linear
+-- velocities with an inelastic (e=0) split of OurOld/TheirOld along HitNormal.
+---------------------------------------------------------------------------
+
+local twoBodyTick = 0
+local twoBodyPairs = {} -- ["i j"] = true this tick
+
+-- Same PhysicsCollide fires on both ents; mark only when we actually schedule.
+local function PairRewritten(a, b)
+	local t = CurTime()
+	if t ~= twoBodyTick then
+		twoBodyTick = t
+		twoBodyPairs = {}
+	end
+	local i, j = a:EntIndex(), b:EntIndex()
+	if i > j then
+		i, j = j, i
+	end
+	local k = i .. " " .. j
+	if twoBodyPairs[k] then return true end
+	twoBodyPairs[k] = true
+	return false
+end
+
+local function ScheduleTwoBody(ent, other, data)
+	local n = data.HitNormal
+	if not n or n:LengthSqr() < 1e-8 then return end
+	n = Vector(n)
+	local v1 = Vector(data.OurOldVelocity)
+	local v2 = Vector(data.TheirOldVelocity)
+	if (v1 - v2):Dot(n) > 0 then
+		n:Mul(-1)
+	end
+
+	local phys = data.PhysObject
+	local otherPhys = data.HitObject
+	if not phys:IsValid() or not otherPhys:IsValid() then return end
+	local m1 = phys:GetMass()
+	local m2 = otherPhys:GetMass()
+	if m1 <= 0 or m2 <= 0 then return end
+
+	if PairRewritten(ent, other) then return end
+
+	local v1n = v1:Dot(n)
+	local v2n = v2:Dot(n)
+	local vn = (m1 * v1n + m2 * v2n) / (m1 + m2)
+	local new1 = v1 + n * (vn - v1n)
+	local new2 = v2 + n * (vn - v2n)
+
+	timer.Simple(0, function()
+		if not ent:IsValid() or not other:IsValid() then return end
+		if ent:GetNailFrozen() or other:GetNailFrozen() then return end
+		if ent.m_RelapsePushFrozen or other.m_RelapsePushFrozen then return end
+		if phys:IsValid() then
+			phys:SetVelocityInstantaneous(new1)
+		end
+		if otherPhys:IsValid() then
+			otherPhys:SetVelocityInstantaneous(new2)
+		end
+	end)
+end
+
+---------------------------------------------------------------------------
 -- Freeze / unfreeze
 ---------------------------------------------------------------------------
+
+local function UnfreezeStandingOn(base)
+	if not base:IsValid() then return end
+
+	local rad = base:BoundingRadius() + SUPPORT_DROP
+	for _, ent in ipairs(ents.FindInSphere(base:WorldSpaceCenter(), rad)) do
+		if ent == base then continue end
+		if not ent.m_RelapsePushFrozen then continue end
+		if not ent:RelapseIsPushCandidate() then continue end
+
+		local pos = ent:GetPos()
+		local tr = util.TraceEntity({
+			start = pos + LIFT_TRACE,
+			endpos = pos + Vector(0, 0, -SUPPORT_DROP),
+			filter = ent,
+			mask = MASK_SOLID,
+		}, ent)
+		if tr.Entity == base then
+			ent:RelapseUnfreezeAgainstPush()
+		end
+	end
+end
 
 function meta:RelapseFreezeAgainstPush()
 	if self.m_RelapsePushFrozen then return true end
@@ -126,6 +264,7 @@ function meta:RelapseUnfreezeAgainstPush()
 		obj:EnableMotion(true)
 		obj:Wake()
 	end)
+	UnfreezeStandingOn(self)
 	return true
 end
 
@@ -159,6 +298,8 @@ local function TrySettle(ent)
 		return
 	end
 
+	if TouchesLivePhys(ent) then return end
+
 	if asleep then
 		ent:RelapseFreezeAgainstPush()
 		return
@@ -172,17 +313,41 @@ local function TrySettle(ent)
 	end
 end
 
+local function ImpactSpeedSqr(data)
+	local speed = data.Speed or 0
+	return math.max(
+		data.OurOldVelocity:LengthSqr(),
+		data.TheirOldVelocity:LengthSqr(),
+		speed * speed
+	)
+end
+
 local function HookPropCollide(ent)
 	if ent.m_RelapseNoPushHooked then return end
-	if not IsPhysicsProp(ent) then return end
+	if not IsPhysicsProp(ent) and not IsFuncPhysbox(ent) then return end
 
 	ent.m_RelapseNoPushHooked = true
 	ent:AddCallback("PhysicsCollide", function(self, data)
-		if self.m_RelapsePushFrozen or not self:RelapseIsPushCandidate() then return end
-		if IsHeldByGameplay(self) then return end
-
 		local other = data.HitEntity
-		if not other:IsValid() or not other:IsPlayer() then return end
+		if not other:IsValid() then return end
+
+		if IsPhysActor(other) and ImpactSpeedSqr(data) >= SLOW_VEL_SQR then
+			local selfWasFrozen = self.m_RelapsePushFrozen
+			local otherWasFrozen = other.m_RelapsePushFrozen
+			if selfWasFrozen then
+				self:RelapseUnfreezeAgainstPush()
+			end
+			if otherWasFrozen then
+				other:RelapseUnfreezeAgainstPush()
+			end
+			if selfWasFrozen or otherWasFrozen then
+				ScheduleTwoBody(self, other, data)
+			end
+		end
+
+		if IsHeldByGameplay(self) then return end
+		if not other:IsPlayer() then return end
+		if self.m_RelapsePushFrozen or not self:RelapseIsPushCandidate() then return end
 		if data.OurOldVelocity:LengthSqr() >= SLOW_VEL_SQR then return end
 
 		self:RelapseFreezeAgainstPush()
@@ -194,6 +359,50 @@ local function ScanExisting()
 		HookPropCollide(ent)
 		TrySettle(ent)
 	end
+	for _, ent in ipairs(ents.FindByClass("func_physbox*")) do
+		HookPropCollide(ent)
+	end
+end
+
+---------------------------------------------------------------------------
+-- Damage
+---------------------------------------------------------------------------
+
+-- Mirror GM:EntityTakeDamage early-outs that zero the hit after this hook.
+local function ShouldSkipDamageThaw(ent, dmginfo)
+	local attacker = dmginfo:GetAttacker()
+	local inflictor = dmginfo:GetInflictor()
+	if attacker:IsValid() and attacker == inflictor and attacker:IsProjectile()
+		and dmginfo:GetDamageType() == DMG_CRUSH then
+		return true
+	end
+	if GAMEMODE:GetWave() <= 0 and IsPhysicsProp(ent)
+		and inflictor:IsValid() and inflictor.NoPropDamageDuringWave0 then
+		return true
+	end
+	return false
+end
+
+-- Motion was off when the engine applied force; push next tick if still still.
+local function ScheduleBlastForce(ent, dmginfo)
+	if bit.band(dmginfo:GetDamageType(), BLAST_FORCE) == 0 then return end
+	local force = dmginfo:GetDamageForce()
+	if force:LengthSqr() <= 0 then return end
+	force = Vector(force)
+	local pos = Vector(dmginfo:GetDamagePosition())
+
+	timer.Simple(0, function()
+		if not ent:IsValid() then return end
+		if ent.m_RelapsePushFrozen or ent:GetNailFrozen() then return end
+		local phys = ent:GetPhysicsObject()
+		if not phys:IsValid() then return end
+		if phys:GetVelocity():LengthSqr() >= SLOW_VEL_SQR then return end
+		if pos:LengthSqr() > 0 then
+			phys:ApplyForceOffset(force, pos)
+		else
+			phys:ApplyForceCenter(force)
+		end
+	end)
 end
 
 ---------------------------------------------------------------------------
@@ -214,8 +423,15 @@ end)
 
 hook.Add("EntityTakeDamage", "RelapsePropPush", function(ent, dmginfo)
 	if not ent.m_RelapsePushFrozen then return end
-	if dmginfo:GetDamage() <= 0 then return end
+	if ShouldSkipDamageThaw(ent, dmginfo) then return end
+	if dmginfo:GetDamage() <= 0 and dmginfo:GetDamageForce():LengthSqr() <= 0 then
+		return
+	end
+
 	ent:RelapseUnfreezeAgainstPush()
+	-- Pure crush is two-body. BLAST|CRUSH still needs delayed force.
+	-- Do not return a value: GM:EntityTakeDamage never runs if a hook does.
+	ScheduleBlastForce(ent, dmginfo)
 end)
 
 timer.Create("RelapsePropPushSettle", 0.25, 0, function()

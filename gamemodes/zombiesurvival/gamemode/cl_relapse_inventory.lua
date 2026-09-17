@@ -1,5 +1,6 @@
 GM.RelapseInvOwned = {}
 GM.RelapseInvModel = nil
+GM.RelapseInvMarks = 0
 
 function GM:PlayerOwnsRelapseItem(id)
 	return self.RelapseInvOwned[id] and true or false
@@ -21,6 +22,7 @@ net.Receive("relapse_inv_sync", function()
 	end
 	GAMEMODE.RelapseInvOwned = owned
 	GAMEMODE.RelapseInvModel = net.ReadString()
+	GAMEMODE.RelapseInvMarks = net.ReadUInt(32)
 	if GAMEMODE.RefreshRelapseInventory then
 		GAMEMODE:RefreshRelapseInventory()
 	end

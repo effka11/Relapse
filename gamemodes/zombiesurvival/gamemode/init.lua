@@ -32,8 +32,10 @@ AddCSLuaFile("sh_usefulness.lua")
 AddCSLuaFile("sh_usefulness_model.lua")
 AddCSLuaFile("sh_relapse_tabclass.lua")
 AddCSLuaFile("sh_relapse_inventory.lua")
+AddCSLuaFile("sh_relapse_loadout.lua")
 AddCSLuaFile("sh_relapse_scars.lua")
 AddCSLuaFile("sh_cycle_grid.lua")
+AddCSLuaFile("sh_relapse_percent.lua")
 AddCSLuaFile("sh_relapse_wmpose.lua")
 
 AddCSLuaFile("vault/shared.lua")
@@ -56,6 +58,7 @@ AddCSLuaFile("cl_relapse_carry_holster.lua")
 AddCSLuaFile("cl_relapse_freecam.lua")
 AddCSLuaFile("cl_relapse_wmpose.lua")
 AddCSLuaFile("cl_relapse_inventory.lua")
+AddCSLuaFile("cl_relapse_loadout.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -98,8 +101,10 @@ AddCSLuaFile("vgui/parsenal.lua")
 AddCSLuaFile("vgui/premantle.lua")
 AddCSLuaFile("vgui/zshealtharea.lua")
 AddCSLuaFile("vgui/zsammoarea.lua")
+AddCSLuaFile("vgui/zsinvarea.lua")
 AddCSLuaFile("vgui/zsstatusarea.lua")
 AddCSLuaFile("vgui/zsgamestate.lua")
+AddCSLuaFile("vgui/zswavenotify.lua")
 
 include("sh_globals.lua")
 
@@ -122,11 +127,13 @@ include("sv_relapse_prop_push.lua")
 include("sv_relapse_freecam.lua")
 include("sv_relapse_wmpose.lua")
 include("sv_relapse_inventory.lua")
+include("sv_relapse_loadout.lua")
 
 include("itemstocks/sv_stock.lua")
 
 include("vault/server.lua")
 include("sv_relapse_scars.lua")
+include("sv_cycle_grid.lua")
 
 include("skillweb/sv_registry.lua")
 include("skillweb/sv_skillweb.lua")
@@ -435,6 +442,10 @@ function GM:AddResources()
 	resource.AddWorkshop("2904144632") -- COD BO1 Undercover Spetsnaz
 	resource.AddWorkshop("3486238431") -- Alvaro's Shared Textures
 	resource.AddWorkshop("3571846979") -- Wuchang Fallen Feathers playermodel
+	resource.AddWorkshop("3642088520") -- Bunker Soldiers playermodels
+	resource.AddWorkshop("3641416752") -- Warzone Mil-Sim Balkan Special ATU
+	resource.AddWorkshop("3713771232") -- Cold War Park Coventry playermodel
+	resource.AddWorkshop("3747373360") -- Dead by Daylight Backstabber Susie
 	resource.AddWorkshop("3739488356") -- [RE2: Remake] Zombies Ragdolls
 end
 
@@ -461,6 +472,11 @@ function GM:Initialize()
 	game.ConsoleCommand("fire_dmgscale 1\n")
 	game.ConsoleCommand("mp_flashlight 1\n")
 	game.ConsoleCommand("sv_gravity 600\n")
+	-- Clients must not request 66 snapshots on a 33-tick server.
+	game.ConsoleCommand("sv_minupdaterate 33\n")
+	game.ConsoleCommand("sv_maxupdaterate 33\n")
+	game.ConsoleCommand("sv_mincmdrate 33\n")
+	game.ConsoleCommand("sv_maxcmdrate 33\n")
 end
 
 function GM:AddNetworkStrings()
@@ -549,6 +565,8 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_scars_sync")
 	util.AddNetworkString("zs_scars_take")
 	util.AddNetworkString("zs_scars_request")
+	util.AddNetworkString("zs_cycle_grid_sync")
+	util.AddNetworkString("zs_cycle_grid_unlock")
 
 	util.AddNetworkString("zs_crow_kill_crow")
 	util.AddNetworkString("zs_pl_kill_pl")
@@ -2113,6 +2131,9 @@ function GM:PlayerReady(pl)
 	if self.SendRelapseScars then
 		self:SendRelapseScars(pl)
 	end
+	if self.SendCycleGrid then
+		self:SendCycleGrid(pl)
+	end
 
 	pl.PlayerReady = true
 end
@@ -2240,7 +2261,7 @@ function GM:AttemptHumanDynamicSpawn(pl)
 end
 
 function GM:PlayerInitialSpawn(pl)
-	pl.MaxBloodArmor = GAMEMODE.ZombieEscape and 0 or 10
+	pl.MaxBloodArmor = GAMEMODE.ZombieEscape and 0 or (GAMEMODE.HumanBloodArmor or 15)
 	pl.NextFlashlightSwitch = 0
 	pl.NextPainSound = 0
 	pl.NextFlinch = 0
@@ -2651,7 +2672,7 @@ function GM:GiveRandomEquipment(pl)
 	if self.StartingLoadout then
 		self:GiveStartingLoadout(pl)
 	elseif GAMEMODE.OverrideStartingWorth then
-		pl:Give("weapon_zs_swissarmyknife")
+		pl:Give("mg_me_t9cane")
 	elseif #self.StartLoadouts >= 1 then
 		for _, id in pairs(self.StartLoadouts[math.random(#self.StartLoadouts)]) do
 			local tab = FindStartingItem(id)
@@ -3944,9 +3965,12 @@ end
 function GM:PlayerDroppedWeapon(pl, wep)
 	if not IsValid(pl) or pl:Team() ~= TEAM_HUMAN then return end
 
+	local class = IsValid(wep) and wep:GetClass()
 	timer.Simple(0, function()
-		if pl:IsValid() and pl:Team() == TEAM_HUMAN then
-			pl:ResetSpeed()
+		if not (pl:IsValid() and pl:Team() == TEAM_HUMAN) then return end
+		pl:ResetSpeed()
+		if class and GAMEMODE.RelapseLoadoutRemove then
+			GAMEMODE:RelapseLoadoutRemove(pl, class)
 		end
 	end)
 end
@@ -4018,6 +4042,9 @@ VoiceSetTranslate["models/jazzmcfly/kantai/yuudachi/yuudachi.mdl"] = VOICESET_FE
 VoiceSetTranslate["models/player/dewobedil/vocaloid/haku/bikini_p.mdl"] = VOICESET_FEMALE
 VoiceSetTranslate["models/player/dewobedil/touhou/junko/default_p.mdl"] = VOICESET_FEMALE
 function GM:PlayerSpawn(pl)
+	if self.ResetRelapseLoadout then
+		self:ResetRelapseLoadout(pl)
+	end
 	pl:StripWeapons()
 	pl:WipePlayerInventory()
 	pl:GiveAmmo(1, "dummy", true) -- Fixes empty weapon deploy bug.
@@ -4188,6 +4215,9 @@ function GM:PlayerSpawn(pl)
 				pl.AdjustedStartScrapSkill = nil
 			end
 			pl:ApplySkills()
+			if pl.ApplyTrinkets then
+				pl:ApplyTrinkets()
+			end
 		end
 
 		pl.StowageCaches = 0
@@ -4231,8 +4261,8 @@ function GM:PlayerSpawn(pl)
 						pl:Give(class)
 					end
 				else
-					pl:Give("weapon_zs_redeemers")
-					pl:Give("weapon_zs_swissarmyknife")
+					pl:Give("mg_makarov")
+					pl:Give("mg_me_t9cane")
 				end
 			end
 		end
@@ -4350,11 +4380,6 @@ function GM:WaveStateChanged(newstate)
 			gamemode.Call("SetWaveEnd", self:GetWaveStart() + self:GetWaveOneLength() + (self:GetWave() - 1) * (GetGlobalBool("classicmode") and self.TimeAddedPerWaveClassic or self.TimeAddedPerWave))
 		end
 
-		net.Start("zs_wavestart")
-			net.WriteInt(self:GetWave(), 16)
-			net.WriteFloat(self:GetWaveEnd())
-		net.Broadcast()
-
 		for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do
 			pl.m_LastWaveStartSpawn = CurTime()
 
@@ -4382,6 +4407,17 @@ function GM:WaveStateChanged(newstate)
 				ent:Input("onwavestart", ent, ent, curwave)
 			end
 		end
+
+		local nsigils = self:NumSigils()
+		if nsigils < 1 then
+			nsigils = self.MaxSigils or 0
+		end
+		net.Start("zs_wavestart")
+			net.WriteInt(self:GetWave(), 16)
+			net.WriteFloat(self:GetWaveEnd())
+			net.WriteInt(self:GetNumberOfWaves(), 16)
+			net.WriteUInt(math.max(0, nsigils), 8)
+		net.Broadcast()
 	elseif self:GetWave() >= self:GetNumberOfWaves() then -- Last wave is over
 		if self:GetUseSigils() then
 			if self:GetEscapeStage() == ESCAPESTAGE_BOSS then

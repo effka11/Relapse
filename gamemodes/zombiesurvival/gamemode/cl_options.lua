@@ -36,20 +36,6 @@ GM.SpeedToText = {
 }
 
 GM.AmmoToPurchaseNames = GM.AmmoToPurchaseNames or {}
-local ammoBuy = {
-	["pistol"] = "pistolammo",
-	["buckshot"] = "shotgunammo",
-	["smg1"] = "smgammo",
-	["ar2"] = "assaultrifleammo",
-	["357"] = "rifleammo",
-	["pulse"] = "pulseammo",
-	["XBowBolt"] = "crossbowammo",
-	["impactmine"] = "impactmine",
-	["chemical"] = "chemical"
-}
-for k, v in pairs(ammoBuy) do
-	GM.AmmoToPurchaseNames[k] = v
-end
 
 GM.WeaponStatBarVals = {
 	{"MeleeDamage", "Damage", 2, 140, false},
@@ -202,6 +188,9 @@ cvars.AddChangeCallback("zs_interfacesize", function(cvar, oldvalue, newvalue)
 	GAMEMODE.CenterNotificationHUD:InvalidateLayout()
 	GAMEMODE.XPHUD:InvalidateLayout()
 	GAMEMODE.StatusHUD:InvalidateLayout()
+	if GAMEMODE.InvHUD then
+		GAMEMODE.InvHUD:InvalidateLayout()
+	end
 
 	GAMEMODE.ArsenalInterface = nil
 

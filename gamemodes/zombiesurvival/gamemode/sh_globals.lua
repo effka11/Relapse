@@ -107,7 +107,8 @@ GM.MaxLegDamage = 3
 GM.MaxArmDamage = 3
 
 GM.UtilityKey = IN_SPEED
-GM.MenuKey = IN_WALK -- I would use the spawn menu but it has no IN_ key assignment.
+-- Hold-to-open inventory / nest menu. Q has no IN_ bit (+menu); tracked client-side.
+GM.MenuKeyCode = KEY_Q
 
 GM.ArsenalCrateCommission = 0.04
 
@@ -144,7 +145,9 @@ GM.SkeletonPointRatio = GM.HumanoidZombiePointRatio/3
 -- IRL human movement. 1 Source unit = 1 inch (player is ~6 ft), so 1 km/h ≈ 10.94 u/s.
 -- Walk ~8.7 km/h (95). Run ~22 km/h (240).
 -- Unladen adult. Extra kg (guns now; ammo/armor later) scales speed as body/(body+load).
+-- Sprint pays the full load. Walk uses this fraction of it, so step barely moves.
 GM.HumanBodyMass = 75
+GM.HumanCarryWalkLoadMul = 0.2
 SPEED_NORMAL = 95
 SPEED_SLOWEST = SPEED_NORMAL - 20
 SPEED_SLOWER = SPEED_NORMAL - 14
@@ -156,6 +159,7 @@ SPEED_FASTEST = SPEED_NORMAL + 20
 GM.HumanSprintMultiplier = 240 / 95
 GM.ZombieEscapeSprintMultiplier = 1.2
 GM.BarricadeGhostSpeed = 17
+GM.HumanBloodArmor = 15
 
 -- Default human unarmed. HL2 fists stay as a SWEP base for knuckles / power fists.
 GM.HumanUnarmedWeapon = "mg_fists"

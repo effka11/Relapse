@@ -8,12 +8,28 @@ end)
 local M_Player = FindMetaTable("Player")
 local P_Team = M_Player.Team
 
+local function WaveNotice(title, ...)
+	if RelapseUI and RelapseUI.WaveNotify then
+		RelapseUI.WaveNotify(title, ...)
+		return
+	end
+	GAMEMODE:CenterNotify({font = "Relapse30"}, RelapseUI and RelapseUI.Col.Text or color_white, title)
+	for i = 1, select("#", ...) do
+		local s = select(i, ...)
+		if isstring(s) and s ~= "" then
+			GAMEMODE:CenterNotify({font = "Relapse20"}, RelapseUI and RelapseUI.Col.Muted or color_white, s)
+		end
+	end
+end
+
 local function AltSelItemUpd()
+	if not (GAMEMODE.HumanMenuPanel and GAMEMODE.HumanMenuPanel:IsValid() and GAMEMODE.HumanMenuPanel.SelectedItemLabel) then return end
 	local activeweapon = MySelf:GetActiveWeapon()
 	if not activeweapon or not activeweapon:IsValid() then return end
 
 	local actwclass = activeweapon:GetClass()
-	GAMEMODE.HumanMenuPanel.SelectedItemLabel:SetText(weapons.Get(actwclass).PrintName)
+	local wep = weapons.Get(actwclass)
+	GAMEMODE.HumanMenuPanel.SelectedItemLabel:SetText(wep and RelapseUI.WepName(wep) or actwclass)
 end
 
 local function ApplyReconnectAmmo(weps, ammo)
@@ -261,21 +277,22 @@ end)
 net.Receive("zs_wavestart", function(length)
 	local wave = net.ReadInt(16)
 	local time = net.ReadFloat()
+	local numwaves = net.ReadInt(16)
+	local nsigils = net.ReadUInt(8)
 
 	gamemode.Call("SetWave", wave)
 	gamemode.Call("SetWaveEnd", time)
 
 	if GAMEMODE.ZombieEscape then
-		GAMEMODE:CenterNotify(COLOR_RED, {font = "ZSHUDFont"}, translate.Get("escape_from_the_zombies"))
-	elseif wave == GAMEMODE:GetNumberOfWaves() then
-		GAMEMODE:CenterNotify({killicon = "default"}, {font = "ZSHUDFont"}, " ", COLOR_RED, translate.Get("final_wave"), {killicon = "default"})
-		GAMEMODE:CenterNotify(translate.Get("final_wave_sub"))
+		WaveNotice(RelapseUI.T("escape_from_the_zombies"))
+	elseif wave == numwaves then
+		WaveNotice(RelapseUI.T("final_wave"), RelapseUI.T("final_wave_sub"))
 	else
-		GAMEMODE:CenterNotify({killicon = "default"}, {font = "ZSHUDFont"}, " ", COLOR_RED, translate.Format("wave_x_has_begun", wave), {killicon = "default"})
-
-		if wave == 1 and GAMEMODE:GetUseSigils() then
-			GAMEMODE:CenterNotify(translate.Format("x_sigils_appeared", GAMEMODE.MaxSigils))
+		local sub
+		if wave == 1 and GAMEMODE:GetUseSigils() and numwaves > 0 then
+			sub = RelapseUI.TF("x_sigils_appeared", numwaves, nsigils)
 		end
+		WaveNotice(RelapseUI.TF("wave_x_has_begun", wave), sub)
 	end
 
 	surface_PlaySound("ambient/creatures/town_zombie_call1.wav")
@@ -292,25 +309,26 @@ net.Receive("zs_waveend", function(length)
 	gamemode.Call("SetWaveStart", time)
 
 	if wave < GAMEMODE:GetNumberOfWaves() and wave > 0 then
-		GAMEMODE:CenterNotify(COLOR_RED, {font = "ZSHUDFont"}, translate.Format("wave_x_is_over", wave))
-		GAMEMODE:CenterNotify(translate.Get("wave_x_is_over_sub"))
+		local extra = { RelapseUI.T("wave_x_is_over_sub") }
 
 		if MySelf:IsValid() and P_Team(MySelf) == TEAM_HUMAN then
 			local picks = GAMEMODE.RelapseScarState and GAMEMODE.RelapseScarState.Picks or 0
 			if picks > 0 then
-				GAMEMODE:CenterNotify(translate.Format("unspent_relapse_picks_press_x", input.LookupBinding("gm_showspare1") or "F3"))
+				extra[#extra + 1] = RelapseUI.TF("unspent_relapse_picks_press_x", input.LookupBinding("gm_showspare1") or "F3")
 			end
 
 			if GAMEMODE.EndWavePointsBonus > 0 then
 				local pointsbonus = GAMEMODE.EndWavePointsBonus + (GAMEMODE:GetWave() - 1) * GAMEMODE.EndWavePointsBonusPerWave + (MySelf.EndWavePointsExtra or 0)
 
 				if not MySelf.Scourer then
-					GAMEMODE:CenterNotify(COLOR_CYAN, translate.Format("points_for_surviving", pointsbonus))
+					extra[#extra + 1] = RelapseUI.TF("points_for_surviving", pointsbonus)
 				else
-					GAMEMODE:CenterNotify(COLOR_ORANGE, translate.Format("scrap_for_surviving", pointsbonus))
+					extra[#extra + 1] = RelapseUI.TF("scrap_for_surviving", pointsbonus)
 				end
 			end
 		end
+
+		WaveNotice(RelapseUI.TF("wave_x_is_over", wave), unpack(extra))
 
 		surface_PlaySound("ambient/atmosphere/cave_hit"..math.random(6)..".wav")
 	end
@@ -604,9 +622,10 @@ net.Receive("zs_currentround", function(length)
 end)
 
 net.Receive("zs_updatealtselwep", function(length)
-	if MySelf:Alive() and P_Team(MySelf) == TEAM_HUMAN and GAMEMODE.HumanMenuPanel and GAMEMODE.HumanMenuPanel:IsValid() and not GAMEMODE.InventoryMenu.SelInv then
-		timer.Simple(0.25, AltSelItemUpd)
-	end
+	local frame = GAMEMODE.InventoryMenu
+	if not (MySelf:Alive() and P_Team(MySelf) == TEAM_HUMAN and GAMEMODE.HumanMenuPanel and GAMEMODE.HumanMenuPanel:IsValid()) then return end
+	if IsValid(frame) and (frame.SelInv or frame.SelKind == "ammo") then return end
+	timer.Simple(0.25, AltSelItemUpd)
 end)
 
 net.Receive("zs_nestbuilt", function(length)

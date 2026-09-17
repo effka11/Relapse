@@ -1,17 +1,15 @@
 -- Weapon sets that humans can start with if they choose RANDOM.
 GM.StartLoadouts = {
-	{"pshtr", "3pcp", "2pcp", "2sgcp", "3sgcp"},
-	{"btlax", "3pcp", "2pcp", "2arcp", "3arcp"},
-	{"stbbr", "3rcp", "2rcp", "2pcp", "3pcp"},
-	{"tossr", "3smgcp", "2smgcp", "zpplnk", "stone"},
-	{"blstr", "3sgcp", "2sgcp", "csknf"},
-	{"owens", "3pcp", "2pcp", "2pls", "3pls"},
-	{"curativei", "medkit", "90mkit", "60mkit"},
-	{"minelayer", "4mines", "6mines"},
-	{"crklr", "3arcp", "2arcp", "xbow1", "xbow2"},
-	{"junkpack", "12nails", "crphmr", "loadingframe"},
-	{"z9000", "3pls", "2pls", "stnbtn"},
-	{"sling", "xbow1", "xbow2", "2sgcp", "3sgcp"}
+	{"makarov", "2ammo_9x18", "3ammo_9x18", "cwcane"},
+	{"m1911", "2ammo_45acp", "3ammo_45acp", "cinderblock"},
+	{"revolver357", "2ammo_357mag", "3ammo_357mag"},
+	{"uzi", "2ammo_9x19", "3ammo_9x19"},
+	{"m680", "2ammo_12ga", "3ammo_12ga"},
+	{"sks", "2ammo_762x39", "3ammo_762x39"},
+	{"crphmr", "12nails", "8nails"},
+	{"arscrate", "makarov", "2ammo_9x18"},
+	{"resupplybox", "uzi", "2ammo_9x19"},
+	{"remantler", "cinderblock", "2ammo_9x18"}
 }
 
 

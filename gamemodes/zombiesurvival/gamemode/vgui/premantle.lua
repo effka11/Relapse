@@ -592,10 +592,8 @@ function GM:OpenRemantlerMenu(remantler)
 	remantleframe:SetSize(wid - 8, boty - topy - 8 - topspace:GetTall())
 
 	local trinketsframe = vgui.Create("DPanel")
-	sheet = remprop:AddSheet("Trinkets", trinketsframe, GAMEMODE.ItemCategoryIcons[ITEMCAT_TRINKETS], false, false)
-	sheet.Panel:SetPos(0, tabhei + 2)
-	trinketsframe:SetSize(wid - 8, boty - topy - 8 - topspace:GetTall())
 	trinketsframe:SetPaintBackground(false)
+	trinketsframe:SetSize(wid - 8, boty - topy - 8 - topspace:GetTall())
 	frame.TrinketsFrame = trinketsframe
 
 	local ammoframe = vgui.Create("DPanel")
@@ -606,76 +604,22 @@ function GM:OpenRemantlerMenu(remantler)
 	frame.m_AmmoFrame = ammoframe
 
 	local subpropertysheet
-	for frameindex = 0, 1 do
-		local curframe = frameindex == 0 and trinketsframe or ammoframe
+	do
+		local curframe = ammoframe
+		local list = vgui.Create("DGrid", curframe)
+		list:SetPos(0, 0)
+		list:SetSize(curframe:GetWide() - 312, curframe:GetTall())
+		list:SetCols(3)
+		list:SetColWide(290 * screenscale)
+		list:SetRowHeight(100 * screenscale)
 
-		if frameindex == 0 then
-			local tabpane = vgui.Create("DPanel", curframe)
-			--tabpane.Paint = function() end
-			tabpane.Grids = {}
-			tabpane.Buttons = {}
-			tabpane:SetSize(curframe:GetWide(), curframe:GetTall())
+		list:SetPos(8, 16)
+		list:SetWide(ammoframe:GetWide() - 16)
+		list:SetTall(ammoframe:GetTall() - 32)
 
-			local offset = 64 * screenscale
-			local itemframe = vgui.Create("DScrollPanel", tabpane)
-			itemframe:SetSize(curframe:GetWide(), curframe:GetTall() - offset - 32)
-			itemframe:SetPos(0, offset)
-
-			local mkgrid = function()
-				local list = vgui.Create("DGrid", itemframe)
-				list:SetPos(0, 0)
-				list:SetSize(curframe:GetWide() - 312, curframe:GetTall())
-				list:SetCols(2)
-				list:SetColWide(280 * screenscale)
-				list:SetRowHeight(64 * screenscale)
-
-				return list
-			end
-
-			local subcats = GAMEMODE.ItemSubCategories
-			local tbn
-			for j = 1, #subcats do
-				local ispacer = ((j-1) % 3)+1
-
-				tbn = EasyButton(tabpane, subcats[j], 8, 4)
-				tbn:SetFont("ZSHUDFontSmallest")
-				tbn:SetAlpha(j == 1 and 255 or 70)
-				tbn:AlignRight(800 * screenscale - (ispacer - 1) * 190 * screenscale)
-				tbn:AlignTop(j <= 3 and 0 or 28)
-				tbn:SizeToContents()
-				tbn.DoClick = function(me)
-					for k, v in pairs(tabpane.Grids) do
-						v:SetVisible(k == j)
-						tabpane.Buttons[k]:SetAlpha(k == j and 255 or 70)
-					end
-				end
-
-				tabpane.Grids[j] = mkgrid()
-				tabpane.Grids[j]:SetVisible(j == 1)
-				tabpane.Buttons[j] = tbn
-			end
-
-			for j, tab in ipairs(GAMEMODE.Items) do
-				if tab.PointShop and tab.Category == ITEMCAT_TRINKETS then
-					self:AddShopItem(tabpane.Grids[tab.SubCategory], j, tab, false, true)
-				end
-			end
-		else
-			local list = vgui.Create("DGrid", curframe)
-			list:SetPos(0, 0)
-			list:SetSize(curframe:GetWide() - 312, curframe:GetTall())
-			list:SetCols(3)
-			list:SetColWide(290 * screenscale)
-			list:SetRowHeight(100 * screenscale)
-
-			list:SetPos(8, 16)
-			list:SetWide(ammoframe:GetWide() - 16)
-			list:SetTall(ammoframe:GetTall() - 32)
-
-			for j, tab in ipairs(GAMEMODE.Items) do
-				if tab.PointShop and tab.Category == ITEMCAT_AMMO or tab.CanMakeFromScrap then
-					self:AddShopItem(list, j, tab, false, true)
-				end
+		for j, tab in ipairs(GAMEMODE.Items) do
+			if tab.PointShop and tab.Category == ITEMCAT_AMMO or tab.CanMakeFromScrap then
+				self:AddShopItem(list, j, tab, false, true)
 			end
 		end
 	end

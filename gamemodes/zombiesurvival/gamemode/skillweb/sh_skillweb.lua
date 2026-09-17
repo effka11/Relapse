@@ -127,10 +127,18 @@ function meta:ApplySkills(override)
 	local current_active = self:GetActiveSkills()
 	local desired_assoc = table.ToAssoc(desired)
 
-	-- Do we even have these skills unlocked?
+	-- Relapse retired the ZS skill tree. Trinkets apply in ApplyTrinkets.
 	if not override then
 		for skillid in pairs(desired_assoc) do
-			if not self:IsSkillUnlocked(skillid) or allskills[skillid] and allskills[skillid].Disabled then
+			local skill = allskills[skillid]
+			if not skill or not skill.Trinket or skill.Disabled or not self:IsSkillUnlocked(skillid) then
+				desired_assoc[skillid] = nil
+			end
+		end
+	else
+		for skillid in pairs(desired_assoc) do
+			local skill = allskills[skillid]
+			if not skill or not skill.Trinket then
 				desired_assoc[skillid] = nil
 			end
 		end
@@ -159,6 +167,10 @@ function meta:ApplySkills(override)
 
 	-- Store and sync with client.
 	self:SetActiveSkills(desired_assoc, not self.PlayerReady)
+
+	if SERVER and GAMEMODE.ApplyCycleGridModifiers then
+		GAMEMODE:ApplyCycleGridModifiers(self)
+	end
 
 	if SERVER and self.ExtraStartingWorth ~= self.LastSentESW then
 		self.LastSentESW = self.ExtraStartingWorth
@@ -218,6 +230,10 @@ function meta:ApplyTrinkets(override)
 				end
 			end
 		end
+	end
+
+	if SERVER and GAMEMODE.ApplyCycleGridModifiers then
+		GAMEMODE:ApplyCycleGridModifiers(self)
 	end
 end
 

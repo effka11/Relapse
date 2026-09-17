@@ -98,4 +98,8 @@ function M_Player:UpdateCustomAmmoCount(index)
 	net.WriteUInt(index - 128, 6)
 	net.WriteUInt(self.ca and self.ca[index] or 0, 10)
 	net.Send(self)
+
+	if GAMEMODE.RelapseLoadoutDirty then
+		GAMEMODE:RelapseLoadoutDirty(self)
+	end
 end

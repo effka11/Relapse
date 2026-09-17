@@ -55,14 +55,16 @@ function ENT:ShouldNotCollide(ent)
 	if not IsValid(ent) then return true end
 	if ent:IsPlayer() then
 		if ent:GetMoveType() == MOVETYPE_NOCLIP then return true end
-		-- Seated on this face only: the hull may kiss the 4u slab. Do not
-		-- open the wall for walking — XY is locked by RelapseLadderClimb.
+		-- Seated on this strip: stacked slabs through a floor cell still
+		-- kiss the hull. Do not open other faces or walking.
 		if ent.RelapseLadderHold or ent:GetNW2Bool("RelapseLadderHold", false) then
 			local clip = ent.RelapseLadderClipEnt
 			if not IsValid(clip) and ent.GetNW2Entity then
 				clip = ent:GetNW2Entity("RelapseLadderClip")
 			end
 			if clip == self then return true end
+			local same = GAMEMODE and GAMEMODE.RelapseLadderSameStrip
+			if same and IsValid(clip) and same(clip, self) then return true end
 		end
 		return false
 	end

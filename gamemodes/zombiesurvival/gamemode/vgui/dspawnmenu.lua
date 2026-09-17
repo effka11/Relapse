@@ -19,7 +19,7 @@ function PANEL:Think()
 		self.CloseTime = nil
 		self:SetVisible(false)
 	elseif self.StartChecking and time >= self.StartChecking then
-		if not MySelf:KeyDown(GAMEMODE.MenuKey) then
+		if not GAMEMODE:IsMenuKeyDown() then
 			self:CloseMenu()
 		end
 	end

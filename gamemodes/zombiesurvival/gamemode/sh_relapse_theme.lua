@@ -3,7 +3,7 @@
 --
 -- Off-white, same-hue gray. Surfaces are neutral value steps.
 -- Wine only for damage and shortage. World sigils use the same tokens:
--- live Fog (Text / HealthMax), hurt and corrupt Wine.
+-- live Fog (Text / HealthMax), hurt Gray, corrupt Wine.
 
 RelapseUI = RelapseUI or {}
 
@@ -34,7 +34,7 @@ local function FogValA(t, a)
 end
 
 local GlassA = 220
-local CardA  = 175
+local CardA  = 130
 
 RelapseUI.Col = {
 	Bg        = FogVal(0.09),
@@ -52,7 +52,7 @@ RelapseUI.Col = {
 	TabOn     = FogVal(0.22),
 	Lock      = Color(0, 0, 0, 80),
 	HudTrack  = Color(0, 0, 0, 80),
-	Scrim     = Color(0, 0, 0, 160),
+	Scrim     = Color(0, 0, 0, 100),
 	Shadow    = Color(0, 0, 0, 255),
 	Wash      = Color(FogLum, FogLum, FogLum, 28),
 	DangerDim = With(Wine, 40),
@@ -101,21 +101,22 @@ function RelapseUI.LerpCol(a, b, t, out)
 	return out
 end
 
--- Live Fog, corrupt Wine. healthfrac 1 is full. flashfrac 1 is a just-hit pulse.
+-- Live Fog → Gray as HP drops. Corrupt (destroyed) is Wine only.
+-- healthfrac 1 is full. flashfrac 1 is a just-hit pulse.
 function RelapseUI.SigilCol(corrupt, healthfrac, flashfrac, out)
 	local c = RelapseUI.Col
 	out = out or colSigil
 	healthfrac = math.Clamp(healthfrac or 1, 0, 1)
 	flashfrac = math.Clamp(flashfrac or 0, 0, 1)
 	if corrupt then
-		RelapseUI.LerpCol(c.HealthMin, c.Danger, healthfrac, out)
+		out.r, out.g, out.b, out.a = c.Danger.r, c.Danger.g, c.Danger.b, c.Danger.a
 		if flashfrac > 0 then
 			RelapseUI.LerpCol(out, c.Text, flashfrac, out)
 		end
 	else
-		RelapseUI.LerpCol(c.HealthMin, c.HealthMax, healthfrac, out)
+		RelapseUI.LerpCol(c.Muted, c.HealthMax, healthfrac, out)
 		if flashfrac > 0 then
-			RelapseUI.LerpCol(out, c.Danger, flashfrac, out)
+			RelapseUI.LerpCol(out, c.Muted, flashfrac, out)
 		end
 	end
 	return out

@@ -157,7 +157,8 @@ SWEP.Recoil = {
 }
 
 SWEP.Bullet = {
-    Damage = {R.Damage, farDamage},
+    -- MW divides Damage by NumBullets. Relapse.Damage is per pellet.
+    Damage = {R.Damage * R.Pellets, farDamage * R.Pellets},
     DropOffStartRange = 15,
     EffectiveRange = 20, --in meters, damage scales within this distance
     Range = 40, --in meters, after this distance the bullet stops existing

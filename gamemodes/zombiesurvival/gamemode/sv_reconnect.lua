@@ -340,10 +340,18 @@ local function RestoreReconnectActiveWeapon(pl, class)
 		return
 	end
 
+	if gm and gm.RelapseSelectWeapon then
+		gm:RelapseSelectWeapon(pl, class)
+		return
+	end
+
 	pl:SelectWeapon(class)
 	if pl:GetActiveWeapon() == wep then return end
 
 	pl:SetActiveWeapon(wep)
+	if wep.Deploy then
+		wep:Deploy()
+	end
 end
 
 local function WeaponPrimarySpare(pl, class, state)
@@ -615,6 +623,9 @@ function GM:ApplyReconnectSpawn(pl)
 			self:ApplyReconnectWeaponAmmo(pl, state)
 			RestoreReconnectActiveWeapon(pl, state.activeweapon)
 			self:UpdateTabClassDisplay(pl)
+			if self.RebuildRelapseLoadout then
+				self:RebuildRelapseLoadout(pl)
+			end
 		end)
 		timer.Simple(0.15, function()
 			RestoreReconnectActiveWeapon(pl, state.activeweapon)

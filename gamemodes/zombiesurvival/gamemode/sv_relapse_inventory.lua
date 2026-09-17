@@ -1,4 +1,5 @@
 -- Relapse cosmetic inventory. Persist per SteamID64. Grants merge on join.
+-- Marks live in this file: remort drop, not the cycle vault.
 
 util.AddNetworkString("relapse_inv_sync")
 util.AddNetworkString("relapse_inv_equip")
@@ -51,7 +52,8 @@ end
 function GM:EmptyRelapseInventory()
 	return {
 		items = {},
-		model = self:GetRelapseDefaultModelId()
+		model = self:GetRelapseDefaultModelId(),
+		marks = 0
 	}
 end
 
@@ -70,6 +72,7 @@ function GM:SanitizeRelapseInventory(data)
 	if isstring(data.model) and clean.items[data.model] then
 		clean.model = data.model
 	end
+	clean.marks = self:ClampRelapseMarks(data.marks)
 	return clean
 end
 
@@ -129,7 +132,8 @@ function GM:SaveRelapseInventory(pl)
 	file.CreateDir(string.GetPathFromFilename(filename))
 	file.Write(filename, Serialize({
 		items = pl.RelapseInv.items,
-		model = pl.RelapseInv.model
+		model = pl.RelapseInv.model,
+		marks = self:ClampRelapseMarks(pl.RelapseInv.marks)
 	}))
 end
 
@@ -221,7 +225,36 @@ function GM:SyncRelapseInventory(pl)
 			net.WriteString(ids[i])
 		end
 		net.WriteString(self:GetRelapseEquippedModelId(pl) or "")
+		net.WriteUInt(math.min(self:GetRelapseMarks(pl), 4294967295), 32)
 	net.Send(pl)
+end
+
+function GM:SetRelapseMarks(pl, n)
+	if not IsValid(pl) or pl:IsBot() then return 0 end
+	self:EnsureRelapseInventory(pl, true)
+	pl.RelapseInv.marks = self:ClampRelapseMarks(n)
+	self:SaveRelapseInventory(pl)
+	self:SyncRelapseInventory(pl)
+	return pl.RelapseInv.marks
+end
+
+function GM:AddRelapseMarks(pl, n)
+	n = math.floor(tonumber(n) or 0)
+	if n == 0 or not IsValid(pl) or pl:IsBot() then
+		return self:GetRelapseMarks(pl)
+	end
+	self:EnsureRelapseInventory(pl, true)
+	pl.RelapseInv.marks = self:ClampRelapseMarks((pl.RelapseInv.marks or 0) + n)
+	self:SaveRelapseInventory(pl)
+	self:SyncRelapseInventory(pl)
+	return pl.RelapseInv.marks
+end
+
+function GM:GrantRelapseMarks(pl)
+	if not IsValid(pl) or pl:IsBot() then return 0 end
+	local gained = self:RollRelapseMarks()
+	self:AddRelapseMarks(pl, gained)
+	return gained
 end
 
 function GM:RefreshHumanHands(pl)
@@ -300,6 +333,10 @@ function GM:EquipRelapseModel(pl, id)
 
 	self:SyncRelapseInventory(pl)
 	return true
+end
+
+function GM:UnequipRelapseModel(pl)
+	return self:EquipRelapseModel(pl, self:GetRelapseDefaultModelId())
 end
 
 local function WriteOfflineInventory(gm, sid64, mutator)
@@ -418,5 +455,9 @@ net.Receive("relapse_inv_equip", function(_, pl)
 	pl.RelapseInvEquipAt = CurTime() + 0.25
 	local id = net.ReadString()
 	if not id or #id > 64 then return end
+	if id == "" then
+		GAMEMODE:UnequipRelapseModel(pl)
+		return
+	end
 	GAMEMODE:EquipRelapseModel(pl, id)
 end)

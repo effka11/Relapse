@@ -43,6 +43,7 @@ Offset крутится с моделью. «Выше/ниже в рамке» =
 | .357 | `(0, 0, 0)` | `(0, 0, 90)` | — | **0.7** | **1.65** |
 | 680 | `(0, 90, 0)` | — | `(0, 0, -1.2)` | **2.2** | 1.4 |
 | СКС | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -5)` | **3.5** | 1.4 |
+| MK2 | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -5)` | **3.5** | 1.4 |
 | Uzi | `(0, 0, 0)` | `(0, 0, 90)` | — | **2.2** | 1.4 |
 | MP5 | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -2)` | **2.2** | 1.4 |
 | UMP-45 | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -2)` | **2.2** | **1.6** |
@@ -55,8 +56,9 @@ Offset крутится с моделью. «Выше/ниже в рамке» =
 | FAL | `(0, 0, 0)` | `(0, 0, 90)` | `(0, 0, -3)` | **2.8** | 1.4 |
 | ПКМ | `(0, 90, 0)` | — | `(-6, 0, -3)` | **2.8** | 1.4 |
 | FiNN LMG | `(0, 90, 0)` | — | `(-6, 0, -3)` | **2.8** | 1.4 |
+| AX-50 | `(0, 90, 0)` | — | `(-6, 0, -3)` | **2.8** | 1.4 |
 
-Ближайший эталон для нового ствола: короткий −X → Макаров; короткий +Z → 1911/.357/M19; длинный −X / **+X** → 680 yaw 90 (ПКМ/FiNN: hull вдоль +X); длинный +Z → СКС; средний +Z (ПП) → Uzi; автомат +Z (SCAR, VAL, АК, Origin-12, M4A1, JAK-12, FAL) → сборка СКС (кадр SCAR Lift 2.8 Offset −3). У M4 default receiver — отдельный mdl, не пустой `att_receiver` АК. У FAL default receiver и forend — отдельные mdl (`attachments/falima/`, в паке `reciever`). У JAK-12 default stock/grip — `att_stock` / `att_grip`, не копировать Origin sidegrip/stock. Не копировать MP5 `[0]=1` на АК/SCAR/ПКМ/FiNN/M4/JAK-12/FAL. Не копировать 680 yaw 90 на Origin-12/JAK-12 (у 680 пустой WM, у Origin/JAK ресивер на variant 0). Не копировать SCAR `LocalAng 90` на ПКМ/FiNN (у SCAR hull +Z, у ПКМ/FiNN +X: roll крутит вокруг ствола).
+Ближайший эталон для нового ствола: короткий −X → Макаров; короткий +Z → 1911/.357/M19; длинный −X / **+X** → 680 yaw 90 (ПКМ/FiNN/AX-50: hull вдоль +X); длинный +Z → СКС / MK2; средний +Z (ПП) → Uzi; автомат +Z (SCAR, VAL, АК, Origin-12, M4A1, JAK-12, FAL) → сборка СКС (кадр SCAR Lift 2.8 Offset −3). У M4 default receiver — отдельный mdl, не пустой `att_receiver` АК. У FAL default receiver и forend — отдельные mdl (`attachments/falima/`, в паке `reciever`). У JAK-12 default stock/grip — `att_stock` / `att_grip`, не копировать Origin sidegrip/stock. Не копировать MP5 `[0]=1` на АК/SCAR/ПКМ/FiNN/M4/JAK-12/FAL/AX-50/MK2. Не копировать 680 yaw 90 на Origin-12/JAK-12 (у 680 пустой WM, у Origin/JAK ресивер на variant 0). Не копировать SCAR `LocalAng 90` на ПКМ/FiNN/AX-50 (у SCAR hull +Z, у ПКМ/FiNN/AX-50 +X: roll крутит вокруг ствола).
 
 ## Сборка — не копируй соседа
 
@@ -86,7 +88,7 @@ MW `v_` / `w_` часто пустые: руки + stub. Пушка сидит �
 | Кусок уже на WM | .357: цилиндр/grip на `w_357`; mag `ShowOnWorldModel=false` | Не дублировать. Лишний mdl без кости WM зависает в origin и уводит пивот. |
 | WM — пустой риг | 680: `w_romeo870` не рисует ствол, `j_gun` нет | Не dummy-only WM. Не bone-merge receiver на эту WM. Дефолтные аттачи, один origin. |
 | WM mesh не на bodygroup 0 | Uzi: `w_uzulu` receiver `[0]` = 0 verts, `[1]` = вся пушка | Dummy = WM + bodygroup 1. DrawModel после SetupBones вдоль +Z — hull + LocalAng 90 как СКС. Yaw 90 ставит ПП вертикально. |
-| WM mesh на bodygroup 0, `[1]` пустой | АК / SCAR / Origin-12 / JAK-12 / ПКМ / FiNN / M4 / FAL: `w_akilo47` / `w_scharlie` / `w_oscar12` / `w_aalpha12` / `w_pkilo` / `w_sierrax` / `w_mike4` / `w_falima` | **Не** копировать MP5 `[0]=1` — спрячет коробку, приклад останется на `tag_stock_attach` с дырой. Дефолт 0, как СКС. Origin-12 / JAK-12: не копировать 680 (пустой WM). ПКМ/FiNN: сборка как СКС, углы как 680 (hull +X). M4/FAL: default receiver — отдельный mdl, класть в PreviewParts. |
+| WM mesh на bodygroup 0, `[1]` пустой | АК / SCAR / Origin-12 / JAK-12 / ПКМ / FiNN / M4 / FAL / AX-50 / MK2: `w_akilo47` / `w_scharlie` / `w_oscar12` / `w_aalpha12` / `w_pkilo` / `w_sierrax` / `w_mike4` / `w_falima` / `w_alpha50` / `w_sbeta` | **Не** копировать MP5 `[0]=1` — спрячет коробку, приклад останется на `tag_stock_attach` с дырой. Дефолт 0, как СКС. Origin-12 / JAK-12: не копировать 680 (пустой WM). ПКМ/FiNN/AX-50: сборка как СКС, углы как 680 (hull +X). M4/FAL: default receiver — отдельный mdl, класть в PreviewParts. AX-50 default optic = irons (`att_sight`), не класть scope. MK2 default stock = `att_stock` on WM, barrel only; default optic = irons. |
 | WM — только рамка, пушка в аттачах | MP5: `w_mpapa5` `[0]=1` = receiver, mag/stock/barrel на `tag_*_attach` | Как СКС: dummy WM + extras. Не копируй Uzi (у Uzi вся пушка уже в variant 1). Кадр как Uzi: Lift 2.2, CamScale 1.4. |
 | Нет отдельного grip-аттача | Рамка = bodygroup receiver на `w_` **или** на att receiver (680: приклад на receiver) | Не выдумывай grip.mdl / stock.mdl. |
 
@@ -103,7 +105,7 @@ RelapsePreviewParts = { "models/viper/mw/weapons/w_romeo870.mdl" }
 -- ❌ Uzi как СКС: default WM пустой, extras без receiver → обломки в углу hull
 -- ❌ Uzi yaw 90: DrawModel вдоль +Z, ствол стоит вертикально
 -- ❌ MP5 как Uzi: только WM — рамка без магазина и приклада
--- ❌ АК/SCAR/Origin-12/ПКМ/FiNN/M4/JAK-12/FAL как MP5: `[0]=1` прячет коробку (у них variant 1 пустой / его нет)
+-- ❌ АК/SCAR/Origin-12/ПКМ/FiNN/M4/JAK-12/FAL/AX-50/MK2 как MP5: `[0]=1` прячет коробку (у них variant 1 пустой / его нет)
 -- ❌ Origin-12/JAK-12 как 680: yaw 90, без bone merge — WM уже ресивер вдоль +Z
 
 -- ✅ Макаров — эталон короткого −X; WM пустая, barrel + grip
@@ -145,13 +147,24 @@ RelapsePreviewOffset = Vector(0, 0, -1.2)
 RelapsePreviewLift = 2.2
 RelapsePreviewCamScale = 1.4
 
--- ✅ СКС — эталон длинного +Z; hull после SetupBones, не файл приклада
+-- ✅ СКС — эталон длинного +Z; hull после SetupBones, не файл приклада.
 RelapsePreviewBoneMerge = true
 RelapsePreviewHullBounds = true
 RelapsePreviewParts = { w_sksierra, barrel, mag, stock }
 RelapsePreviewAngle = Angle(0, 0, 0)
 RelapsePreviewLocalAng = Angle(0, 0, 90)
 RelapsePreviewOffset = Vector(0, 0, -5) -- к прикладу; hull начинается у руки
+RelapsePreviewLift = 3.5
+RelapsePreviewCamScale = 1.4
+
+-- ✅ MK2 — длинный +Z как СКС. Приклад уже на WM (att_stock). Barrel only.
+-- Default optic is att_sight (irons). Path: attachments/sbeta/. Do not copy MP5 [0]=1.
+RelapsePreviewBoneMerge = true
+RelapsePreviewHullBounds = true
+RelapsePreviewParts = { w_sbeta, barrel }
+RelapsePreviewAngle = Angle(0, 0, 0)
+RelapsePreviewLocalAng = Angle(0, 0, 90)
+RelapsePreviewOffset = Vector(0, 0, -5)
 RelapsePreviewLift = 3.5
 RelapsePreviewCamScale = 1.4
 
@@ -194,13 +207,14 @@ RelapsePreviewOffset = Vector(0, 0, -3)
 RelapsePreviewLift = 2.8
 RelapsePreviewCamScale = 1.4
 
--- ✅ ПКМ / FiNN LMG — сборка как СКС (WM + barrel/mag/stock), углы как 680.
+-- ✅ ПКМ / FiNN LMG / AX-50 — сборка как СКС (WM + barrel/mag/stock), углы как 680.
 -- Studio hull вдоль +X (дуло +X), не +Z. LocalAng 90 = roll вокруг ствола, пушка на боку.
 -- Default grip is att_grip — do not invent a bipod. Do not copy SCAR LocalAng 90.
 -- ПКМ: attachments/pkilo/, w_pkilo. FiNN: attachments/sierrax/, w_sierrax.
+-- AX-50: attachments/alpha50/, w_alpha50. Default optic is att_sight (irons), not the scope.
 RelapsePreviewBoneMerge = true
 RelapsePreviewHullBounds = true
-RelapsePreviewParts = { w_pkilo, barrel, mag, stock } -- FiNN: w_sierrax + sierrax/...
+RelapsePreviewParts = { w_pkilo, barrel, mag, stock } -- FiNN: w_sierrax + sierrax/...; AX-50: w_alpha50 + alpha50/...
 RelapsePreviewAngle = Angle(0, 90, 0)
 RelapsePreviewLocalAng = Angle(0, 0, 0)
 RelapsePreviewOffset = Vector(-6, 0, -3) -- hull center is muzzle-heavy; -X toward the stock
@@ -212,11 +226,11 @@ Dummy = `parts[1]`. Без bone merge панель **не** рисует dummy, 
 
 ## Углы
 
-`RelapsePreviewAngle` — орбита. Длинный/короткий ствол вдоль −X **или +X**: yaw 90, **pitch 0** (Макаров, 680, ПКМ, FiNN). Ствол вдоль +Z: `Angle(0,0,0)` + `LocalAng(0,0,90)` (1911, M19, .357, СКС, Uzi, SCAR, M4, JAK-12, FAL). Yaw 90 на Uzi/SCAR ставит ствол вертикально. Yaw 90 на ПКМ/FiNN — профиль: hull вдоль +X.
+`RelapsePreviewAngle` — орбита. Длинный/короткий ствол вдоль −X **или +X**: yaw 90, **pitch 0** (Макаров, 680, ПКМ, FiNN, AX-50). Ствол вдоль +Z: `Angle(0,0,0)` + `LocalAng(0,0,90)` (1911, M19, .357, СКС, MK2, Uzi, SCAR, M4, JAK-12, FAL). Yaw 90 на Uzi/SCAR ставит ствол вертикально. Yaw 90 на ПКМ/FiNN/AX-50 — профиль: hull вдоль +X.
 
 `RelapsePreviewLift` / `CamScale` — только из таблицы эталона. Не копировать СКС 3.5 / 1.4 на пистолет.
 
-Ствол **не** вдоль −X (WM в руке, при identity ствол вверх / +Z): **не** копируй `Angle(8, 90, 0)` и не yaw 90. Yaw 90 покажет торец. Орбита `Angle(0,0,0)` + local roll 90. Исключение: ПКМ/FiNN identity уже +X — yaw 90 как 680, **без** LocalAng 90.
+Ствол **не** вдоль −X (WM в руке, при identity ствол вверх / +Z): **не** копируй `Angle(8, 90, 0)` и не yaw 90. Yaw 90 покажет торец. Орбита `Angle(0,0,0)` + local roll 90. Исключение: ПКМ/FiNN/AX-50 identity уже +X — yaw 90 как 680, **без** LocalAng 90.
 
 Не складывай в один Euler `Angle(8, 90, 90)`. В `OrbitShopPreview`: матрица `orbit * local`, пивот той же матрицей. Не `Vector:Rotate` при ненулевом roll.
 

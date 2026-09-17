@@ -1308,15 +1308,7 @@ function GM:ToggleSkillWeb()
 	if self.SkillWeb and self.SkillWeb:IsValid() then
 		self.SkillWeb:Remove()
 		self.SkillWeb = nil
-		return
 	end
-
-	if not IsValid(MySelf) then
-		MySelf = LocalPlayer()
-	end
-	if not IsValid(MySelf) then return end
-
-	self.SkillWeb = vgui.Create("ZSSkillWeb")
 end
 
 local meta = FindMetaTable("Player")

@@ -9,6 +9,10 @@ function meta:AddInventoryItem(item)
 		self:ApplyTrinkets()
 	end
 
+	if GAMEMODE.RelapseInvOnGain then
+		GAMEMODE:RelapseInvOnGain(self, item)
+	end
+
 	net.Start("zs_inventoryitem")
 		net.WriteString(item)
 		net.WriteInt(self.ZSInventory[item], 5)
@@ -31,6 +35,10 @@ function meta:TakeInventoryItem(item)
 		self:ApplyTrinkets()
 	end
 
+	if GAMEMODE.RelapseInvOnLose then
+		GAMEMODE:RelapseInvOnLose(self, item)
+	end
+
 	net.Start("zs_inventoryitem")
 		net.WriteString(item)
 		net.WriteInt(self.ZSInventory[item] or 0, 5)
@@ -44,6 +52,11 @@ function meta:WipePlayerInventory()
 
 	self.ZSInventory = {}
 	self:ApplyTrinkets()
+
+	if GAMEMODE.RelapseInvSanitize then
+		GAMEMODE:RelapseInvSanitize(self)
+		GAMEMODE:RelapseLoadoutDirty(self)
+	end
 
 	net.Start("zs_wipeinventory")
 	net.Send(self)

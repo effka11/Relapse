@@ -52,8 +52,10 @@ include("vgui/dpingmeter.lua")
 include("vgui/dsidemenu.lua")
 include("vgui/dspawnmenu.lua")
 include("vgui/zsgamestate.lua")
+include("vgui/zswavenotify.lua")
 include("vgui/zshealtharea.lua")
 include("vgui/zsammoarea.lua")
+include("vgui/zsinvarea.lua")
 include("vgui/zsstatusarea.lua")
 
 include("cl_dermaskin.lua")
@@ -70,6 +72,7 @@ include("cl_relapse_carry_holster.lua")
 include("cl_relapse_freecam.lua")
 include("cl_relapse_wmpose.lua")
 include("cl_relapse_inventory.lua")
+include("cl_relapse_loadout.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -1155,7 +1158,8 @@ function GM:RestartRound()
 end
 
 function GM:_HUDShouldDraw(name)
-	if self.FilmMode and name ~= "CHudWeaponSelection" then return false end
+	if name == "CHudWeaponSelection" then return false end
+	if self.FilmMode then return false end
 
 	return name ~= "CHudHealth" and name ~= "CHudBattery"
 	and name ~= "CHudAmmo" and name ~= "CHudSecondaryAmmo"
@@ -1392,6 +1396,13 @@ function GM:EvaluateFilmMode()
 	if self.StatusHUD and self.StatusHUD:IsValid() then
 		self.StatusHUD:SetVisible(visible)
 	end
+
+	if self.InvHUD and self.InvHUD:IsValid() then
+		if not visible then
+			self.InvHUD:SetVisible(false)
+			self.InvHUD:SetAlpha(0)
+		end
+	end
 end
 
 function GM:CreateVGUI()
@@ -1416,7 +1427,7 @@ function GM:CreateVGUI()
 	self.CenterNotificationHUD.PerformLayout = function(pan)
 		pan:SetSize(ScrW() / 2, ScrH() * 0.35)
 		pan:CenterHorizontal()
-		pan:AlignBottom(16 * BetterScreenScale())
+		pan:AlignBottom(RelapseUI.Grid15(3) + RelapseUI.Grid15(4) + RelapseUI.Grid15())
 	end
 	self.CenterNotificationHUD:InvalidateLayout()
 	self.CenterNotificationHUD:ParentToHUD()
@@ -1433,6 +1444,10 @@ function GM:CreateLateVGUI()
 
 	if not self.StatusHUD then
 		self.StatusHUD = vgui.Create("ZSStatusArea")
+	end
+
+	if not self.InvHUD then
+		self.InvHUD = vgui.Create("ZSInvArea")
 	end
 
 	if not self.XPHUD then
@@ -1572,40 +1587,39 @@ function GM:_HUDPaintBackground()
 	end
 end
 
-local function GiveWeapon()
-	if GAMEMODE.HumanMenuLockOn then
-		RunConsoleCommand("zsgiveweapon", GAMEMODE.HumanMenuLockOn:EntIndex(), GAMEMODE.InventoryMenu.SelInv)
-	end
-end
-local function GiveWeaponClip()
-	if GAMEMODE.HumanMenuLockOn then
-		RunConsoleCommand("zsgiveweaponclip", GAMEMODE.HumanMenuLockOn:EntIndex(), GAMEMODE.InventoryMenu.SelInv)
-	end
-end
 local function DropWeapon()
 	RunConsoleCommand("zsdropweapon", GAMEMODE.InventoryMenu.SelInv)
 end
-local function EmptyClip()
-	RunConsoleCommand("zsemptyclip")
-end
-local function DismantleWeapon()
-	RunConsoleCommand("zs_dismantle", GAMEMODE.InventoryMenu.SelInv)
-end
 
 local function AltSelItemUpd()
+	if not (GAMEMODE.HumanMenuPanel and GAMEMODE.HumanMenuPanel:IsValid() and GAMEMODE.HumanMenuPanel.SelectedItemLabel) then return end
 	local activeweapon = MySelf:GetActiveWeapon()
 	if not activeweapon or not activeweapon:IsValid() then return end
 
 	local actwclass = activeweapon:GetClass()
-	GAMEMODE.HumanMenuPanel.SelectedItemLabel:SetText(weapons.Get(actwclass).PrintName)
+	local wep = weapons.Get(actwclass)
+	GAMEMODE.HumanMenuPanel.SelectedItemLabel:SetText(wep and RelapseUI.WepName(wep) or actwclass)
 end
 
 function GM:DoAltSelectedItemUpdate()
-	if self.InventoryMenu.SelInv then
-		self.HumanMenuPanel.SelectedItemLabel:SetText(self.ZSInventoryItemData[self.InventoryMenu.SelInv].PrintName)
-	else
-		timer.Simple(0.25, AltSelItemUpd)
+	if not (self.HumanMenuPanel and self.HumanMenuPanel:IsValid() and self.HumanMenuPanel.SelectedItemLabel) then return end
+	local frame = self.InventoryMenu
+	local sel = frame and frame.SelInv
+	local data = sel and self.ZSInventoryItemData[sel]
+	if data then
+		self.HumanMenuPanel.SelectedItemLabel:SetText(data.PrintName)
+		return
 	end
+	if frame and frame.SelKind == "ammo" and frame.SelId then
+		self.HumanMenuPanel.SelectedItemLabel:SetText(RelapseUI.ShopAmmo(frame.SelId))
+		return
+	end
+	if frame and frame.SelKind == "wep" and frame.SelId then
+		local wep = weapons.Get(frame.SelId)
+		self.HumanMenuPanel.SelectedItemLabel:SetText(wep and RelapseUI.WepName(wep) or frame.SelId)
+		return
+	end
+	timer.Simple(0.25, AltSelItemUpd)
 end
 
 function GM:HumanMenu()
@@ -1618,106 +1632,41 @@ function GM:HumanMenu()
 		self.HumanMenuLockOn = nil
 	end
 
+	if IsValid(self.HumanMenuPanel) and not self.HumanMenuPanel.RelapseDropOnly then
+		self.HumanMenuPanel:Remove()
+		self.HumanMenuPanel = nil
+		self.HumanMenuSupplyChoice = nil
+	end
+
 	self:OpenInventory()
 	if self.HumanMenuPanel and self.HumanMenuPanel:IsValid() then
-		self.HumanMenuPanel:SetVisible(true)
 		self.HumanMenuPanel:OpenMenu()
-
 		self:DoAltSelectedItemUpdate()
+		if self.FadeRelapseGameInv then
+			self:FadeRelapseGameInv(true)
+		end
 		return
 	end
 
+	RelapseUI.CreateFonts()
 	local panel = vgui.Create("DSideMenu")
 	self.HumanMenuPanel = panel
+	panel.RelapseDropOnly = true
 
-	local screenscale = BetterScreenScale()
-	for k, v in pairs(self.AmmoNames) do
-		local b = vgui.Create("DAmmoCounter", panel)
-		b:SetAmmoType(k)
-		b:SetTall(math.max(32, screenscale * 36))
-		panel:AddItem(b)
-	end
-
-	local hei = draw_GetFontHeight("ZSHUDFontSmall")
-
-	local selecteditemtitle = EasyLabel(panel, "Selected Item", "ZSHUDFontSmall", color_white)
-	selecteditemtitle:SetContentAlignment(5)
-	panel:AddItem(selecteditemtitle)
-
-	local selecteditemlabel = EasyLabel(panel, "Fists", "ZSHUDFontSmaller", color_white)
-	selecteditemlabel:SetContentAlignment(5)
-	panel:AddItem(selecteditemlabel)
-	panel.SelectedItemLabel = selecteditemlabel
-
-	local gwbtn = vgui.Create("DButton")
-	gwbtn:SetFont("ZSHUDFontSmaller")
-	gwbtn:SetText("Give Item")
-	gwbtn:SetSize(panel:GetWide() - 8 * screenscale, hei - 4 * screenscale)
-	gwbtn:CenterHorizontal()
-	gwbtn.DoClick = GiveWeapon
-	panel:AddItem(gwbtn)
-
-	gwbtn = vgui.Create("DButton")
-	gwbtn:SetFont("ZSHUDFontSmaller")
-	gwbtn:SetText("Give Item and 5 clips")
-	gwbtn:SetSize(panel:GetWide() - 8 * screenscale, hei - 4 * screenscale)
-	gwbtn:CenterHorizontal()
-	gwbtn.DoClick = GiveWeaponClip
-	panel:AddItem(gwbtn)
-
-	gwbtn = vgui.Create("DButton")
-	gwbtn:SetFont("ZSHUDFontSmaller")
-	gwbtn:SetText("Drop Item")
-	gwbtn:SetSize(panel:GetWide() - 8 * screenscale, hei - 4 * screenscale)
-	gwbtn:CenterHorizontal()
-	gwbtn.DoClick = DropWeapon
-	panel:AddItem(gwbtn)
-
-	gwbtn = vgui.Create("DButton")
-	gwbtn:SetFont("ZSHUDFontSmaller")
-	gwbtn:SetText("Empty Weapon Clip")
-	gwbtn:SetSize(panel:GetWide() - 8 * screenscale, hei - 4 * screenscale)
-	gwbtn:CenterHorizontal()
-	gwbtn.DoClick = EmptyClip
-	panel:AddItem(gwbtn)
-
-	gwbtn = vgui.Create("DButton")
-	gwbtn:SetFont("ZSHUDFontSmaller")
-	gwbtn:SetText("Dismantle Item")
-	gwbtn:SetSize(panel:GetWide() - 8 * screenscale, hei - 4 * screenscale)
-	gwbtn:CenterHorizontal()
-	gwbtn.DoClick = DismantleWeapon
-	panel:AddItem(gwbtn)
-
-	panel:AddItem(EasyLabel(panel, "Resupply Ammo Selection", "DefaultFont", color_white))
-	local dropdown = vgui.Create("DComboBox", panel)
-	dropdown:SetMouseInputEnabled(true)
-	dropdown:AddChoice("Resupply Held Weapon")
-	for k,v in pairs(self.AmmoResupply) do
-		dropdown:AddChoice(self.AmmoNames[k])
-	end
-	dropdown.OnSelect = function(me, index, value, data)
-		if value == "Resupply Held Weapon" then
-			MySelf.ResupplyChoice = nil
-			RunConsoleCommand("zs_resupplyammotype", "default")
-			return
-		end
-
-		for k,v in pairs(self.AmmoNames) do
-			if value == v then
-				MySelf.ResupplyChoice = k
-				RunConsoleCommand("zs_resupplyammotype", k)
-				break
-			end
-		end
-	end
-	dropdown:SetText("Resupply Held Weapon")
-	dropdown:SetTextColor(color_black)
-	panel:AddItem(dropdown)
-
-	self.HumanMenuSupplyChoice = dropdown
+	local btn = vgui.Create("DButton")
+	btn:SetFont("Relapse20")
+	btn:SetText(RelapseUI.T("inv_drop_item"))
+	btn:SetTall(RelapseUI.Grid15(3))
+	btn:SetPaintBackgroundEnabled(false)
+	btn.Paint = RelapseUI.PaintGhostButton
+	btn.DoClick = DropWeapon
+	panel:AddItem(btn)
 
 	panel:OpenMenu()
+	self:DoAltSelectedItemUpdate()
+	if self.FadeRelapseGameInv then
+		self:FadeRelapseGameInv(true)
+	end
 end
 
 function GM:ZombieSpawnMenu()
@@ -1738,6 +1687,12 @@ function GM:ZombieSpawnMenu()
 end
 
 function GM:PlayerBindPress(pl, bind, wasin)
+	if self.RelapseLoadoutBindPress and self:RelapseLoadoutBindPress(pl, bind, wasin) then
+		return true
+	end
+	if bind == "+menu" then
+		return true
+	end
 	if wasin and bind == "gm_showhelp" and self.RelapseInventoryOpen and self:RelapseInventoryOpen() then
 		self:CloseRelapseInventory()
 		return true
@@ -2126,48 +2081,81 @@ function GM:LocalPlayerDied(attackername)
 	end
 end
 
-function GM:KeyPress(pl, key)
-	if key == self.MenuKey then
-		local team = P_Team(pl)
-		if team == TEAM_HUMAN and pl:Alive() and not pl:IsHolding() then
-			gamemode.Call("HumanMenu")
-		elseif team == TEAM_ZOMBIE and not pl:Alive() then
-			gamemode.Call("ZombieSpawnMenu")
+function GM:IsMenuKeyDown()
+	if gui.IsGameUIVisible and gui.IsGameUIVisible() then return false end
+	if gui.IsConsoleVisible and gui.IsConsoleVisible() then return false end
+	if IsValid(MySelf) and MySelf.IsTyping and MySelf:IsTyping() then return false end
+	return input.IsKeyDown(self.MenuKeyCode or KEY_Q)
+end
+
+function GM:OnMenuKeyPress()
+	local pl = MySelf
+	if not IsValid(pl) then return end
+	local team = P_Team(pl)
+	if team == TEAM_HUMAN and pl:Alive() and not pl:IsHolding() then
+		gamemode.Call("HumanMenu")
+	elseif team == TEAM_ZOMBIE and not pl:Alive() then
+		gamemode.Call("ZombieSpawnMenu")
+	end
+end
+
+function GM:OnMenuKeyRelease()
+	if self.CloseRelapseGameInv then
+		self:CloseRelapseGameInv()
+		return
+	end
+	if self.CancelRelapseGameInvDrag then
+		self:CancelRelapseGameInvDrag()
+	end
+	if self.HumanMenuPanel and self.HumanMenuPanel:IsValid() then
+		if self.InventoryMenu and self.InventoryMenu:IsValid() then
+			self.InventoryMenu:SetVisible(false)
+
+			if self.ShowRelapseInvViewer then
+				self:ShowRelapseInvViewer(false, true)
+			elseif self.m_InvViewer and self.m_InvViewer:IsValid() then
+				self.m_InvViewer:SetVisible(false)
+			end
+
+			if self.SelectRelapseGameInv then
+				self:SelectRelapseGameInv(nil)
+			else
+				self.InventoryMenu.SelInv = nil
+				self:DoAltSelectedItemUpdate()
+			end
 		end
-	elseif key == IN_SPEED then
+
+		if self.HumanMenuSupplyChoice then
+			self.HumanMenuSupplyChoice:CloseMenu()
+		end
+	end
+end
+
+function GM:SetMenuKeyHeld(held)
+	held = held and true or false
+	if self.MenuKeyHeld == held then return end
+	self.MenuKeyHeld = held
+	if held then
+		self:OnMenuKeyPress()
+	else
+		self:OnMenuKeyRelease()
+	end
+end
+
+hook.Add("Think", "RelapseMenuKey", function()
+	local gm = GAMEMODE
+	if gm and gm.SetMenuKeyHeld then
+		gm:SetMenuKeyHeld(gm:IsMenuKeyDown())
+	end
+end)
+
+function GM:KeyPress(pl, key)
+	if key == IN_SPEED then
 		if pl:Alive() then
 			if P_Team(pl) == TEAM_HUMAN then
 				pl:DispatchAltUse()
 			elseif P_Team(pl) == TEAM_UNDEAD then
 				pl:CallZombieFunction0("AltUse")
-			end
-		end
-	end
-end
-
-function GM:KeyRelease(pl, key)
-	if key == self.MenuKey then
-		if self.HumanMenuPanel and self.HumanMenuPanel:IsValid() then
-			if self.InventoryMenu and self.InventoryMenu:IsValid() then
-				self.InventoryMenu:SetVisible(false)
-
-				if self.m_InvViewer and self.m_InvViewer:IsValid() then
-					self.m_InvViewer:SetVisible(false)
-				end
-			end
-
-			if self.HumanMenuSupplyChoice then
-				self.HumanMenuSupplyChoice:CloseMenu()
-			end
-
-			if self.InventoryMenu.SelInv then
-				self.InventoryMenu.SelInv = nil
-				self:DoAltSelectedItemUpdate()
-
-				local grid = self.InventoryMenu.Grid
-				for k, v in pairs(grid:GetChildren()) do
-					v.On = false
-				end
 			end
 		end
 	end

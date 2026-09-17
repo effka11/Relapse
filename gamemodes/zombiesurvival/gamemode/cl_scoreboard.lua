@@ -21,6 +21,13 @@ local function Ellipsize(text, font, maxW)
 	return ell
 end
 
+local function RemortCaption(pl)
+	if not (pl and pl:IsValid()) then return "" end
+	local n = pl:GetZSRemortLevel()
+	if not n or n < 1 then return "" end
+	return tostring(n)
+end
+
 local function RowMetrics(w)
 	local pad = RelapseUI.Grid15()
 	local avatar = RelapseUI.Grid15(2)
@@ -250,10 +257,6 @@ function PANEL:Init()
 	self.m_TitleLabel = title
 	self.RelapseTitle = title
 
-	self.m_ServerNameLabel = EasyLabel(self, GetHostName(), "Relapse20", RelapseUI.Col.Muted)
-	self.m_ServerNameLabel:SetContentAlignment(4)
-	self.m_ServerNameLabel:SizeToContents()
-
 	self.m_HumanHeading = vgui.Create("DTeamHeading", self)
 	self.m_HumanHeading:SetTeam(TEAM_HUMAN)
 	self.m_HumanHeading:SetMouseInputEnabled(false)
@@ -319,10 +322,6 @@ function PANEL:PerformLayout()
 	self.m_ZombieHeading:SetPos(zx, y)
 
 	RelapseUI.PlaceShopTitle(self.m_TitleLabel, L)
-	self.m_ServerNameLabel:SetText(GetHostName())
-	self.m_ServerNameLabel:SizeToContents()
-	local _, titleY = self.m_TitleLabel:GetPos()
-	self.m_ServerNameLabel:SetPos(self:GetWide() - L.pad - self.m_ServerNameLabel:GetWide(), titleY + RelapseUI.sPx(10))
 end
 
 function PANEL:Paint(w, h)
@@ -373,16 +372,6 @@ function PANEL:CreatePlayerPanel(pl)
 end
 
 function PANEL:RefreshScoreboard()
-	if IsValid(self.m_ServerNameLabel) then
-		self.m_ServerNameLabel:SetText(GetHostName())
-		self.m_ServerNameLabel:SizeToContents()
-		local L = self.RelapseLayout
-		if L then
-			local _, titleY = self.m_TitleLabel:GetPos()
-			self.m_ServerNameLabel:SetPos(self:GetWide() - L.pad - self.m_ServerNameLabel:GetWide(), titleY + RelapseUI.sPx(10))
-		end
-	end
-
 	if self.PlayerPanels == nil then self.PlayerPanels = {} end
 
 	for pl, panel in pairs(self.PlayerPanels) do
@@ -554,7 +543,28 @@ function PANEL:PerformLayout()
 		math.floor((h - self.m_ScoreLabel:GetTall()) * 0.5)
 	)
 
-	self.m_RemortLabel:SetVisible(false)
+	local remort = self.m_RemortLabel
+	local remortText = remort:GetText() or ""
+	if remortText == "" or remortText == " " then
+		remort:SetVisible(false)
+	else
+		remort:SetVisible(true)
+		remort:SetTextColor(RelapseUI.Col.Muted)
+		surface.SetFont("Relapse20")
+		local nickW, nickH = surface.GetTextSize(self.m_PlayerLabel:GetText() or "")
+		if not nickH or nickH < 1 then
+			nickH = RelapseUI.sPx(20)
+		end
+		surface.SetFont("Relapse15")
+		local remortW, remortH = surface.GetTextSize(remortText)
+		if not remortH or remortH < 1 then
+			remortH = RelapseUI.sPx(15)
+		end
+		local nickY = math.floor((h - nickH) * 0.5)
+		remort:SetSize(remortW, remortH)
+		remort:SetContentAlignment(4)
+		remort:SetPos(met.nameX + nickW + RelapseUI.sPx(15), nickY + nickH - remortH - RelapseUI.sPx(1))
+	end
 
 	self.m_ClassImage:SetSize(met.class, met.class)
 	self.m_ClassImage:SetPos(met.classX, math.floor((h - met.class) * 0.5))
@@ -582,7 +592,14 @@ function PANEL:RefreshPlayer()
 	end
 
 	local met = RowMetrics(self:GetWide())
-	self.m_PlayerLabel:SetText(Ellipsize(pl:Name(), "Relapse20", met.nameW))
+	local remortText = RemortCaption(pl)
+	local nameMax = met.nameW
+	if remortText ~= "" then
+		surface.SetFont("Relapse15")
+		local remortW = surface.GetTextSize(remortText)
+		nameMax = math.max(RelapseUI.Grid15(), met.nameW - RelapseUI.sPx(15) - remortW)
+	end
+	self.m_PlayerLabel:SetText(Ellipsize(pl:Name(), "Relapse20", nameMax))
 	self.m_PlayerLabel:SetTextColor(RelapseUI.Col.Text)
 
 	if pl:Team() == TEAM_HUMAN then
@@ -592,7 +609,9 @@ function PANEL:RefreshPlayer()
 	end
 	self.m_ScoreLabel:SetTextColor(RelapseUI.Col.Text)
 
-	self.m_RemortLabel:SetVisible(false)
+	self.m_RemortLabel:SetText(remortText)
+	self.m_RemortLabel:SetTextColor(RelapseUI.Col.Muted)
+	self.m_RemortLabel:SetVisible(remortText ~= "")
 
 	if IsValid(MySelf) and MySelf:Team() == TEAM_UNDEAD and pl:Team() == TEAM_UNDEAD and pl:GetZombieClassTable().Icon then
 		self.m_ClassImage:SetVisible(true)

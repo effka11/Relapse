@@ -16,12 +16,14 @@ GM.RelapseAmmoOrder = {
 	"9x19",
 	"45acp",
 	"357mag",
+	"3030win",
 	"12ga",
 	"9x39",
 	"556x45",
 	"762x39",
 	"762x51",
 	"762x54r",
+	"50bmg",
 }
 
 GM.RelapseAmmo = {
@@ -52,6 +54,13 @@ GM.RelapseAmmo = {
 		ShopCount = 12,
 		Icon = "ammo_pistol",
 		Model = "models/Items/BoxSRounds.mdl",
+	},
+	["3030win"] = {
+		PrintName = ".30-30",
+		Dollars = 0.50,
+		ShopCount = 12,
+		Icon = "ammo_rifle",
+		Model = "models/props_lab/box01a.mdl",
 	},
 	["12ga"] = {
 		PrintName = "12 gauge",
@@ -92,6 +101,13 @@ GM.RelapseAmmo = {
 		PrintName = "7.62×54R",
 		Dollars = 0.40,
 		ShopCount = 20,
+		Icon = "ammo_rifle",
+		Model = "models/props_lab/box01a.mdl",
+	},
+	["50bmg"] = {
+		PrintName = ".50 BMG",
+		Dollars = 2.50,
+		ShopCount = 5,
 		Icon = "ammo_rifle",
 		Model = "models/props_lab/box01a.mdl",
 	},
@@ -181,6 +197,9 @@ function GM:BindRelapseAmmoTables()
 		self.AmmoResupply[id] = true
 		self.AmmoToPurchaseNames[id] = "ammo_" .. id
 	end
+
+	self.AmmoToPurchaseNames["gaussenergy"] = "nail"
+	self.AmmoToPurchaseNames["battery"] = "25mkit"
 end
 
 function GM:RegisterRelapseAmmoShopItems()

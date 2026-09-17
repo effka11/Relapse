@@ -1,3 +1,60 @@
+RelapseUI = RelapseUI or {}
+
+-- SetAlpha on a parent fades 2D. DModelPanel draws 3D with its own GetAlpha
+-- (always 255) and playermodels ignore render.SetBlend. Fade blit uses an RT;
+-- once opaque, draw to the framebuffer so MSAA stays.
+function RelapseUI.PanelFadeAlpha(pnl)
+	local a = 1
+	while IsValid(pnl) do
+		a = a * (pnl:GetAlpha() / 255)
+		if a <= 0 then
+			return 0
+		end
+		pnl = pnl:GetParent()
+	end
+	return a
+end
+
+local FadeRT = {}
+
+local RT_POINT = bit.bor(1, 4, 8, 256)
+
+local function EnsureFadeRT(w, h)
+	w = math.max(1, math.floor(w))
+	h = math.max(1, math.floor(h))
+	local key = w .. "x" .. h
+	local slot = FadeRT[key]
+	if slot then
+		return slot.rt, slot.mat, w, h
+	end
+
+	local rt = GetRenderTargetEx(
+		"RelapseModelFade" .. key,
+		w,
+		h,
+		RT_SIZE_NO_CHANGE,
+		MATERIAL_RT_DEPTH_SEPARATE,
+		RT_POINT,
+		0,
+		IMAGE_FORMAT_RGBA8888
+	)
+	if not rt then
+		rt = GetRenderTarget("RelapseModelFade" .. key, w, h)
+	end
+	local mat = CreateMaterial("RelapseModelFadeMat" .. key, "UnlitGeneric", {
+		["$basetexture"] = rt:GetName(),
+		["$translucent"] = "1",
+		["$vertexalpha"] = "1",
+		["$vertexcolor"] = "1",
+		["$nolod"] = "1",
+		["$ignorez"] = "1"
+	})
+	mat:SetTexture("$basetexture", rt)
+	slot = {rt = rt, mat = mat}
+	FadeRT[key] = slot
+	return rt, mat, w, h
+end
+
 local PANEL = {}
 
 function PANEL:SetModel(strModelName)
@@ -48,20 +105,21 @@ function PANEL:DrawModel()
 	local ent = self.Entity
 	if not IsValid(ent) then return end
 
-	local leftx, topy = self:LocalToScreen(0, 0)
-	local rightx, bottomy = self:LocalToScreen(self:GetWide(), self:GetTall())
-	local curparent = self
-	while IsValid(curparent:GetParent()) do
-		curparent = curparent:GetParent()
-		local x1, y1 = curparent:LocalToScreen(0, 0)
-		local x2, y2 = curparent:LocalToScreen(curparent:GetWide(), curparent:GetTall())
-		leftx = math.max(leftx, x1)
-		topy = math.max(topy, y1)
-		rightx = math.min(rightx, x2)
-		bottomy = math.min(bottomy, y2)
+	if not self._RelapsePaintRT then
+		local leftx, topy = self:LocalToScreen(0, 0)
+		local rightx, bottomy = self:LocalToScreen(self:GetWide(), self:GetTall())
+		local curparent = self
+		while IsValid(curparent:GetParent()) do
+			curparent = curparent:GetParent()
+			local x1, y1 = curparent:LocalToScreen(0, 0)
+			local x2, y2 = curparent:LocalToScreen(curparent:GetWide(), curparent:GetTall())
+			leftx = math.max(leftx, x1)
+			topy = math.max(topy, y1)
+			rightx = math.min(rightx, x2)
+			bottomy = math.min(bottomy, y2)
+		end
+		render.SetScissorRect(leftx, topy, rightx, bottomy, true)
 	end
-
-	render.SetScissorRect(leftx, topy, rightx, bottomy, true)
 
 	if self.RelapseShopPreview and RelapseUI and RelapseUI.DrawShopPreviewGun then
 		RelapseUI.DrawShopPreviewGun(self, ent)
@@ -73,7 +131,87 @@ function PANEL:DrawModel()
 		end
 	end
 
-	render.SetScissorRect(0, 0, 0, 0, false)
+	if not self._RelapsePaintRT then
+		render.SetScissorRect(0, 0, 0, 0, false)
+	end
+end
+
+local function PaintModel3D(self, x, y, w, h)
+	local ent = self.Entity
+	local ang = self.aLookAngle
+	if not ang then
+		ang = (self.vLookatPos - self.vCamPos):Angle()
+	end
+
+	cam.Start3D(self.vCamPos, ang, self.fFOV, x, y, w, h, 5, self.FarZ or 4096)
+	render.SuppressEngineLighting(true)
+	render.SetLightingOrigin(ent:GetPos())
+	local amb = self.colAmbientLight or color_white
+	render.ResetModelLighting(amb.r / 255, amb.g / 255, amb.b / 255)
+	local col = self.colColor or color_white
+	render.SetColorModulation(col.r / 255, col.g / 255, col.b / 255)
+	render.SetBlend(1)
+	local lights = self.DirectionalLight
+	if lights then
+		for i = 0, 5 do
+			local lc = lights[i]
+			if lc then
+				render.SetModelLighting(i, lc.r / 255, lc.g / 255, lc.b / 255)
+			end
+		end
+	end
+	self:DrawModel()
+	render.SetBlend(1)
+	render.SetColorModulation(1, 1, 1)
+	render.SuppressEngineLighting(false)
+	cam.End3D()
+end
+
+function PANEL:Paint(w, h)
+	if not IsValid(self.Entity) then return end
+
+	self:LayoutEntity(self.Entity)
+
+	local fade = RelapseUI.PanelFadeAlpha(self)
+	if fade <= 0 then
+		self.LastPaint = RealTime()
+		return
+	end
+
+	-- Opaque window fade: draw to the framebuffer so MSAA stays.
+	-- Static card previews blit through an RT so 3D does not punch the glass.
+	if fade >= 1 and not self.RelapsePlayerPreviewStatic then
+		local x, y = self:LocalToScreen(0, 0)
+		PaintModel3D(self, x, y, w, h)
+		self.LastPaint = RealTime()
+		return
+	end
+
+	local rt, mat, rtW, rtH = EnsureFadeRT(w, h)
+	render.PushRenderTarget(rt)
+	render.OverrideAlphaWriteEnable(true, true)
+	render.Clear(0, 0, 0, 0, true, true)
+	self._RelapsePaintRT = true
+	PaintModel3D(self, 0, 0, w, h)
+	self._RelapsePaintRT = nil
+	render.OverrideAlphaWriteEnable(false)
+	render.PopRenderTarget()
+
+	-- 3D ignores parent SetAlpha. Blit as 2D with the window fade, and pin
+	-- the surface multiplier so PushRenderTarget cannot double-apply it.
+	local prevMul = surface.GetAlphaMultiplier and surface.GetAlphaMultiplier() or 1
+	if surface.SetAlphaMultiplier then
+		surface.SetAlphaMultiplier(1)
+	end
+	surface.SetDrawColor(255, 255, 255, math.floor(fade * 255 + 0.5))
+	surface.SetMaterial(mat)
+	local u, v = w / rtW, h / rtH
+	surface.DrawTexturedRectUV(0, 0, w, h, 0, 0, u, v)
+	if surface.SetAlphaMultiplier then
+		surface.SetAlphaMultiplier(prevMul)
+	end
+
+	self.LastPaint = RealTime()
 end
 
 function PANEL:LayoutEntity(ent)

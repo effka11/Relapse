@@ -375,7 +375,7 @@ GM:AddSkill(SKILL_BLOODLETTER, "Bloodletter", GOOD.."+100% blood armor generated
 																0,			4,					{SKILL_ANTIGEN}, TREE_HEALTHTREE)
 GM:AddSkill(SKILL_REGENERATOR, "Regenerator", GOOD.."Regenerate 1 health every 6s when below 60% health\n"..BAD.."-6 maximum health",
 																-5,			-2,					{}, TREE_HEALTHTREE)
-GM:AddSkill(SKILL_BLOODARMOR, "Blood Armor", GOOD.."Regenerate 1 blood armor every 8 seconds upto your blood armor max\nBase blood armor maximum is 20\nBase blood armor damage absorption is 50%\n"..BAD.."-13 maximum health",
+GM:AddSkill(SKILL_BLOODARMOR, "Blood Armor", GOOD.."Regenerate 1 blood armor every 8 seconds upto your blood armor max\nBase blood armor maximum is 15\nBase blood armor damage absorption is 50%\n"..BAD.."-13 maximum health",
 																2,			2,					{SKILL_IRONBLOOD, SKILL_BLOODLETTER, SKILL_D_HEMOPHILIA}, TREE_HEALTHTREE)
 GM:AddSkill(SKILL_IRONBLOOD, "Iron Blood", GOOD.."+25% damage reduction from blood armor\n"..GOOD.."Bonus doubled when health is 50% or less\n"..BAD.."-50% maximum blood armor",
 																2,			4,					{SKILL_HAEMOSTASIS, SKILL_CIRCULATION}, TREE_HEALTHTREE)
@@ -709,8 +709,9 @@ end)
 
 GM:SetSkillModifierFunction(SKILLMOD_BLOODARMOR, function(pl, amount)
 	local oldarmor = pl:GetBloodArmor()
-	local oldcap = pl.MaxBloodArmor or 20
-	local new = 20 + math.Clamp(amount, -20, 1000)
+	local base = (GAMEMODE.ZombieEscape and 0) or (GAMEMODE.HumanBloodArmor or 15)
+	local oldcap = pl.MaxBloodArmor or base
+	local new = math.max(0, base + math.Clamp(amount, -base, 1000))
 
 	pl.MaxBloodArmor = new
 
@@ -929,7 +930,7 @@ GM:SetSkillModifierFunction(SKILLMOD_BLOODARMOR_MUL, function(pl, amount)
 	pl.MaxBloodArmorMul = mul
 
 	local oldarmor = pl:GetBloodArmor()
-	local oldcap = pl.MaxBloodArmor or 20
+	local oldcap = pl.MaxBloodArmor or (GAMEMODE.HumanBloodArmor or 15)
 	local new = pl.MaxBloodArmor * mul
 
 	pl.MaxBloodArmor = new

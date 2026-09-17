@@ -70,7 +70,7 @@ function GM:_CreateMove(cmd)
 			end
 			local lockon = self.HumanMenuLockOn
 			if lockon then
-				if self:ValidMenuLockOnTarget(MySelf, lockon) and self.HumanMenuPanel and self.HumanMenuPanel:IsValid() and self.HumanMenuPanel:IsVisible() and MySelf:KeyDown(self.MenuKey) then
+				if self:ValidMenuLockOnTarget(MySelf, lockon) and self.HumanMenuPanel and self.HumanMenuPanel:IsValid() and self.HumanMenuPanel:IsVisible() and self:IsMenuKeyDown() then
 					local oldang = cmd:GetViewAngles()
 					local newang = (lockon:EyePos() - EyePos()):Angle()
 					--oldang.pitch = math.ApproachAngle(oldang.pitch, newang.pitch, FrameTime() * math.max(45, math.abs(math.AngleDifference(oldang.pitch, newang.pitch)) ^ 1.3))

@@ -3,9 +3,6 @@ local PANEL = {}
 PANEL.NextRefresh = 0
 PANEL.RefreshTime = 1
 
-local col2 = Color(190, 150, 80, 210)
-local coldark = Color(0, 0, 0, 100)
-
 local function GetTargetEntIndex()
 	return GAMEMODE.HumanMenuLockOn and GAMEMODE.HumanMenuLockOn:IsValid() and GAMEMODE.HumanMenuLockOn:EntIndex() or 0
 end
@@ -19,33 +16,31 @@ local function GiveDoClick(self)
 end
 
 function PANEL:Init()
-	local font = "ZSAmmoName"
-	self.m_AmmoCountLabel = EasyLabel(self, "0", font, color_black)
+	RelapseUI.CreateFonts()
+	self.m_AmmoCountLabel = EasyLabel(self, "0", "Relapse20", RelapseUI.Col.Text)
+	self.m_AmmoTypeLabel = EasyLabel(self, " ", "Relapse15", RelapseUI.Col.Muted)
 
-	self.m_AmmoTypeLabel = EasyLabel(self, " ", font, col2)
-
-	self.m_DropButton = vgui.Create("DImageButton", self)
-	self.m_DropButton:SetImage("icon16/box.png")
-	self.m_DropButton:SizeToContents()
-	self.m_DropButton:SetTooltip("Drop")
+	self.m_DropButton = vgui.Create("DButton", self)
+	self.m_DropButton:SetFont("Relapse15")
+	self.m_DropButton:SetText(RelapseUI.T("inv_drop"))
+	self.m_DropButton:SetTooltip(RelapseUI.T("inv_drop"))
+	self.m_DropButton:SetPaintBackgroundEnabled(false)
+	self.m_DropButton.Paint = RelapseUI.PaintGhostButton
 	self.m_DropButton.DoClick = DropDoClick
 
-	self.m_GiveButton = vgui.Create("DImageButton", self)
-	self.m_GiveButton:SetImage("icon16/user_go.png")
-	self.m_GiveButton:SizeToContents()
-	self.m_GiveButton:SetTooltip("Give")
+	self.m_GiveButton = vgui.Create("DButton", self)
+	self.m_GiveButton:SetFont("Relapse15")
+	self.m_GiveButton:SetText(RelapseUI.T("inv_give"))
+	self.m_GiveButton:SetTooltip(RelapseUI.T("inv_give"))
+	self.m_GiveButton:SetPaintBackgroundEnabled(false)
+	self.m_GiveButton.Paint = RelapseUI.PaintGhostButton
 	self.m_GiveButton.DoClick = GiveDoClick
 
 	self:SetAmmoType("pistol")
 end
 
-local colBG = Color(5, 5, 5, 180)
-function PANEL:Paint()
-	local tall = self:GetTall()
-	local csize = tall - 8
-	draw.RoundedBoxEx(8, 0, 0, self:GetWide(), tall, colBG)
-	draw.RoundedBox(4, 8, tall * 0.5 - csize * 0.5, csize, csize, col2)
-
+function PANEL:Paint(w, h)
+	RelapseUI.PaintCard(self, w, h, false, false, false)
 	return true
 end
 
@@ -58,33 +53,35 @@ end
 
 function PANEL:RefreshContents()
 	local count = MySelf:GetAmmoCount(self:GetAmmoType())
-
-	self.m_AmmoCountLabel:SetTextColor(count == 0 and coldark or color_black)
+	self.m_AmmoCountLabel:SetTextColor(count == 0 and RelapseUI.Col.Muted or RelapseUI.Col.Text)
 	self.m_AmmoCountLabel:SetText(count)
 	self.m_AmmoCountLabel:SizeToContents()
-
 	self:InvalidateLayout()
 end
 
-function PANEL:PerformLayout()
-	self.m_AmmoTypeLabel:Center()
+function PANEL:PerformLayout(w, h)
+	w = w or self:GetWide()
+	h = h or self:GetTall()
+	local pad = RelapseUI.Grid5()
+	local btnW = RelapseUI.Grid15(4)
+	local btnH = RelapseUI.Grid15(2)
 
-	self.m_AmmoCountLabel:SetPos(8 + (self:GetTall() - 8) * 0.5 - self.m_AmmoCountLabel:GetWide() / 2, 0)
-	self.m_AmmoCountLabel:CenterVertical()
+	self.m_GiveButton:SetSize(btnW, btnH)
+	self.m_DropButton:SetSize(btnW, btnH)
+	local by = math.floor((h - btnH) * 0.5 + 0.5)
+	self.m_DropButton:SetPos(w - pad - btnW, by)
+	self.m_GiveButton:SetPos(w - pad - btnW * 2 - RelapseUI.Grid5(), by)
 
-	self.m_DropButton:AlignTop(1)
-	self.m_DropButton:AlignRight(8)
-
-	self.m_GiveButton:AlignBottom(1)
-	self.m_GiveButton:AlignRight(8)
+	self.m_AmmoCountLabel:SetPos(RelapseUI.Grid15(), math.floor((h - self.m_AmmoCountLabel:GetTall()) * 0.5 + 0.5))
+	local nameX = RelapseUI.Grid15() + RelapseUI.Grid15(3)
+	self.m_AmmoTypeLabel:SetPos(nameX, math.floor((h - self.m_AmmoTypeLabel:GetTall()) * 0.5 + 0.5))
+	self.m_AmmoTypeLabel:SetWide(math.max(1, w - nameX - pad - btnW * 2 - RelapseUI.Grid5()))
 end
 
 function PANEL:SetAmmoType(ammotype)
 	self.m_AmmoType = ammotype
-
-	self.m_AmmoTypeLabel:SetText(GAMEMODE.AmmoNames[ammotype] or ammotype)
+	self.m_AmmoTypeLabel:SetText(RelapseUI.ShopAmmo(ammotype))
 	self.m_AmmoTypeLabel:SizeToContents()
-
 	self:RefreshContents()
 end
 
