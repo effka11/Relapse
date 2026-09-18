@@ -1,35 +1,44 @@
 ---
-description: Relapse ladder hold — world hatch is engine unstick, not a trace problem. NOCLIP on hold.
+description: Relapse ladder hold — FLY unsticks hatches; NOCLIP on hold. Closed ceiling is a horizontal brush line from air, not FLY.
 globs: gamemodes/zombiesurvival/gamemode/player_movement/**/*ladder*,gamemodes/zombiesurvival/gamemode/player_movement/shared/player_movement.lua,gamemodes/zombiesurvival/entities/entities/relapse_ladder_clip.lua
 alwaysApply: true
 ---
 
 # Relapse лестница: hold сквозь люк
 
-Кастомный клип, не `MOVETYPE_LADDER`. `Move` true не отменяет столкновение **мира** у `FLY`: корпус чуть входит в плиту — движок выталкивает. Чем глубже, тем сильнее. Спринт чуть дальше, пройти нельзя.
+Кастомный клип, не `MOVETYPE_LADDER`.
 
-Так выглядит **engine unstick**, не `PullHitPos`. Не лечить hop / duck hull / extra 8 / `FloorUnder` 12×12 / snap `SeatXY(0)`.
+**Чуть в стене, чем глубже тем сильнее оттяг, спринт чуть дальше** — engine unstick. `Move` true не отменяет коллизию мира у `FLY`. Не hop / duck hull / extra 8 / `FloorUnder` 12×12 / snap `SeatXY(0)` / `PullHitPos`.
 
-Код: `SetClimbing` / `RelapseLadderClimb` в `relapse_ladder.lua`. `GM:Move` зовёт climb **до** early-out по noclip.
+**Сквозь глухой потолок** — hold `NOCLIP` без стопа по Z. Не возвращать `FLY`.
+
+Код: `SetClimbing` / `ClimbWorldStop` / `RelapseLadderClimb` в `relapse_ladder.lua`. `GM:Move` зовёт climb **до** early-out по noclip. Наш hold-noclip не `RelapseNoclip`: climb не `return false` из-за `GetMoveType()==NOCLIP`.
 
 | | |
 |---|---|
-| Hold | `MOVETYPE_NOCLIP` (не `FLY`) |
-| XY | как посадил `TrySeat`, только Z |
+| Hold | `MOVETYPE_NOCLIP` |
+| XY | как `TrySeat`, только Z |
+| Потолок | BRUSHONLY из воздуха: вверх голова `hull.z`, вниз ноги. Hit, не небо, abs n.z > 0.5 → `dest.z = origin.z` |
+| Люк | линия в дырку **или** `StartSolid` в плите — dest не трогать |
+| Filter | все `RelapseLadderClip` |
 | Leave | край `ClimbZRange` и stand hull не `StartSolid` |
 | Space/E | `UnstickForLeave` |
-| Клип для ходьбы | стена. `OpenFaceSlabs`, `STAND_OFF` 24, `IN_DUCK` не трогать |
-| Ghost | только пропы. Админский `RelapseNoclip` не перехватывать |
+| Не трогать | `OpenFaceSlabs`, `STAND_OFF` 24, `IN_DUCK`, `ClimbZRange` |
+| Ghost | пропы. `RelapseNoclip` не перехватывать |
+
+Extra 16 над глухим полом линия остановит — это не дырка. Проход, если XY посадки в отверстии.
 
 ```lua
--- ❌ FLY + трасса «рим vs стена». Move true, мир всё равно выталкивает
+-- ❌ FLY (unstick) / стоп StartSolid (люк) / HitPos по XY
 pl:SetMoveType(MOVETYPE_FLY)
-origin = PullHitPos(...)
+if tr.StartSolid or math.abs(n.z) <= 0.5 then dest = PullHitPos(tr) end
 
--- ✅ hold без коллизии мира; XY не двигать
+-- ✅ NOCLIP; стоп только горизонталь из воздуха
 pl:SetMoveType(MOVETYPE_NOCLIP)
 dest = Vector(origin.x, origin.y, destZ)
--- leave только если не HullTrace(dest).StartSolid
+if not tr.StartSolid and tr.Hit and math.abs(tr.HitNormal.z) > 0.5 then
+	dest = Vector(dest.x, dest.y, origin.z)
+end
 ```
 
 `changelevel`, не `restart`.

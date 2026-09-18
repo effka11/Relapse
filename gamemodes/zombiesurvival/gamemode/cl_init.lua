@@ -1102,10 +1102,149 @@ function GM:DrawNestIndicators()
 	end
 end
 
+-- Vanish is tighter than the ladder E sphere.
+-- Letter: 1 far, close-out to 0 at inner (vanishR - peak).
+-- Hint: 0 far, fade-in 104 from that inner circle (same as ladder from its oval).
+local SIGIL_VANISH_RADIUS = 64
+local SIGIL_HINT_FADE_OUT = 40
+local colSigilHint = Color(0, 0, 0, 255)
+local sigilHintFont
+
+local function SigilVanishRadius()
+	return SIGIL_VANISH_RADIUS
+end
+
+local function SigilHintAppearRadius()
+	return (GAMEMODE and GAMEMODE.RelapseLadderUseRadius) or 104
+end
+
+local function SigilHintPeak(useR)
+	local peak = SIGIL_HINT_FADE_OUT
+	if peak > useR * 0.45 then peak = useR * 0.45 end
+	if peak < 16 then peak = 16 end
+	return peak
+end
+
+-- RelapseLadderHint: 0 at/inside oval and at outer, 1 in the middle.
+local function SigilGapAlpha(gap, outer)
+	if gap <= 0 or gap >= outer then return 0 end
+	local peak = SIGIL_HINT_FADE_OUT
+	if peak > outer * 0.45 then peak = outer * 0.45 end
+	if peak < 16 then peak = 16 end
+	if gap <= peak then
+		local t = gap / peak
+		return t * (2 - t)
+	end
+	local t = (outer - gap) / (outer - peak)
+	if t < 0 then return 0 end
+	if t > 1 then return 1 end
+	return t
+end
+
+local function SigilCircleDist(ent)
+	local pl = LocalPlayer()
+	if not IsValid(pl) or not IsValid(ent) then return math.huge end
+	local ppos = pl:GetPos()
+	local spos = ent:GetPos()
+	local dx, dy = ppos.x - spos.x, ppos.y - spos.y
+	return math.sqrt(dx * dx + dy * dy)
+end
+
+-- Inner edge of the vanish circle. 0 on/inside, 1 at vanishR.
+local function SigilCloseAlpha(dist)
+	local vanishR = SigilVanishRadius()
+	local peak = SigilHintPeak(vanishR)
+	local gap = dist - (vanishR - peak)
+	if gap <= 0 then return 0 end
+	if gap >= peak then return 1 end
+	local t = gap / peak
+	return t * (2 - t)
+end
+
+local function SigilLetterAlpha(dist)
+	if dist >= SigilVanishRadius() then return 1 end
+	return SigilCloseAlpha(dist)
+end
+
+local function SigilHintAlpha(dist)
+	local vanishR = SigilVanishRadius()
+	local appearR = SigilHintAppearRadius()
+	local innerR = vanishR - SigilHintPeak(vanishR)
+	return SigilGapAlpha(dist - innerR, appearR)
+end
+
+local function EnsureSigilHintFont()
+	if sigilHintFont then return end
+	sigilHintFont = true
+	surface.CreateFont("RelapseSigilHint", {
+		font = "Manrope",
+		size = 60,
+		weight = 500,
+		antialias = true,
+		extended = true,
+		shadow = false,
+		outline = false,
+	})
+end
+
+local function DrawSigilUseHint(sigil, circleDist)
+	if sigil:GetSigilCorrupted() then return end
+	local alpha = SigilHintAlpha(circleDist)
+	if alpha <= 0.02 then return end
+
+	local pl = LocalPlayer()
+	local spos = sigil:GetPos()
+	local ppos = pl:GetPos()
+	local dx, dy = ppos.x - spos.x, ppos.y - spos.y
+	if circleDist < 1 then return end
+	local c, s = dx / circleDist, dy / circleDist
+
+	local wm, wx = sigil:WorldSpaceAABB()
+	local z = spos.z + 16
+	if wm and wx and wx.z > wm.z + 8 then
+		z = wm.z + math.min(16, (wx.z - wm.z) * 0.3)
+	end
+
+	local drawAt = Vector(spos.x + c * 2, spos.y + s * 2, z)
+	local look = EyePos()
+	if look:DistToSqr(drawAt) < 36 then return end
+
+	local key = RelapseHint and RelapseHint.BindLabel("+use") or "E"
+	local txt = translate.Format("press_e_to_teleport_sigil", key)
+	if not txt or txt == "" then return end
+
+	local ang = (look - drawAt):Angle()
+	ang:RotateAroundAxis(ang:Right(), 270)
+	ang:RotateAroundAxis(ang:Up(), 90)
+
+	local col = RelapseUI and RelapseUI.Col and RelapseUI.Col.Text
+	colSigilHint.r = col and col.r or 220
+	colSigilHint.g = col and col.g or 220
+	colSigilHint.b = col and col.b or 220
+	colSigilHint.a = math.floor(alpha * 255 + 0.5)
+
+	EnsureSigilHintFont()
+	local fog = render_GetFogMode()
+	cam_IgnoreZ(true)
+	render_FogMode(0)
+	cam_Start3D2D(drawAt, ang, 0.05)
+	surface.SetAlphaMultiplier(alpha)
+	draw.SimpleText(txt, "RelapseSigilHint", 0, 0, colSigilHint, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+	surface.SetAlphaMultiplier(1)
+	cam_End3D2D()
+	render_FogMode(fog)
+	cam_IgnoreZ(false)
+end
+
 function GM:DrawSigilIndicators()
 	if not self:GetUseSigils() then return end
 
-	local health, pos, distance, maxhealth, frac, ang, alpha
+	local pl = LocalPlayer()
+	local showHint = IsValid(pl) and pl:Alive() and pl:Team() == TEAM_HUMAN
+		and not self.FilmMode and not IsValid(pl.SigilTeleport)
+		and self:NumUncorruptedSigils() >= 2
+
+	local health, pos, distance, maxhealth, frac, ang, alpha, letterA
 	local eyepos = EyePos()
 
 	for i, sigil in pairs(GAMEMODE.CachedSigils) do
@@ -1119,23 +1258,34 @@ function GM:DrawSigilIndicators()
 
 			maxhealth = sigil:GetSigilMaxHealth()
 			frac = maxhealth > 0 and health / maxhealth or 0
-			alpha = math.min(220, math.sqrt(distance / 4))
 
-			ang = (eyepos - pos):Angle()
-			ang:RotateAroundAxis(ang:Right(), 270)
-			ang:RotateAroundAxis(ang:Up(), 90)
+			local dist = math.sqrt(distance)
+			local circleDist = SigilCircleDist(sigil)
+			local close = SigilLetterAlpha(circleDist)
+			alpha = math.floor(math.min(220, math.sqrt(distance / 4)) * close + 0.5)
+			letterA = math.floor(close * 255 + 0.5)
 
-			cam_IgnoreZ(true)
-			cam_Start3D2D(pos, ang, math.max(250, math.sqrt(distance)) / 5000)
-			local oldfogmode = render_GetFogMode()
-			render_FogMode(0)
+			if alpha > 4 or letterA > 4 then
+				ang = (eyepos - pos):Angle()
+				ang:RotateAroundAxis(ang:Right(), 270)
+				ang:RotateAroundAxis(ang:Up(), 90)
 
-			RelapseUI.SigilFromEnt(sigil, colSigilHud)
-			RelapseUI.PaintWorldSigil(string.char(64 + i), frac, colSigilHud, alpha)
+				cam_IgnoreZ(true)
+				cam_Start3D2D(pos, ang, math.max(250, dist) / 5000)
+				local oldfogmode = render_GetFogMode()
+				render_FogMode(0)
 
-			render_FogMode(oldfogmode)
-			cam_End3D2D()
-			cam_IgnoreZ(false)
+				RelapseUI.SigilFromEnt(sigil, colSigilHud)
+				RelapseUI.PaintWorldSigil(string.char(64 + i), frac, colSigilHud, alpha, letterA)
+
+				render_FogMode(oldfogmode)
+				cam_End3D2D()
+				cam_IgnoreZ(false)
+			end
+
+			if showHint then
+				DrawSigilUseHint(sigil, circleDist)
+			end
 		end
 	end
 end
@@ -1658,7 +1808,7 @@ function GM:HumanMenu()
 	btn:SetText(RelapseUI.T("inv_drop_item"))
 	btn:SetTall(RelapseUI.Grid15(3))
 	btn:SetPaintBackgroundEnabled(false)
-	btn.Paint = RelapseUI.PaintGhostButton
+	btn.Paint = RelapseUI.PaintPrimaryButton
 	btn.DoClick = DropWeapon
 	panel:AddItem(btn)
 

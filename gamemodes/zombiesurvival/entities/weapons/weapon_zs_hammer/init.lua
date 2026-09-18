@@ -73,7 +73,7 @@ function SWEP:OnMeleeHit(hitent, hitflesh, tr)
 			hitent.ReinforceApplier = owner
 		end
 
-		local healstrength = self.HealStrength * GAMEMODE.NailHealthPerRepair * (owner.RepairRateMul or 1)
+		local healstrength = self.HealStrength * GAMEMODE.NailHealthPerRepair * GAMEMODE:GetRepairPercentMul(owner)
 		local oldhealth = hitent:GetBarricadeHealth()
 		if oldhealth <= 0 or oldhealth >= hitent:GetMaxBarricadeHealth() or hitent:GetBarricadeRepairs() <= 0.01 then return end
 

@@ -248,6 +248,7 @@ RelapseUI.InvSlotIconZoom = {
 	mg_357 = 1.15,
 	mg_makarov = 1.4,
 	mg_me_t9cane = 1.4,
+	mg_mike4 = 1.2,
 }
 -- Extra-grid px, +x is right, +y is down.
 RelapseUI.InvSlotIconShift = {
@@ -260,6 +261,7 @@ RelapseUI.InvSlotIconShift = {
 	mg_357 = { -2, 2 },
 	mg_makarov = { -4, 1 },
 	mg_me_t9cane = { -1, 2 },
+	mg_mike4 = { -4, 1 },
 }
 
 function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
@@ -2623,7 +2625,7 @@ function RelapseUI.CreateWorldFonts()
 	RelapseUI._WorldFonts = true
 	surface.CreateFont("Relapse3D", {
 		font = "Manrope",
-		size = 128,
+		size = 135,
 		weight = 500,
 		antialias = true,
 		extended = true,
@@ -2636,13 +2638,19 @@ local colWorldText = Color(0, 0, 0, 255)
 local matWorldSigil
 
 -- Through-wall sigil: grayscale photo of the post, Fog/Gray/Wine multiply, 120° shadow.
-function RelapseUI.PaintWorldSigil(letter, frac, col, alpha)
+-- letterAlpha nil = same as the icon. 0 skips the caption.
+function RelapseUI.PaintWorldSigil(letter, frac, col, alpha, letterAlpha)
 	RelapseUI.CreateWorldFonts()
 	if not matWorldSigil then
 		matWorldSigil = Material("zombiesurvival/relapse_sigil.png")
 	end
 	frac = math.Clamp(frac or 0, 0, 1)
 	alpha = math.Clamp(alpha or 255, 0, 255)
+	if letterAlpha == nil then
+		letterAlpha = alpha
+	else
+		letterAlpha = math.Clamp(letterAlpha, 0, 255)
+	end
 	local c = RelapseUI.Col
 	local shadow = 8
 	local x, y, w, h = -64, -128, 128, 256
@@ -2660,8 +2668,10 @@ function RelapseUI.PaintWorldSigil(letter, frac, col, alpha)
 		surface.DrawTexturedRectUV(x, y, w, h * missing, 0, 0, 1, missing)
 	end
 
-	colWorldText.r, colWorldText.g, colWorldText.b, colWorldText.a = col.r, col.g, col.b, alpha
-	RelapseUI.HudText(letter, "Relapse3D", 0, y + h + 8, colWorldText, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, shadow)
+	if letterAlpha > 4 and letter and letter ~= "" then
+		colWorldText.r, colWorldText.g, colWorldText.b, colWorldText.a = col.r, col.g, col.b, letterAlpha
+		RelapseUI.HudText(letter, "Relapse3D", 0, y + h + 8, colWorldText, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, shadow)
+	end
 end
 
 -- Scratch buffers only. Values are always overwritten from RelapseUI.Col.

@@ -499,6 +499,14 @@ GM.CycleGridCatalog = {
 		U = 20,
 		Recoil = -0.03
 	},
+	build_1 = {
+		tree = "build",
+		slot = 0,
+		nameKey = "grid_skill_build_1",
+		descKey = "grid_skill_build_1_desc",
+		U = 20,
+		Repair = 0.04
+	},
 	vitality_2 = {
 		tree = "vitality",
 		slot = 1,

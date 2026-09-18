@@ -72,6 +72,7 @@ local FLY = MOVETYPE_FLY
 
 local P_ExitLadder = FindMetaTable("Player").ExitLadder
 local MASK_PLAYERSOLID = MASK_PLAYERSOLID
+local MASK_SOLID_BRUSHONLY = MASK_SOLID_BRUSHONLY
 
 local cache = {}
 local cacheUntil = 0
@@ -616,9 +617,30 @@ local function DepenetrateOutward(pl, origin, clip, ghost, mins, maxs)
 	return origin, ghost
 end
 
--- Keep mount XY. Floors do not stop Z. Extra stays whatever TrySeat set.
+-- Keep mount XY. Extra stays whatever TrySeat set. Closed floors stop in
+-- ClimbWorldStop, not here.
 local function ClimbSqueeze(pl, clip, origin, destZ, ghost)
 	return Vector(origin.x, origin.y, destZ), ghost
+end
+
+-- NOCLIP hold ignores world. Stop Z only if a brush line from air hits a
+-- floor/ceiling. Vertical rim and StartSolid in the slab do not stop.
+local function ClimbWorldStop(origin, dest, hullZ)
+	if not origin or not dest or dest.z == origin.z then return dest end
+	local h = dest.z > origin.z and (hullZ or 72) or 0
+	local tr = util.TraceLine({
+		start = Vector(origin.x, origin.y, origin.z + h),
+		endpos = Vector(dest.x, dest.y, dest.z + h),
+		mask = MASK_SOLID_BRUSHONLY,
+		filter = function(ent)
+			return not (IsValid(ent) and ent.RelapseLadderClip)
+		end,
+	})
+	if tr.StartSolid then return dest end
+	if not tr.Hit or tr.HitSky then return dest end
+	local n = tr.HitNormal
+	if not n or math.abs(n.z) <= 0.5 then return dest end
+	return Vector(dest.x, dest.y, origin.z)
 end
 
 local function UnstickForLeave(pl, origin, clip)
@@ -1122,6 +1144,7 @@ function GM:RelapseLadderClimb(pl, mv)
 	local z = math.Clamp(pos.z + wish * speed * dt, zmin - pad, zmax + pad)
 	local ghost = LadderGhostOn(pl)
 	local dest = ClimbSqueeze(pl, clip, pos, z, ghost)
+	dest = ClimbWorldStop(pos, dest, hx and hx.z)
 
 	if CurTime() > (pl.RelapseLadderMountedAt or 0) + 0.15 then
 		local atEnd = (wish > 0 and dest.z >= zmax - 0.5) or (wish < 0 and dest.z <= zmin + 0.5)

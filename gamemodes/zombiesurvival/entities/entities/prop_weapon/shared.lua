@@ -4,7 +4,11 @@ ENT.Base = "prop_baseoutlined"
 ENT.NoNails = true
 
 function ENT:HumanHoldable(pl)
-	return pl:KeyDown(GAMEMODE.UtilityKey) or (pl:HasWeapon(self:GetWeaponType()) and self:GetClip1() == 0 and self:GetClip2() == 0)
+	if pl:KeyDown(GAMEMODE.UtilityKey) then return true end
+	if not pl:HasWeapon(self:GetWeaponType()) then return false end
+	-- GetClip1 is server-only. Unknown clips are not an empty husk.
+	if not self.GetClip1 then return false end
+	return self:GetClip1() == 0 and self:GetClip2() == 0
 end
 
 function ENT:SetWeaponType(class)

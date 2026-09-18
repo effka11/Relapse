@@ -449,6 +449,118 @@ concommand.Add("relapse_inv_take", function(pl, _, args)
 	print("took " .. id .. " from " .. sid64 .. " (offline)")
 end)
 
+local function ReplyGiveMarks(pl, msg)
+	print(msg)
+	if IsValid(pl) then
+		pl:PrintMessage(HUD_PRINTCONSOLE, msg)
+		pl:ChatPrint(msg)
+	end
+end
+
+local function FindPlayerByNickPartial(nick)
+	nick = string.Trim(nick or "")
+	if nick == "" then return nil, "empty name" end
+
+	local needle = string.lower(nick)
+	local exact, partial = {}, {}
+	for _, ply in ipairs(player.GetAll()) do
+		local name = string.lower(ply:Nick())
+		if name == needle then
+			exact[#exact + 1] = ply
+		elseif string.find(name, needle, 1, true) then
+			partial[#partial + 1] = ply
+		end
+	end
+
+	local pool = #exact > 0 and exact or partial
+	if #pool == 0 then
+		return nil, "no player named '" .. nick .. "' on the server"
+	end
+	if #pool > 1 then
+		local names = {}
+		for i, ply in ipairs(pool) do
+			names[i] = ply:Nick()
+		end
+		return nil, "ambiguous name '" .. nick .. "': " .. table.concat(names, ", ")
+	end
+
+	return pool[1]
+end
+
+concommand.Add("relapse_givemarks", function(pl, _, args)
+	if not CanManageInventory(pl) then return end
+
+	local usage = "[Relapse] usage: relapse_givemarks <n>  or  relapse_givemarks <nick|steamid|steamid64> <n>"
+	if #args == 0 then
+		ReplyGiveMarks(pl, usage)
+		return
+	end
+
+	local n, who
+	if #args == 1 then
+		n = tonumber(args[1])
+		if not IsValid(pl) or not n then
+			ReplyGiveMarks(pl, usage)
+			return
+		end
+	else
+		n = tonumber(args[#args])
+		who = table.concat(args, " ", 1, #args - 1)
+	end
+
+	n = n and math.floor(n) or nil
+	if not n or n == 0 then
+		ReplyGiveMarks(pl, "[Relapse] n must be a non-zero number")
+		return
+	end
+
+	local target
+	if not who then
+		target = pl
+	else
+		target = FindPlayerByArg(who)
+		if not IsValid(target) then
+			local err
+			target, err = FindPlayerByNickPartial(who)
+			if err and string.find(err, "ambiguous", 1, true) then
+				ReplyGiveMarks(pl, "[Relapse] " .. err)
+				return
+			end
+		end
+	end
+
+	if IsValid(target) then
+		if target:IsBot() then
+			ReplyGiveMarks(pl, "[Relapse] " .. target:Nick() .. " is a bot")
+			return
+		end
+		local now = GAMEMODE:AddRelapseMarks(target, n)
+		ReplyGiveMarks(pl, string.format("[Relapse] gave %d marks to %s (now %d)", n, target:Nick(), now))
+		if target ~= pl then
+			target:ChatPrint(string.format("[Relapse] you received %d marks (now %d)", n, now))
+		end
+		return
+	end
+
+	if not who then
+		ReplyGiveMarks(pl, usage)
+		return
+	end
+
+	local sid64 = select(1, ResolveSteamID64(who))
+	if not sid64 then
+		ReplyGiveMarks(pl, "[Relapse] player not found")
+		return
+	end
+
+	local now = 0
+	WriteOfflineInventory(GAMEMODE, sid64, function(data)
+		data.marks = GAMEMODE:ClampRelapseMarks((data.marks or 0) + n)
+		now = data.marks
+	end)
+	ReplyGiveMarks(pl, string.format("[Relapse] gave %d marks to %s (now %d, offline)", n, sid64, now))
+end)
+
 net.Receive("relapse_inv_equip", function(_, pl)
 	if not IsValid(pl) then return end
 	if pl.RelapseInvEquipAt and pl.RelapseInvEquipAt > CurTime() then return end

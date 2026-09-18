@@ -16,6 +16,8 @@ local SLOW_ANG_SQR = 20 * 20
 local SUPPORT_DROP = 8
 local CONTACT_DIST_SQR = SUPPORT_DROP * SUPPORT_DROP
 local LIFT_TRACE = Vector(0, 0, 1)
+-- Jump-land embed vs foot clip on a frozen lid. Not SUPPORT_DROP.
+local STUCK_LIFT = 4
 
 local BLAST_FORCE = bit.bor(
 	DMG_BLAST,
@@ -145,6 +147,43 @@ local function TouchesLivePhys(ent)
 	return false
 end
 
+-- Feet on the lid or in the upper half. Side walk stays at floor z.
+local function PlayerOnPropTop(ply, ent)
+	if ply:GetGroundEntity() == ent then return true end
+	local mins, maxs = ent:WorldSpaceAABB()
+	return ply:GetPos().z >= (mins.z + maxs.z) * 0.5
+end
+
+-- Hull still in this prop after a vertical lift. World StartSolid does not count.
+local function PlayerHullInProp(ply, ent, liftZ)
+	local mins, maxs = ply:GetHull()
+	if ply:Crouching() then
+		mins, maxs = ply:GetHullDuck()
+	end
+	local pos = ply:GetPos() + Vector(0, 0, liftZ)
+	local tr = util.TraceHull({
+		start = pos,
+		endpos = pos,
+		mins = mins,
+		maxs = maxs,
+		mask = MASK_PLAYERSOLID,
+		filter = function(e) return e == ent end,
+	})
+	if not tr.StartSolid or tr.HitWorld then return false end
+	return not tr.Entity:IsValid() or tr.Entity == ent
+end
+
+local function PlayerStuckOnTop(ent)
+	for _, ply in ipairs(player.GetAll()) do
+		if not ply:Alive() then continue end
+		if not PlayerOnPropTop(ply, ent) then continue end
+		if PlayerHullInProp(ply, ent, STUCK_LIFT) then
+			return true
+		end
+	end
+	return false
+end
+
 ---------------------------------------------------------------------------
 -- Two-body
 --
@@ -246,6 +285,7 @@ function meta:RelapseFreezeAgainstPush()
 	local phys = self:GetPhysicsObject()
 	if not phys:IsValid() or not phys:IsMoveable() then return false end
 	if not HasRestSupport(self) then return false end
+	if PlayerStuckOnTop(self) then return false end
 
 	self.m_RelapsePushFrozen = true
 	EachPhys(self, function(obj)
@@ -273,7 +313,7 @@ local function TrySettle(ent)
 	if IsHeldByGameplay(ent) then return end
 
 	if ent.m_RelapsePushFrozen then
-		if not HasRestSupport(ent) then
+		if not HasRestSupport(ent) or PlayerStuckOnTop(ent) then
 			ent:RelapseUnfreezeAgainstPush()
 		end
 		return
@@ -347,6 +387,12 @@ local function HookPropCollide(ent)
 
 		if IsHeldByGameplay(self) then return end
 		if not other:IsPlayer() then return end
+		if PlayerOnPropTop(other, self) and PlayerHullInProp(other, self, STUCK_LIFT) then
+			if self.m_RelapsePushFrozen then
+				self:RelapseUnfreezeAgainstPush()
+			end
+			return
+		end
 		if self.m_RelapsePushFrozen or not self:RelapseIsPushCandidate() then return end
 		if data.OurOldVelocity:LengthSqr() >= SLOW_VEL_SQR then return end
 

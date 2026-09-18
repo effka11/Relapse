@@ -1,0 +1,47 @@
+---
+description: Relapse DModelPanel fade — opaque RT + stencil coverage, not SetBlend, depth-in-alpha, or a second DrawModel.
+globs: gamemodes/zombiesurvival/gamemode/vgui/dmodelpanelex.lua,gamemodes/zombiesurvival/gamemode/vgui/dmodelkillicon.lua,gamemodes/zombiesurvival/gamemode/vgui/pcharacter.lua,gamemodes/zombiesurvival/gamemode/vgui/relapse_ui.lua
+alwaysApply: true
+---
+
+# Relapse 3D-превью: фейд окна
+
+`SetAlpha` родителя красит 2D. `DModelPanel` рисует 3D со своей альфой 255. Плейермодели игнорируют `render.SetBlend`.
+
+Код: `PanelFadeAlpha` / `Paint` в `dmodelpanelex.lua`. Окно — `RelapseUI.PlayFade`.
+
+| | |
+|---|---|
+| Фейд | непрозрачный захват в RT, блит 2D с альфой окна |
+| После | прямой 3D в кадр (MSAA) |
+| Карточки | всегда RT, иначе 3D дырявит стекло |
+| Захват | `SetWriteDepthToDestAlpha(false)`; бленд `ONE/ZERO`; stencil с цветового `DrawModel`; заливка альфы 255 по stencil |
+| Блит | `surface` vertex A = `PanelFadeAlpha`; POINT filter |
+
+**Сквозь модель видна комната, после фейда резко плотная / светлее** — в альфу RT ушла глубина (дефолт 3D→RT) или маска фонга; либо меш с `SetBlend` стал настоящей полупрозрачностью и выключился на `fade >= 1`.
+
+**Чёрный контур на фейде, после пропадает** — второй `DrawModel` покрытия (`debugwhite` / `IgnoreZ` / `DepthRange`) шире цвета: RGB с clear, A=255. Покрытие только stencil пикселей цвета, не второй меш.
+
+Не чинить яркостью blit-материала и не оставлять RT после фейда «чтобы не щёлкало» — без MSAA превью мыльное. Сначала плотный захват, потом путь можно менять.
+
+```lua
+-- ❌ живой 3D с блендом — дырка в комнату, скачок когда fade=1
+render.SetBlend(fade)
+ent:DrawModel()
+
+-- ❌ второй меш покрытия — чёрный кант
+render.MaterialOverride(matCoverage)
+ent:DrawModel()
+
+-- ✅ глубина не в альфе; stencil = силуэт цвета; альфа 255 только там
+render.SetWriteDepthToDestAlpha(false)
+render.SetStencilCompareFunction(STENCIL_ALWAYS)
+render.SetStencilPassOperation(STENCIL_REPLACE)
+ent:DrawModel()
+render.SetStencilCompareFunction(STENCIL_EQUAL)
+render.OverrideColorWriteEnable(true, false)
+render.DrawScreenQuad()
+-- blit POINT: SetDrawColor(255, 255, 255, fade * 255)
+```
+
+`changelevel`, не `restart`.

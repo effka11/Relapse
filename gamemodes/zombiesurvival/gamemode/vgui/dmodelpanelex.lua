@@ -3,6 +3,10 @@ RelapseUI = RelapseUI or {}
 -- SetAlpha on a parent fades 2D. DModelPanel draws 3D with its own GetAlpha
 -- (always 255) and playermodels ignore render.SetBlend. Fade blit uses an RT;
 -- once opaque, draw to the framebuffer so MSAA stays.
+-- 3D into an RT writes depth into dest alpha unless told not to. Colour pass
+-- plus stencil coverage (pixels that actually drew). A second DrawModel
+-- (debugwhite / IgnoreZ) is wider than the colour silhouette: clear RGB with
+-- A=255 is a black fringe that snaps off at fade=1. Do not SetBlend the mesh.
 function RelapseUI.PanelFadeAlpha(pnl)
 	local a = 1
 	while IsValid(pnl) do
@@ -17,7 +21,7 @@ end
 
 local FadeRT = {}
 
-local RT_POINT = bit.bor(1, 4, 8, 256)
+local RT_POINT = bit.bor(1, 4, 8, 256, 8192)
 
 local function EnsureFadeRT(w, h)
 	w = math.max(1, math.floor(w))
@@ -29,19 +33,19 @@ local function EnsureFadeRT(w, h)
 	end
 
 	local rt = GetRenderTargetEx(
-		"RelapseModelFade" .. key,
+		"RelapseModelFadeV3" .. key,
 		w,
 		h,
 		RT_SIZE_NO_CHANGE,
 		MATERIAL_RT_DEPTH_SEPARATE,
 		RT_POINT,
 		0,
-		IMAGE_FORMAT_RGBA8888
+		IMAGE_FORMAT_BGRA8888
 	)
 	if not rt then
-		rt = GetRenderTarget("RelapseModelFade" .. key, w, h)
+		rt = GetRenderTarget("RelapseModelFadeV3" .. key, w, h)
 	end
-	local mat = CreateMaterial("RelapseModelFadeMat" .. key, "UnlitGeneric", {
+	local mat = CreateMaterial("RelapseModelFadeMatV3" .. key, "UnlitGeneric", {
 		["$basetexture"] = rt:GetName(),
 		["$translucent"] = "1",
 		["$vertexalpha"] = "1",
@@ -160,11 +164,49 @@ local function PaintModel3D(self, x, y, w, h)
 			end
 		end
 	end
+	if self._RelapsePaintRT then
+		if render.SetWriteDepthToDestAlpha then
+			render.SetWriteDepthToDestAlpha(false)
+		end
+		-- Shader alpha is a fallback if the RT has no stencil. Stencil fill
+		-- then forces 255 on pixels that actually drew.
+		render.OverrideAlphaWriteEnable(true, true)
+		if render.OverrideBlend then
+			render.OverrideBlend(true, BLEND_ONE, BLEND_ZERO, BLENDFUNC_ADD)
+		end
+	end
 	self:DrawModel()
+	if self._RelapsePaintRT then
+		if render.OverrideBlend then
+			render.OverrideBlend(false)
+		end
+	end
 	render.SetBlend(1)
 	render.SetColorModulation(1, 1, 1)
 	render.SuppressEngineLighting(false)
 	cam.End3D()
+end
+
+local function FillRTCoverage()
+	render.SetStencilCompareFunction(STENCIL_EQUAL)
+	render.SetStencilPassOperation(STENCIL_KEEP)
+	render.SetStencilFailOperation(STENCIL_KEEP)
+	render.SetStencilZFailOperation(STENCIL_KEEP)
+	render.OverrideColorWriteEnable(true, false)
+	render.OverrideAlphaWriteEnable(true, true)
+	if render.OverrideBlend then
+		render.OverrideBlend(true, BLEND_ZERO, BLEND_ONE, BLENDFUNC_ADD, BLEND_ONE, BLEND_ZERO, BLENDFUNC_ADD)
+	end
+	cam.IgnoreZ(true)
+	render.SetColorMaterial()
+	render.SetBlend(1)
+	render.DrawScreenQuad()
+	cam.IgnoreZ(false)
+	if render.OverrideBlend then
+		render.OverrideBlend(false)
+	end
+	render.OverrideColorWriteEnable(false)
+	render.SetStencilEnable(false)
 end
 
 function PANEL:Paint(w, h)
@@ -189,11 +231,24 @@ function PANEL:Paint(w, h)
 
 	local rt, mat, rtW, rtH = EnsureFadeRT(w, h)
 	render.PushRenderTarget(rt)
+	if render.SetWriteDepthToDestAlpha then
+		render.SetWriteDepthToDestAlpha(false)
+	end
 	render.OverrideAlphaWriteEnable(true, true)
 	render.Clear(0, 0, 0, 0, true, true)
+	render.ClearStencil()
+	render.SetStencilEnable(true)
+	render.SetStencilWriteMask(255)
+	render.SetStencilTestMask(255)
+	render.SetStencilReferenceValue(1)
+	render.SetStencilCompareFunction(STENCIL_ALWAYS)
+	render.SetStencilPassOperation(STENCIL_REPLACE)
+	render.SetStencilFailOperation(STENCIL_KEEP)
+	render.SetStencilZFailOperation(STENCIL_KEEP)
 	self._RelapsePaintRT = true
 	PaintModel3D(self, 0, 0, w, h)
 	self._RelapsePaintRT = nil
+	FillRTCoverage()
 	render.OverrideAlphaWriteEnable(false)
 	render.PopRenderTarget()
 
@@ -206,7 +261,15 @@ function PANEL:Paint(w, h)
 	surface.SetDrawColor(255, 255, 255, math.floor(fade * 255 + 0.5))
 	surface.SetMaterial(mat)
 	local u, v = w / rtW, h / rtH
+	if render.PushFilterMin then
+		render.PushFilterMin(TEXFILTER.POINT)
+		render.PushFilterMag(TEXFILTER.POINT)
+	end
 	surface.DrawTexturedRectUV(0, 0, w, h, 0, 0, u, v)
+	if render.PopFilterMin then
+		render.PopFilterMag()
+		render.PopFilterMin()
+	end
 	if surface.SetAlphaMultiplier then
 		surface.SetAlphaMultiplier(prevMul)
 	end

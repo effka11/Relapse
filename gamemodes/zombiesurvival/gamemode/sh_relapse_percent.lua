@@ -41,3 +41,11 @@ function GM:GetReloadPercentMul(pl)
 	end
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "Reload"), skill)
 end
+
+function GM:GetRepairPercentMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.RepairRateMul) then
+		skill = pl.RepairRateMul - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill)
+end

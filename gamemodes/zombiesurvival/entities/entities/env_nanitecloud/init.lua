@@ -23,7 +23,7 @@ function ENT:AcceptInput(name, activator, caller, arg)
 	if not owner:IsValidLivingHuman() then owner = self end
 
 	local pos = self:GetPos()
-	local totalheal = self.HealPower * (self:GetOwner().RepairRateMul or 1)
+	local totalheal = self.HealPower * GAMEMODE:GetRepairPercentMul(self:GetOwner())
 
 	for _, hitent in pairs(ents.FindInSphere(pos, self.Radius * (owner.CloudRadius or 1))) do
 		if not hitent:IsValid() or hitent == self or not WorldVisible(pos, hitent:NearestPoint(pos)) then
