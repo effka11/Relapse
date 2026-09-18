@@ -23,7 +23,13 @@ local GRID_CORE_STATS = {
 	RunSpeed = true,
 	Jump = true,
 	Climb = true,
-	Blood = true
+	Blood = true,
+	ArsenalMargin = true
+}
+
+local GRID_STAT_SKIP = {
+	ArsenalRivalOthers = true,
+	ArsenalRivalSelf = true
 }
 
 local GRID_STAT_INFO = {
@@ -31,7 +37,16 @@ local GRID_STAT_INFO = {
 	Recoil = { key = "recoil", name = "char_stat_recoil", fallback = "Recoil", kind = "pct" },
 	Deploy = { key = "deploy", name = "char_stat_deploy", fallback = "Deploy speed", kind = "pct" },
 	Repair = { key = "repair", name = "char_stat_repair", fallback = "Repair rate", kind = "pct" },
+	DeviceHealth = { key = "devicehealth", name = "char_stat_devicehealth", fallback = "Device durability", kind = "pct" },
+	ResupplyAmmo = { key = "crateammo", name = "char_stat_crateammo", fallback = "Crate ammo", kind = "pct" },
+	ArsenalMargin = { key = "arsenalcut", name = "char_stat_arsenalcut", fallback = "Arsenal margin", kind = "pct" },
+	HammerSwing = { key = "hammerswing", name = "char_stat_hammerswing", fallback = "Hammer attack speed", kind = "pct" },
+	NailRange = { key = "nailrange", name = "char_stat_nailrange", fallback = "Nail range", kind = "pct" },
+	DoorDamage = { key = "doordamage", name = "char_stat_doordamage", fallback = "Door damage", kind = "pct" },
 	Heal = { key = "heal", name = "char_stat_heal", fallback = "Healing received", kind = "pct" },
+	MedicHeal = { key = "medicheal", name = "char_stat_medicheal", fallback = "Healing effectiveness", kind = "pct" },
+	MeleeDamage = { key = "melee", name = "char_stat_melee", fallback = "Melee damage", kind = "pct" },
+	ZombieHealth = { key = "zombiehealth", name = "char_stat_zombiehealth", fallback = "Zombie max health", kind = "pct" },
 	Worth = { key = "worth", name = "char_stat_worth", fallback = "Starting worth" },
 	Scrap = { key = "scrap", name = "char_stat_scrap", fallback = "Starting scrap" },
 	FallResist = { key = "fallresist", name = "char_stat_fall", fallback = "Fall damage", kind = "pp" },
@@ -190,6 +205,13 @@ local function CharacterClimb(pl, sprint)
 	return climb
 end
 
+local function CharacterArsenalMargin(pl)
+	if GAMEMODE and GAMEMODE.GetArsenalMarginKeepRate then
+		return GAMEMODE:GetArsenalMarginKeepRate(pl)
+	end
+	return (GAMEMODE and GAMEMODE.ArsenalCrateCommission) or 0.04
+end
+
 local function CollectCharacterStats(pl)
 	local rows = {}
 	if not IsValid(pl) then
@@ -238,6 +260,10 @@ local function CollectCharacterStats(pl)
 		name = Phrase("char_stat_climb_sprint", "Climb sprint"),
 		value = FmtStatNumber(CharacterClimb(pl, true))
 	}
+	rows[#rows + 1] = {
+		name = Phrase("char_stat_arsenalcut", "Arsenal margin"),
+		value = FmtStatNumber(CharacterArsenalMargin(pl) * 100) .. "%"
+	}
 
 	local extras = {}
 	local function add_extra(order, key, name, amount, kind)
@@ -266,7 +292,7 @@ local function CollectCharacterStats(pl)
 	local gridAdds = GAMEMODE.GetCycleGridStatAdds and GAMEMODE:GetCycleGridStatAdds(pl) or {}
 	local gi = 0
 	for field, amount in pairs(gridAdds) do
-		if GRID_CORE_STATS[field] then continue end
+		if GRID_CORE_STATS[field] or GRID_STAT_SKIP[field] then continue end
 		gi = gi + 1
 		local info = GRID_STAT_INFO[field]
 		if info then
@@ -712,6 +738,18 @@ local GRID_ZOOM_MIN = 800
 local GRID_ZOOM_MAX = 5200
 local GRID_ZOOM_START = GRID_ZOOM_MIN + 500
 local GRID_RT_SIZE = 2048
+local skillsDev = false
+
+concommand.Add("relapse_skillsdev", function(_, _, args)
+	if args[1] ~= nil and args[1] ~= "" then
+		local a = string.lower(tostring(args[1]))
+		skillsDev = a == "1" or a == "true" or a == "on"
+	else
+		skillsDev = not skillsDev
+	end
+	MsgN("relapse_skillsdev " .. (skillsDev and "1" or "0"))
+end)
+
 local gridRT
 local gridRTMat
 local matFadeU = Material("vgui/gradient-u")
@@ -1172,10 +1210,12 @@ function GRID:SkillCaption(n, layout)
 		return
 	end
 	local skill = GAMEMODE.GetCycleGridSkill and GAMEMODE:GetCycleGridSkill(n.treeId, n.slot)
-	if not skill then
-		return
+	if skill then
+		return Phrase(skill.nameKey, skill.id), Phrase(skill.descKey, "")
 	end
-	return Phrase(skill.nameKey, skill.id), Phrase(skill.descKey, "")
+	if skillsDev then
+		return n.treeId, ""
+	end
 end
 
 function GRID:StepCaptionFade(hoverNode, layout, dt)
@@ -1200,8 +1240,9 @@ function GRID:DrawSkillCaption(w, h, layout, fade)
 	if t <= 0.01 or fade <= 0 then
 		return
 	end
-	local name, desc = self:SkillCaption(self.CaptionNode, layout)
-	if not name then
+	local n = self.CaptionNode
+	local name, desc = self:SkillCaption(n, layout)
+	if not name and not (skillsDev and n) then
 		return
 	end
 	t = t * t * (3 - 2 * t) * fade
@@ -1211,6 +1252,16 @@ function GRID:DrawSkillCaption(w, h, layout, fade)
 	end
 	-- Relapse30 cell sits ~6px above caps. 45px from box top to the capital.
 	local y = RelapseUI.sPx(45) - RelapseUI.sPx(6)
+	if skillsDev and n then
+		local tag = n.tree == nil and "hub" or tostring(n.slot)
+		RelapseUI.HudText(tag, "Relapse30", w * 0.5, y, withA(RelapseUI.Col.Accent), TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, 1)
+		surface.SetFont("Relapse30")
+		local _, tagH = surface.GetTextSize(tag)
+		y = y + tagH + RelapseUI.sPx(15)
+	end
+	if not name then
+		return
+	end
 	RelapseUI.HudText(name, "Relapse30", w * 0.5, y, withA(RelapseUI.Col.Text), TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, 1)
 	if not desc or desc == "" then
 		return

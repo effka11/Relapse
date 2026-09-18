@@ -201,7 +201,17 @@ if CLIENT then
 		if scale >= 1 then
 			return p, a, f
 		end
-		return LerpVector(scale, origPos, p), LerpAngle(scale, origAng, a), f
+		-- Scale tag_camera walk/sprint, not idle breath (same wave as a rifle).
+		local breath = self.Camera and self.Camera.LerpBreathing
+		if isangle(a) and isangle(breath) then
+			a:Sub(breath)
+		end
+		p = LerpVector(scale, origPos, p)
+		a = LerpAngle(scale, origAng, a)
+		if isangle(breath) then
+			a:Add(breath)
+		end
+		return p, a, f
 	end
 end
 

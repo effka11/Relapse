@@ -1,7 +1,86 @@
--- Relapse: MW breathing on the camera while hip, not only at full ADS.
--- Pack zeroes the wave by AimDelta, then GetBreathingSwayAngle cuts hip again.
+-- Relapse: one idle breath wave for every first-person SWEP.
+-- MW: GetBreathingSwayAngle -> Camera.LerpBreathing (eye + VM).
+-- Other weapons: GM:_CalcView adds the same angle once.
+-- Pack ADS sway stays here. Hip pack scale is 0 so this wave is not stacked.
 
-local HIP_SWAY = 0.5
+RelapseBreath = RelapseBreath or {}
+
+local HIP_PITCH = 0.22
+local HIP_YAW = 0.15
+local HIP_ROLL = 0.05
+
+function RelapseBreath.Enabled()
+	local cv = GetConVar("mgbase_sv_breathing")
+	if cv then
+		return cv:GetBool()
+	end
+	return true
+end
+
+local function adsMul(wep)
+	if not IsValid(wep) then
+		return 1
+	end
+	if wep.GetAimDelta then
+		return 1 - math.Clamp(wep:GetAimDelta() or 0, 0, 1)
+	end
+	if wep.GetIronsights and wep:GetIronsights() then
+		local gm = GAMEMODE
+		if not (gm and gm.NoIronsights) then
+			return 0
+		end
+	end
+	return 1
+end
+
+local function sprintMul(wep, ply)
+	if IsValid(wep) then
+		if wep.HasFlag and wep:HasFlag("Sprinting") then
+			return 0
+		end
+		if wep.GetIsSprinting and wep:GetIsSprinting() then
+			return 0
+		end
+	end
+	if not IsValid(ply) then
+		return 1
+	end
+	local stride = GAMEMODE and GAMEMODE.Stride
+	if stride and stride.Get then
+		local st = stride:Get(ply)
+		if st then
+			if st.sprinting then
+				return 0
+			end
+			if st.sprintBlend then
+				return 1 - math.Clamp(st.sprintBlend, 0, 1)
+			end
+		end
+	end
+	return 1
+end
+
+function RelapseBreath.IdleAngle(wep, ply)
+	if not RelapseBreath.Enabled() then
+		return Angle(0, 0, 0)
+	end
+	if IsValid(wep) then
+		ply = ply or wep:GetOwner()
+		if wep.HasFlag and wep:HasFlag("Customizing") then
+			return Angle(0, 0, 0)
+		end
+	end
+	local mul = adsMul(wep) * sprintMul(wep, ply)
+	if mul <= 0.001 then
+		return Angle(0, 0, 0)
+	end
+	local t = CurTime()
+	return Angle(
+		math.sin(t * 1.35) * math.cos(t * 0.62) * HIP_PITCH * mul,
+		math.cos(t * 1.05) * math.sin(t * 0.47) * HIP_YAW * mul,
+		math.sin(t * 0.8) * HIP_ROLL * mul
+	)
+end
 
 local function patchBase(wep)
 	if not wep or wep.RelapseHipBreath then return end
@@ -47,27 +126,28 @@ local function patchBase(wep)
 	end
 
 	wep.GetBreathingSwayAngle = function(self)
-		local cv = GetConVar("mgbase_sv_breathing")
-		if cv and not cv:GetBool() then
-			return angle_zero
-		end
-		if not isfunction(self.GetBreathingAngle) then
-			return angle_zero
+		if not RelapseBreath.Enabled() then
+			return Angle(0, 0, 0)
 		end
 
-		local src = self:GetBreathingAngle()
-		if not src then
-			return angle_zero
+		local ang = RelapseBreath.IdleAngle(self, self:GetOwner())
+		local ads = 0
+		if self.GetAimDelta then
+			ads = math.Clamp(self:GetAimDelta() or 0, 0, 1)
 		end
-
-		local ads = math.Clamp(self:GetAimDelta() or 0, 0, 1)
-		local idle = (self.Zoom and self.Zoom.IdleSway) or 0.1
-		local ang = Angle(
-			math.NormalizeAngle(src.p),
-			math.NormalizeAngle(src.y),
-			math.NormalizeAngle(src.r)
-		)
-		ang:Mul(idle * Lerp(ads, HIP_SWAY, 1))
+		if ads > 0.001 and isfunction(self.GetBreathingAngle) then
+			local src = self:GetBreathingAngle()
+			if src then
+				local idle = (self.Zoom and self.Zoom.IdleSway) or 0.1
+				local pack = Angle(
+					math.NormalizeAngle(src.p),
+					math.NormalizeAngle(src.y),
+					math.NormalizeAngle(src.r)
+				)
+				pack:Mul(idle * ads)
+				ang:Add(pack)
+			end
+		end
 		return ang
 	end
 end

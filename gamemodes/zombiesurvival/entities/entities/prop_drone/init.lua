@@ -55,7 +55,7 @@ function ENT:SetupPlayerSkills()
 	local loaded = false
 
 	if owner:IsValid() then
-		newmaxhealth = newmaxhealth * (owner.ControllableHealthMul or 1)
+		newmaxhealth = newmaxhealth * GAMEMODE:GetMechanicsDeviceHealthMul(owner, self, "ControllableHealthMul")
 		maxspeed = maxspeed * owner:GetTotalAdditiveModifier("ControllableSpeedMul", "DroneSpeedMul")
 		acceleration = acceleration * (owner.ControllableHandlingMul or 1)
 		carrymass = carrymass * (owner.DroneCarryMassMul or 1)

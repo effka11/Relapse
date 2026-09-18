@@ -184,7 +184,15 @@ function SWEP:MeleeSwing()
 		return
 	end
 
-	local damagemultiplier = owner:Team() == TEAM_HUMAN and owner.MeleeDamageMultiplier or 1 --(owner.BuffMuscular and owner:Team()==TEAM_HUMAN) and 1.2 or 1
+	local hitent = tr.Entity
+	local damagemultiplier = 1
+	if owner:Team() == TEAM_HUMAN then
+		if GAMEMODE and GAMEMODE.GetMeleeDamagePercentMul then
+			damagemultiplier = GAMEMODE:GetMeleeDamagePercentMul(owner, hitent)
+		else
+			damagemultiplier = owner.MeleeDamageMultiplier or 1
+		end
+	end
 	if owner:IsSkillActive(SKILL_LASTSTAND) then
 		if owner:Health() <= owner:GetMaxHealth() * 0.25 then
 			damagemultiplier = damagemultiplier * 2
@@ -192,8 +200,6 @@ function SWEP:MeleeSwing()
 			damagemultiplier = damagemultiplier * 0.85
 		end
 	end
-
-	local hitent = tr.Entity
 	local hitflesh = tr.MatType == MAT_FLESH or tr.MatType == MAT_BLOODYFLESH or tr.MatType == MAT_ANTLION or tr.MatType == MAT_ALIENFLESH
 
 	if self.HitAnim then

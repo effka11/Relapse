@@ -1,0 +1,32 @@
+---
+description: Warn before adding a heavy playermodel workshop pack. AddWorkshop downloads for every client.
+globs: gamemodes/zombiesurvival/gamemode/sh_relapse_inventory.lua,gamemodes/zombiesurvival/gamemode/sv_relapse_inventory.lua,addons/zzz_relapse_mw_sykov/lua/autorun/server/relapse_mw_workshop.lua
+alwaysApply: true
+---
+
+# Relapse вес плейермодели
+
+`resource.AddWorkshop` качает пак **всем**, не только покупателю. Перед новой моделью снять `file_size` (Steam API или локальный GMA). Рискованный вес — **сначала сказать юзеру, не писать каталог**, пока не подтвердит.
+
+Код: `RelapseCosmetics` / `Default` в `sh_relapse_inventory.lua`. Марки не компенсируют мегабайты.
+
+| Куда | Мягкий | Стоп |
+|---|---:|---:|
+| Пул Выживших (`Default`) | **80 МБ** | > 80 — спросить |
+| Шоп | **150 МБ** | **250 МБ** |
+| Любой пак | — | **400 МБ** / сырой 4K |
+
+Эталон лёгких: Undercover ~34, Bunker ~24, Susie ~59. Tropa Z ~127 уже тяжёлый для пула. Park ~585 — исключение, не образец.
+
+```lua
+-- ❌ молча в каталог: 585 МБ качает каждый заход
+park_coventry = { Workshop = { "3713771232" }, Marks = 47990 }
+
+-- ❌ Default из пака > 80 МБ без предупреждения
+tropa_z = { Workshop = { "2929135394" }, Default = true }
+
+-- ✅ размер снят, юзер видел МБ и куда (пул/шоп), после «ок» — запись
+kgb_unit = { Workshop = { "3572296525" }, Marks = 17990 } -- 125 МБ, шоп
+```
+
+В сообщении: МБ пака, пул или шоп, порог, что качает весь сервер. Не добавлять Hard Wired / Navy SEALs 2013 и любые несжатые 4K, пока юзер явно не согласится.

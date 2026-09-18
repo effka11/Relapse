@@ -59,7 +59,15 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 		return
 	end
 
-	cost = usescrap and math.ceil(GAMEMODE:PointsToScrap(cost)) or math.floor(cost * (sender.ArsenalDiscount or 1))
+	if usescrap then
+		cost = math.ceil(GAMEMODE:PointsToScrap(cost))
+	elseif GAMEMODE.GetArsenalShopCost then
+		local ok, priced = pcall(GAMEMODE.GetArsenalShopCost, GAMEMODE, sender, cost)
+		if ok then
+			cost = priced
+		end
+	end
+	cost = math.max(0, math.floor(tonumber(cost) or 0))
 
 	if points < cost then
 		GAMEMODE:ConCommandErrorMessage(sender, translate.ClientGet(sender, usescrap and "need_to_have_enough_scrap" or "dont_have_enough_points"))
@@ -141,23 +149,29 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 			end
 		end
 	else
-		local nearest = sender:NearestArsenalCrateOwnedByOther()
-		if nearest then
-			local owner = nearest.GetObjectOwner and nearest:GetObjectOwner() or nearest:GetOwner()
-			if owner:IsValid() then
-				local commission = cost * GAMEMODE.ArsenalCrateCommission
-				if commission > 0 then
-					owner:AddPoints(commission, nil, nil, true)
-					GAMEMODE:CreditTabClass(owner, "supplier", commission)
+		local kind, src = GAMEMODE.PickArsenalShop and GAMEMODE:PickArsenalShop(sender)
+		local owner = kind == "crate" and GAMEMODE.GetArsenalCrateOwner and GAMEMODE:GetArsenalCrateOwner(src)
+		if IsValid(owner) and owner:IsPlayer() and owner ~= sender then
+			local rate = GAMEMODE.GetArsenalMarginKeepRate and GAMEMODE:GetArsenalMarginKeepRate(owner, src) or 0
+			local commission = cost * (tonumber(rate) or 0)
+			if commission > 0 then
+				owner:AddPoints(commission, nil, nil, true)
+				GAMEMODE:CreditTabClass(owner, "supplier", commission)
 
-					net.Start("zs_commission")
-						net.WriteEntity(nearest)
-						net.WriteEntity(sender)
-						net.WriteFloat(commission)
-					net.Send(owner)
-				end
+				net.Start("zs_commission")
+					net.WriteEntity(src)
+					net.WriteEntity(sender)
+					net.WriteFloat(commission)
+				net.Send(owner)
 			end
 		end
+	end
+end)
+
+net.Receive("zs_arsenal_margin", function(_, sender)
+	if not (IsValid(sender) and sender:IsConnected() and sender:IsValidLivingHuman()) then return end
+	if sender.SetArsenalMarginKeepShare then
+		sender:SetArsenalMarginKeepShare(net.ReadFloat())
 	end
 end)
 

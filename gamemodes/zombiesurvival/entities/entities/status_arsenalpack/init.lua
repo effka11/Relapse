@@ -8,9 +8,16 @@ function ENT:Initialize()
 	self:SetMoveType(MOVETYPE_NONE)
 	self:PhysicsInitSphere(3)
 	self:SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER)
+	self:SetUseType(SIMPLE_USE)
 end
 
 function ENT:Think()
 	local owner = self:GetOwner()
 	if not (owner:IsValid() and owner:Alive() and owner:HasTrinket("arsenalpack")) then self:Remove() end
+end
+
+function ENT:Use(activator, caller)
+	if activator:IsValid() and activator:IsPlayer() and activator:Team() == TEAM_HUMAN and activator:Alive() then
+		activator:SendLua("GAMEMODE:OpenArsenalMenu()")
+	end
 end

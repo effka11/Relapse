@@ -2,6 +2,10 @@
 -- cosmetic wallet; they persist here, not in the round vault.
 -- Server owns the list; cl_playermodel is not trusted. Workshop addons still
 -- supply mdl/vtf.
+--
+-- Default = starter Survivor: granted to everyone, cannot be taken, and
+-- first join rolls one from this pool (saved, never re-rolled). Expand the
+-- pool by adding another model with Default = true.
 
 GM.RelapseCosmeticKind = {
 	MODEL = "model"
@@ -9,6 +13,8 @@ GM.RelapseCosmeticKind = {
 
 GM.RelapseCosmeticOrder = {
 	"undercover_spetsnaz",
+	"tropa_z",
+	"tropa_z2",
 	"wuchang",
 	"bunker_soldier1",
 	"bunker_soldier2",
@@ -16,7 +22,11 @@ GM.RelapseCosmeticOrder = {
 	"bunker_soldier4",
 	"balkan",
 	"park_coventry",
-	"backstabber_susie"
+	"backstabber_susie",
+	"navy_seals_sniper",
+	"alex",
+	"kgb_unit",
+	"russian_j12"
 }
 
 GM.RelapseCosmetics = {
@@ -28,6 +38,26 @@ GM.RelapseCosmetics = {
 		Hands = "models/humangrunt/bo1/c_arms_undercoverspetsnaz.mdl",
 		HandsBody = "00000000",
 		Workshop = { "2904144632" },
+		Default = true
+	},
+	tropa_z = {
+		Kind = "model",
+		Name = "Survivor",
+		Model = "models/humangrunt/maxpayne3/tropa_z_pm.mdl",
+		PlayerManager = "Tropa Z",
+		Hands = "models/humangrunt/maxpayne3/c_arms_comandosombra.mdl",
+		HandsBody = "00000000",
+		Workshop = { "2929135394" },
+		Default = true
+	},
+	tropa_z2 = {
+		Kind = "model",
+		Name = "Survivor",
+		Model = "models/humangrunt/maxpayne3/tropa_z2_pm.mdl",
+		PlayerManager = "Tropa Z 2",
+		Hands = "models/humangrunt/maxpayne3/c_arms_comandosombra.mdl",
+		HandsBody = "00000000",
+		Workshop = { "2929135394" },
 		Default = true
 	},
 	wuchang = {
@@ -118,6 +148,46 @@ GM.RelapseCosmetics = {
 		Female = true,
 		VoiceSet = VOICESET_FEMALE,
 		Marks = 45990
+	},
+	navy_seals_sniper = {
+		Kind = "model",
+		Name = "Navy SEALs Sniper",
+		Model = "models/humangrunt/mw2/navyseals_sniper_pm.mdl",
+		PlayerManager = "Navy SEALs Sniper",
+		Hands = "models/humangrunt/mw2/c_arms_seals.mdl",
+		HandsBody = "00000000",
+		Workshop = { "2893907662" },
+		Marks = 13990
+	},
+	alex = {
+		Kind = "model",
+		Name = "Alex",
+		Model = "models/konni/asapgaming/modernwarfare/alex.mdl",
+		PlayerManager = "Alex",
+		Hands = "models/weapons/arms/v_arms_mw_alex.mdl",
+		HandsBody = "00000000",
+		Workshop = { "2317864856" },
+		Marks = 45990
+	},
+	kgb_unit = {
+		Kind = "model",
+		Name = "KGB Unit",
+		Model = "models/arty/mgsdelta/kgb unit/grunt_pm.mdl",
+		PlayerManager = "KGB Unit",
+		Hands = "models/arty/mgsdelta/kgb unit/grunt_vm.mdl",
+		HandsBody = "00",
+		Workshop = { "3572296525" },
+		Marks = 17990
+	},
+	russian_j12 = {
+		Kind = "model",
+		Name = "Russian J-12",
+		Model = "models/jq/codmw2019/russian_j-12_player.mdl",
+		PlayerManager = "Russian J-12",
+		Hands = "models/jq/codmw2019/c_russian_j-12_hands.mdl",
+		HandsBody = "00000000",
+		Workshop = { "3627414330" },
+		Marks = 34990
 	}
 }
 
@@ -169,14 +239,28 @@ function GM:GetRelapseHandsInfo(pl)
 	}
 end
 
-function GM:GetRelapseDefaultModelId()
+function GM:GetRelapseSurvivorPool()
+	local pool = {}
 	for _, id in ipairs(self.RelapseCosmeticOrder) do
 		local item = self.RelapseCosmetics[id]
 		if item and item.Kind == self.RelapseCosmeticKind.MODEL and item.Default then
-			return id
+			pool[#pool + 1] = id
 		end
 	end
-	return self.RelapseCosmeticOrder[1]
+	return pool
+end
+
+function GM:PickRelapseSurvivorModel()
+	local pool = self:GetRelapseSurvivorPool()
+	if #pool == 0 then
+		return self.RelapseCosmeticOrder[1]
+	end
+	return pool[math.random(#pool)]
+end
+
+function GM:GetRelapseDefaultModelId()
+	local pool = self:GetRelapseSurvivorPool()
+	return pool[1] or self.RelapseCosmeticOrder[1]
 end
 
 function GM:RelapseCosmeticName(id)

@@ -3782,20 +3782,8 @@ function RelapseUI.CreditsRow(parent, name, role)
 	return row
 end
 
-function RelapseUI.OptionsSlider(parent, text, cvar, min, max, decimals)
-	local wrap = vgui.Create("DPanel", parent)
-	wrap:SetTall(RelapseUI.Grid15(5))
-	wrap:Dock(TOP)
-	wrap:DockMargin(0, 0, 0, RelapseUI.Grid15())
-	wrap:SetPaintBackground(false)
-	wrap.Paint = function() return true end
-
-	local slider = vgui.Create("DNumSlider", wrap)
-	slider:Dock(FILL)
-	slider:SetText(text)
-	slider:SetMinMax(min, max)
-	slider:SetDecimals(decimals or 0)
-	slider:SetConVar(cvar)
+function RelapseUI.StyleNumSlider(slider)
+	if not IsValid(slider) then return slider end
 	slider:SetDark(false)
 	if IsValid(slider.Label) then
 		slider.Label:SetFont("Relapse20")
@@ -3819,6 +3807,24 @@ function RelapseUI.OptionsSlider(parent, text, cvar, min, max, decimals)
 			bar.Knob.Paint = RelapseUI.PaintSliderKnob
 		end
 	end
+	return slider
+end
+
+function RelapseUI.OptionsSlider(parent, text, cvar, min, max, decimals)
+	local wrap = vgui.Create("DPanel", parent)
+	wrap:SetTall(RelapseUI.Grid15(5))
+	wrap:Dock(TOP)
+	wrap:DockMargin(0, 0, 0, RelapseUI.Grid15())
+	wrap:SetPaintBackground(false)
+	wrap.Paint = function() return true end
+
+	local slider = vgui.Create("DNumSlider", wrap)
+	slider:Dock(FILL)
+	slider:SetText(text)
+	slider:SetMinMax(min, max)
+	slider:SetDecimals(decimals or 0)
+	slider:SetConVar(cvar)
+	RelapseUI.StyleNumSlider(slider)
 	return slider
 end
 

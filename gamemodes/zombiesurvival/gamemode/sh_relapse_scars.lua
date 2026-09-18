@@ -246,9 +246,18 @@ if CLIENT then
 		Counts = {},
 		Meters = {}
 	}
+end
 
-	function GM:GetRelapseScarRank(id)
+function GM:GetRelapseScarRank(id, pl)
+	if not id then
+		return 0
+	end
+	if CLIENT and (not IsValid(pl) or pl == LocalPlayer() or pl == MySelf) then
 		local state = self.RelapseScarState
 		return (state and state.Ranks and state.Ranks[id]) or 0
 	end
+	if IsValid(pl) and pl.RelapseScarRanks then
+		return math.max(0, math.floor(tonumber(pl.RelapseScarRanks[id]) or 0))
+	end
+	return 0
 end

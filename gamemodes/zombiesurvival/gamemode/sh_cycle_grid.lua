@@ -10,9 +10,9 @@ GM.CycleGridTrees = {
 	{ id = "mechanics", nameKey = "grid_tree_mechanics" },
 	{ id = "medicine", nameKey = "grid_tree_medicine" },
 	{ id = "ranged", nameKey = "grid_tree_ranged" },
-	{ id = "melee", nameKey = "grid_tree_melee" },
-	{ id = "build", nameKey = "grid_tree_build" },
 	{ id = "shadow", nameKey = "grid_tree_shadow" },
+	{ id = "build", nameKey = "grid_tree_build" },
+	{ id = "melee", nameKey = "grid_tree_melee" },
 	{ id = "agility", nameKey = "grid_tree_agility" }
 }
 
@@ -483,6 +483,27 @@ GM.CycleGridCatalog = {
 		U = 20,
 		RunSpeed = 0.03
 	},
+	agility_4 = {
+		tree = "agility",
+		slot = 12,
+		nameKey = "grid_skill_agility_4",
+		descKey = "grid_skill_agility_4_desc",
+		U = 20,
+		RunSpeed = 0.02,
+		Jump = 0.02,
+		Health = -2
+	},
+	agility_5 = {
+		tree = "agility",
+		slot = 13,
+		nameKey = "grid_skill_agility_5",
+		descKey = "grid_skill_agility_5_desc",
+		U = 20,
+		need = "agility_4",
+		RunSpeed = 0.02,
+		Jump = 0.02,
+		Health = -2
+	},
 	ranged_1 = {
 		tree = "ranged",
 		slot = 0,
@@ -506,6 +527,113 @@ GM.CycleGridCatalog = {
 		descKey = "grid_skill_build_1_desc",
 		U = 20,
 		Repair = 0.04
+	},
+	build_2 = {
+		tree = "build",
+		slot = 1,
+		nameKey = "grid_skill_build_2",
+		descKey = "grid_skill_build_2_desc",
+		U = 20,
+		HammerSwing = 0.07
+	},
+	build_3 = {
+		tree = "build",
+		slot = 2,
+		nameKey = "grid_skill_build_3",
+		descKey = "grid_skill_build_3_desc",
+		U = 20,
+		NailRange = 0.15
+	},
+	build_4 = {
+		tree = "build",
+		slot = 9,
+		nameKey = "grid_skill_build_4",
+		descKey = "grid_skill_build_4_desc",
+		U = 20,
+		DoorDamage = 0.40
+	},
+	mechanics_1 = {
+		tree = "mechanics",
+		slot = 0,
+		nameKey = "grid_skill_mechanics_1",
+		descKey = "grid_skill_mechanics_1_desc",
+		U = 20,
+		DeviceHealth = 0.05
+	},
+	medicine_1 = {
+		tree = "medicine",
+		slot = 0,
+		nameKey = "grid_skill_medicine_1",
+		descKey = "grid_skill_medicine_1_desc",
+		U = 20,
+		MedicHeal = 0.03
+	},
+	melee_1 = {
+		tree = "melee",
+		slot = 0,
+		nameKey = "grid_skill_melee_1",
+		descKey = "grid_skill_melee_1_desc",
+		U = 20,
+		MeleeDamage = 0.03
+	},
+	shadow_1 = {
+		tree = "shadow",
+		slot = 0,
+		nameKey = "grid_skill_shadow_1",
+		descKey = "grid_skill_shadow_1_desc",
+		U = 20,
+		ZombieHealth = 0.03
+	},
+	supply_1 = {
+		tree = "supply",
+		slot = 0,
+		nameKey = "grid_skill_supply_1",
+		descKey = "grid_skill_supply_1_desc",
+		U = 20,
+		ResupplyAmmo = 0.04
+	},
+	supply_2 = {
+		tree = "supply",
+		slot = 1,
+		nameKey = "grid_skill_supply_2",
+		descKey = "grid_skill_supply_2_desc",
+		U = 20,
+		ArsenalMargin = 0.02
+	},
+	supply_3 = {
+		tree = "supply",
+		slot = 2,
+		nameKey = "grid_skill_supply_3",
+		descKey = "grid_skill_supply_3_desc",
+		U = 20,
+		ResupplyAmmo = 0.04
+	},
+	supply_4 = {
+		tree = "supply",
+		slot = 3,
+		nameKey = "grid_skill_supply_4",
+		descKey = "grid_skill_supply_4_desc",
+		U = 20,
+		ArsenalMargin = 0.02
+	},
+	supply_5 = {
+		tree = "supply",
+		slot = 13,
+		nameKey = "grid_skill_supply_5",
+		descKey = "grid_skill_supply_5_desc",
+		U = 20,
+		ArsenalRivalOthers = 0.02,
+		ArsenalRivalSelf = 0.01
+	},
+	supply_6 = {
+		tree = "supply",
+		slot = 14,
+		nameKey = "grid_skill_supply_6",
+		descKey = "grid_skill_supply_6_desc",
+		U = 20,
+		need = "supply_5",
+		ArsenalRivalOthers = 0.02,
+		ArsenalRivalSelf = 0.01
 	},
 	vitality_2 = {
 		tree = "vitality",
@@ -630,11 +758,22 @@ function GM:CycleGridNeighborOk(pl, treeId, slot)
 	if slot == 0 then
 		return true
 	end
-	local node = self:GetCycleGridNode(treeId, slot)
-	if not node or not node.parent then
+	local skill = self:GetCycleGridSkill(treeId, slot)
+	if skill and skill.need and not self:HasCycleGridSkill(pl, skill.need) then
 		return false
 	end
-	return self:CycleGridSlotTaken(pl, treeId, node.parent.slot)
+	local node = self:GetCycleGridNode(treeId, slot)
+	if not node then
+		return false
+	end
+	local p = node.parent
+	while p do
+		if self:GetCycleGridSkill(treeId, p.slot) then
+			return self:CycleGridSlotTaken(pl, treeId, p.slot)
+		end
+		p = p.parent
+	end
+	return true
 end
 
 function GM:CycleGridIsOffered(pl, treeId, slot)
@@ -661,7 +800,8 @@ local GRID_SKILL_META = {
 	nameKey = true,
 	descKey = true,
 	U = true,
-	id = true
+	id = true,
+	need = true
 }
 
 function GM:GetCycleGridStatAdd(pl, field)
@@ -735,4 +875,38 @@ function GM:ApplyCycleGridModifiers(pl)
 	end
 	pl:ResetSpeed()
 	pl:ResetJumpPower()
+	self:ApplyCycleGridDeviceHealth(pl)
+end
+
+local MECHANICS_HEALTH_REFRESH = {
+	"prop_gunturret*",
+	"prop_zapper*",
+	"prop_repairfield",
+	"prop_ffemitter",
+	"prop_drone",
+	"prop_drone_pulse",
+	"prop_drone_hauler",
+	"prop_manhack",
+	"prop_manhack_saw",
+	"prop_rollermine"
+}
+
+function GM:ApplyCycleGridDeviceHealth(pl)
+	if not SERVER or not IsValid(pl) then
+		return
+	end
+	for i = 1, #MECHANICS_HEALTH_REFRESH do
+		local found = ents.FindByClass(MECHANICS_HEALTH_REFRESH[i])
+		for j = 1, #found do
+			local ent = found[j]
+			if not (ent:IsValid() and ent.GetObjectOwner and ent:GetObjectOwner() == pl) then
+				continue
+			end
+			if isfunction(ent.SetupPlayerSkills) then
+				ent:SetupPlayerSkills()
+			elseif isfunction(ent.SetupDeployableSkillHealth) then
+				ent:SetupDeployableSkillHealth()
+			end
+		end
+	end
 end

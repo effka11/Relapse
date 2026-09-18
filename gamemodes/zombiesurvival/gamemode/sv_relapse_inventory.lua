@@ -3,6 +3,7 @@
 
 util.AddNetworkString("relapse_inv_sync")
 util.AddNetworkString("relapse_inv_equip")
+util.AddNetworkString("relapse_inv_buy")
 
 GM.RelapseInvFolder = "relapse_inv"
 
@@ -53,7 +54,8 @@ function GM:EmptyRelapseInventory()
 	return {
 		items = {},
 		model = self:GetRelapseDefaultModelId(),
-		marks = 0
+		marks = 0,
+		starter_rolled = false
 	}
 end
 
@@ -71,6 +73,9 @@ function GM:SanitizeRelapseInventory(data)
 	end
 	if isstring(data.model) and clean.items[data.model] then
 		clean.model = data.model
+		clean.starter_rolled = true
+	elseif data.starter_rolled then
+		clean.starter_rolled = true
 	end
 	clean.marks = self:ClampRelapseMarks(data.marks)
 	return clean
@@ -133,7 +138,8 @@ function GM:SaveRelapseInventory(pl)
 	file.Write(filename, Serialize({
 		items = pl.RelapseInv.items,
 		model = pl.RelapseInv.model,
-		marks = self:ClampRelapseMarks(pl.RelapseInv.marks)
+		marks = self:ClampRelapseMarks(pl.RelapseInv.marks),
+		starter_rolled = pl.RelapseInv.starter_rolled and true or false
 	}))
 end
 
@@ -190,7 +196,11 @@ function GM:GrantRelapseInventoryDefaults(pl)
 		end
 	end
 
-	if not self:PlayerOwnsRelapseItem(pl, pl.RelapseInv.model) then
+	if not pl.RelapseInv.starter_rolled then
+		pl.RelapseInv.model = self:PickRelapseSurvivorModel()
+		pl.RelapseInv.starter_rolled = true
+		dirty = true
+	elseif not self:PlayerOwnsRelapseItem(pl, pl.RelapseInv.model) then
 		pl.RelapseInv.model = self:GetRelapseDefaultModelId()
 		dirty = true
 	end
@@ -310,6 +320,35 @@ function GM:ApplyRelapsePlayermodel(pl, refreshHands)
 	if refreshHands then
 		self:RefreshHumanHands(pl)
 	end
+end
+
+function GM:BuyRelapseCosmetic(pl, id)
+	if not IsValid(pl) or pl:IsBot() then return false end
+	self:EnsureRelapseInventory(pl)
+
+	local item = self:GetRelapseCosmetic(id)
+	if not item then
+		return false
+	end
+	if not self:RelapseCosmeticForSale(id) then
+		return false
+	end
+	if self:PlayerOwnsRelapseItem(pl, id) then
+		return false
+	end
+
+	local price = self:RelapseCosmeticMarks(id)
+	if self:GetRelapseMarks(pl) < price then
+		return false
+	end
+	if not self:GiveRelapseItem(pl, id) then
+		return false
+	end
+
+	pl.RelapseInv.marks = self:ClampRelapseMarks((pl.RelapseInv.marks or 0) - price)
+	self:SaveRelapseInventory(pl)
+	self:SyncRelapseInventory(pl)
+	return true
 end
 
 function GM:EquipRelapseModel(pl, id)
@@ -572,4 +611,13 @@ net.Receive("relapse_inv_equip", function(_, pl)
 		return
 	end
 	GAMEMODE:EquipRelapseModel(pl, id)
+end)
+
+net.Receive("relapse_inv_buy", function(_, pl)
+	if not IsValid(pl) then return end
+	if pl.RelapseInvBuyAt and pl.RelapseInvBuyAt > CurTime() then return end
+	pl.RelapseInvBuyAt = CurTime() + 0.25
+	local id = net.ReadString()
+	if not id or id == "" or #id > 64 then return end
+	GAMEMODE:BuyRelapseCosmetic(pl, id)
 end)

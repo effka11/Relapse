@@ -56,7 +56,7 @@ function ENT:SetupPlayerSkills()
 	local loaded = false
 
 	if owner:IsValid() then
-		newmaxhealth = newmaxhealth * owner:GetTotalAdditiveModifier("ControllableHealthMul")
+		newmaxhealth = newmaxhealth * GAMEMODE:GetMechanicsDeviceHealthMul(owner, self, "ControllableHealthMul")
 		maxspeed = maxspeed * (owner.ControllableSpeedMul or 1)
 		acceleration = acceleration * (owner.ControllableHandlingMul or 1)
 		loaded = owner:IsSkillActive(SKILL_LOADEDHULL)

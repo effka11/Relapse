@@ -229,7 +229,8 @@ function meta:MeleeViewPunch(damage)
 	self:ViewPunch(Angle(math.Rand(minpunch, maxpunch), math.Rand(minpunch, maxpunch), math.Rand(minpunch, maxpunch)))
 end
 
-function meta:NearArsenalCrate()
+-- Crate or pack only. Sigil shop wraps NearArsenalCrate and must not inherit this.
+function meta:NearDeployedArsenal()
 	local pos = self:EyePos()
 
 	if self.ArsenalZone and self.ArsenalZone:IsValid() then return true end
@@ -247,7 +248,58 @@ function meta:NearArsenalCrate()
 
 	return false
 end
+
+function meta:NearArsenalCrate()
+	return self:NearDeployedArsenal()
+end
 meta.IsNearArsenalCrate = meta.NearArsenalCrate
+
+function meta:NearestOwnedArsenalCrate()
+	local pos = self:EyePos()
+
+	local arseents = {}
+	table.Add(arseents, ents.FindByClass("prop_arsenalcrate"))
+	table.Add(arseents, ents.FindByClass("status_arsenalpack"))
+
+	for _, ent in pairs(arseents) do
+		local nearest = ent:NearestPoint(pos)
+		local owner = ent.GetObjectOwner and ent:GetObjectOwner() or ent:GetOwner()
+		if owner == self and pos:DistToSqr(nearest) <= 10000 and (WorldVisible(pos, nearest) or self:TraceLine(100).Entity == ent) then
+			return ent
+		end
+	end
+end
+
+function meta:NearestArsenalCrateOwnedByOther()
+	local pos = self:EyePos()
+
+	local arseents = {}
+	table.Add(arseents, ents.FindByClass("prop_arsenalcrate"))
+	table.Add(arseents, ents.FindByClass("status_arsenalpack"))
+
+	for _, ent in pairs(arseents) do
+		local nearest = ent:NearestPoint(pos)
+		local owner = ent.GetObjectOwner and ent:GetObjectOwner() or ent:GetOwner()
+		if IsValid(owner) and owner ~= self and owner:IsValidHuman() and pos:DistToSqr(nearest) <= 10000 and (WorldVisible(pos, nearest) or self:TraceLine(100).Entity == ent) then
+			return ent
+		end
+	end
+end
+
+function meta:GetArsenalMarginGiveShare()
+	return math.Clamp(tonumber(self:GetNWFloat("RelapseArsenalMarginGive", 0)) or 0, 0, 1)
+end
+
+function meta:GetArsenalMarginKeepShare()
+	return 1 - self:GetArsenalMarginGiveShare()
+end
+
+if SERVER then
+	function meta:SetArsenalMarginKeepShare(share)
+		share = math.Clamp(tonumber(share) or 1, 0, 1)
+		self:SetNWFloat("RelapseArsenalMarginGive", 1 - share)
+	end
+end
 
 function meta:NearRemantler()
 	local pos = self:EyePos()
@@ -1097,7 +1149,12 @@ function meta:NearestRemantler()
 end
 
 function meta:GetMaxZombieHealth()
-	return self:GetZombieClassTable().Health
+	local classtab = self:GetZombieClassTable()
+	local hp = classtab and classtab.Health or 1
+	if GAMEMODE and GAMEMODE.GetUpgradePercentMul then
+		hp = hp * GAMEMODE:GetUpgradePercentMul(self, "ZombieHealth")
+	end
+	return math.max(1, math.floor(hp + 0.5))
 end
 
 local oldmaxhealth = FindMetaTable("Entity").GetMaxHealth

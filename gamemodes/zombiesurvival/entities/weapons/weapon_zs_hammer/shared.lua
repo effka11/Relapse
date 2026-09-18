@@ -59,7 +59,8 @@ GAMEMODE:AttachWeaponModifier(SWEP, WEAPON_MODIFIER_MELEE_RANGE, 3, 1)
 function SWEP:SetNextAttack()
 	local owner = self:GetOwner()
 	local armdelay = owner:GetMeleeSpeedMul()
-	self:SetNextPrimaryFire(CurTime() + self.Primary.Delay * (owner.HammerSwingDelayMul or 1) * armdelay)
+	local swing = GAMEMODE:GetHammerSwingPercentMul(owner)
+	self:SetNextPrimaryFire(CurTime() + self.Primary.Delay * armdelay / math.max(swing, 0.01))
 end
 
 function SWEP:PlayHitSound()

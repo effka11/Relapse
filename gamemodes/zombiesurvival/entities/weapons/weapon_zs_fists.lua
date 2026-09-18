@@ -159,7 +159,15 @@ function SWEP:DealDamage()
 	self:SetNextSecondaryFire( time + delay )
 
 	if hitent:IsValid() then
-		local damagemultiplier = owner:GetTotalAdditiveModifier("UnarmedDamageMul", "MeleeDamageMultiplier")
+		local damagemultiplier
+		if GAMEMODE and GAMEMODE.GetMeleeDamagePercentMul then
+			damagemultiplier = GAMEMODE:GetMeleeDamagePercentMul(owner, hitent)
+			if isnumber(owner.UnarmedDamageMul) then
+				damagemultiplier = damagemultiplier + owner.UnarmedDamageMul - 1
+			end
+		else
+			damagemultiplier = owner:GetTotalAdditiveModifier("UnarmedDamageMul", "MeleeDamageMultiplier")
+		end
 		if owner:IsSkillActive(SKILL_LASTSTAND) then
 			if owner:Health() <= owner:GetMaxHealth() * 0.25 then
 				damagemultiplier = damagemultiplier * 2

@@ -95,10 +95,8 @@ function ENT:Use(activator, caller)
 		self:GetObjectOwner():SendDeployableClaimedMessage(self)
 	end
 
-	if gamemode.Call("PlayerCanPurchase", activator) then
+	if ishuman then
 		activator:SendLua("GAMEMODE:OpenArsenalMenu()")
-	elseif ishuman then
-		activator:CenterNotify(COLOR_RED, translate.ClientGet(activator, "you_cant_purchase_now"))
 	end
 end
 

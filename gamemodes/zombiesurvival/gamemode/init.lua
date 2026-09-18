@@ -59,6 +59,7 @@ AddCSLuaFile("cl_relapse_freecam.lua")
 AddCSLuaFile("cl_relapse_wmpose.lua")
 AddCSLuaFile("cl_relapse_inventory.lua")
 AddCSLuaFile("cl_relapse_loadout.lua")
+AddCSLuaFile("cl_relapse_breath.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -98,6 +99,7 @@ AddCSLuaFile("vgui/pendboard.lua")
 AddCSLuaFile("vgui/relapse_ui.lua")
 AddCSLuaFile("vgui/pworth.lua")
 AddCSLuaFile("vgui/parsenal.lua")
+AddCSLuaFile("vgui/parsenal_margin.lua")
 AddCSLuaFile("vgui/premantle.lua")
 AddCSLuaFile("vgui/zshealtharea.lua")
 AddCSLuaFile("vgui/zsammoarea.lua")
@@ -446,6 +448,11 @@ function GM:AddResources()
 	resource.AddWorkshop("3641416752") -- Warzone Mil-Sim Balkan Special ATU
 	resource.AddWorkshop("3713771232") -- Cold War Park Coventry playermodel
 	resource.AddWorkshop("3747373360") -- Dead by Daylight Backstabber Susie
+	resource.AddWorkshop("2893907662") -- COD Modern Warfare 2 - Snipers (Navy SEALs Sniper)
+	resource.AddWorkshop("2317864856") -- CODMW2019 Alex playermodel
+	resource.AddWorkshop("3572296525") -- Metal Gear Solid Δ Snake Eater KGB Unit
+	resource.AddWorkshop("3627414330") -- COD MW2019 Russian J-12 playermodel
+	resource.AddWorkshop("2929135394") -- Max Payne 3 Tropa Z / Tropa Z 2
 	resource.AddWorkshop("3739488356") -- [RE2: Remake] Zombies Ragdolls
 end
 
@@ -507,6 +514,7 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_boss_spawned")
 	util.AddNetworkString("zs_boss_slain")
 	util.AddNetworkString("zs_commission")
+	util.AddNetworkString("zs_arsenal_margin")
 	util.AddNetworkString("zs_healother")
 	util.AddNetworkString("zs_healby")
 	util.AddNetworkString("zs_buffby")
@@ -2804,6 +2812,14 @@ function GM:EntityTakeDamage(ent, dmginfo)
 		return
 	end
 
+	-- Grid Strength + skillweb melee, once. MW melee has no MeleeDamageMultiplier on the swing.
+	if attacker:IsValid() and attacker:IsPlayer() and P_Team(attacker) == TEAM_HUMAN
+		and self.IsMeleeDamageInflictor and self:IsMeleeDamageInflictor(inflictor)
+		and (inflictor.Melee or (istable(inflictor.Relapse) and inflictor.Relapse.Melee))
+		and self.GetMeleeDamagePercentMul then
+		dmginfo:ScaleDamage(self:GetMeleeDamagePercentMul(attacker, ent))
+	end
+
 	if ent.LastHeld and CurTime() < ent.LastHeld + 0.1 and attacker:IsPlayer() and P_Team(attacker) == TEAM_HUMAN then
 		dmginfo:SetDamage(0)
 		dmginfo:SetDamageType(0)
@@ -2972,6 +2988,10 @@ function GM:EntityTakeDamage(ent, dmginfo)
 			ent:EmitSound(math.random(2) == 1 and "npc/zombie/zombie_pound_door.wav" or "ambient/materials/door_hit1.wav")
 		end
 
+		if attacker:IsPlayer() and attacker:Team() == TEAM_HUMAN then
+			dmginfo:ScaleDamage(self:GetUpgradePercentMul(attacker, "DoorDamage"))
+		end
+
 		ent.Heal = ent.Heal - dmginfo:GetDamage()
 		local brit = math.Clamp(ent.Heal / ent.TotalHeal, 0, 1)
 		local col = ent:GetColor()
@@ -3037,6 +3057,10 @@ function GM:EntityTakeDamage(ent, dmginfo)
 		if gamemode.Call("ShouldAntiGrief", ent, attacker, dmginfo, ent.TotalHeal) then
 			attacker:AntiGrief(dmginfo)
 			if dmginfo:GetDamage() <= 0 then return end
+		end
+
+		if attacker:IsPlayer() and attacker:Team() == TEAM_HUMAN then
+			dmginfo:ScaleDamage(self:GetUpgradePercentMul(attacker, "DoorDamage"))
 		end
 
 		ent.Heal = ent.Heal - dmginfo:GetDamage()
@@ -3448,6 +3472,13 @@ function GM:KeyPress(pl, key)
 					local use = pl.GetUseEntity and pl:GetUseEntity()
 					if IsValid(use) then
 						self:TryHumanPickup(pl, use)
+					end
+				end
+				if not pl:IsHolding() and pl:NearArsenalCrate() then
+					local use = pl.GetUseEntity and pl:GetUseEntity()
+					local class = IsValid(use) and use:GetClass()
+					if not class or class == "prop_arsenalcrate" or class == "status_arsenalpack" or class == "func_arsenalzone" then
+						pl:SendLua("GAMEMODE:OpenArsenalMenu()")
 					end
 				end
 			end
@@ -4133,12 +4164,12 @@ function GM:PlayerSpawn(pl)
 		end
 
 		if classtab.Boss then
-			pl:SetHealth(classtab.Health)
+			pl:SetHealth(pl:GetMaxZombieHealth())
 		else
 			local lowundead = team.NumPlayers(TEAM_UNDEAD) < 4
 
 			local healthmulti = (self.ObjectiveMap or self.ZombieEscape) and 1 or lowundead and 1.5 or 1
-			pl:SetHealth(classtab.Health * healthmulti)
+			pl:SetHealth(pl:GetMaxZombieHealth() * healthmulti)
 		end
 
 		if classtab.SWEP then

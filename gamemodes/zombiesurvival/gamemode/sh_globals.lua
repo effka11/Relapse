@@ -110,6 +110,7 @@ GM.UtilityKey = IN_SPEED
 -- Hold-to-open inventory / nest menu. Q has no IN_ bit (+menu); tracked client-side.
 GM.MenuKeyCode = KEY_Q
 
+-- Base arsenal margin. Owner keep vs buyer discount is a slider on that pool.
 GM.ArsenalCrateCommission = 0.04
 
 GM.BaseDeploySpeed = 1 -- Put this back to 1 to increase the value of it

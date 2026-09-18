@@ -78,17 +78,17 @@ function SWEP:MeleeSwing()
 	local damage = self:GetDamage(self:GetTracesNumPlayers(tr))
 	local ent
 
-	local damagemultiplier = owner:Team() == TEAM_HUMAN and owner.MeleeDamageMultiplier or 1 --(owner.BuffMuscular and owner:Team()==TEAM_HUMAN) and 1.2 or 1
+	local standmul = 1
 	if owner:IsSkillActive(SKILL_LASTSTAND) then
 		if owner:Health() <= owner:GetMaxHealth() * 0.25 then
-			damagemultiplier = damagemultiplier * 2
+			standmul = 2
 		else
-			damagemultiplier = damagemultiplier * 0.85
+			standmul = 0.85
 		end
 	end
 
 	if combo == 2 then
-		damagemultiplier = damagemultiplier * 1.35
+		standmul = standmul * 1.35
 	end
 
 	for _, trace in ipairs(tr) do
@@ -97,6 +97,16 @@ function SWEP:MeleeSwing()
 		ent = trace.Entity
 
 		hit = true
+
+		local damagemultiplier = 1
+		if owner:Team() == TEAM_HUMAN then
+			if GAMEMODE and GAMEMODE.GetMeleeDamagePercentMul then
+				damagemultiplier = GAMEMODE:GetMeleeDamagePercentMul(owner, ent)
+			else
+				damagemultiplier = owner.MeleeDamageMultiplier or 1
+			end
+		end
+		damagemultiplier = damagemultiplier * standmul
 
 		local hitflesh = trace.MatType == MAT_FLESH or trace.MatType == MAT_BLOODYFLESH or trace.MatType == MAT_ANTLION or trace.MatType == MAT_ALIENFLESH
 

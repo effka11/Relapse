@@ -33,7 +33,12 @@ function meta:HealPlayer(pl, amount, pointmul, nobymsg, poisononly)
 	local bleed = pl:GetBleedDamage()
 
 	local healrec = (pl.HealingReceived or 1) - (pl:GetPhantomHealth() > 0.5 and 0.5 or 0) - (pl:GetStatus("sickness") and 0.5 or 0)
-	local healmul = self.MedicHealMul or 1
+	local healmul = 1
+	if GAMEMODE and GAMEMODE.GetMedicHealPercentMul then
+		healmul = GAMEMODE:GetMedicHealPercentMul(self)
+	elseif isnumber(self.MedicHealMul) then
+		healmul = self.MedicHealMul
+	end
 	local multiplier = healmul + healrec - 1
 	local regamount = healmul * amount
 
@@ -698,11 +703,16 @@ end
 
 function meta:SetupDeployableSkillHealth(extramodifier)
 	local owner = self:GetObjectOwner()
-	local newmaxhealth = self.MaxHealth or self:GetMaxObjectHealth()
-	local currentmaxhealth = self:GetMaxObjectHealth()
+	local currentmaxhealth = math.max(1, self:GetMaxObjectHealth())
+	local base = self.MaxHealth
+	if not base or base <= 0 then
+		self.RelapseObjectHealthBase = self.RelapseObjectHealthBase or currentmaxhealth
+		base = self.RelapseObjectHealthBase
+	end
+	local newmaxhealth = base
 
 	if owner:IsValid() then
-		newmaxhealth = newmaxhealth * owner:GetTotalAdditiveModifier("DeployableHealthMul", extramodifier)
+		newmaxhealth = newmaxhealth * GAMEMODE:GetMechanicsDeviceHealthMul(owner, self, "DeployableHealthMul", extramodifier)
 	end
 
 	newmaxhealth = math.ceil(newmaxhealth)

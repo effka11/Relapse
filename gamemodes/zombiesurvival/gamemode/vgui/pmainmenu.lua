@@ -67,6 +67,10 @@ function GM:ShopMenuOpen()
 	return OverlayOpen(pWorth) or OverlayOpen(self.ArsenalInterface)
 end
 
+function GM:ArsenalMenuOpen()
+	return OverlayOpen(self.ArsenalInterface)
+end
+
 function GM:OptionsMenuOpen()
 	return OverlayOpen(pOptions)
 end
@@ -167,15 +171,14 @@ function GM:CloseOtherOverlays(keep)
 end
 
 function GM:ToggleShopMenu()
-	if self:ShopMenuOpen() then
+	if self:ArsenalMenuOpen() then
 		self:CloseShopMenu()
 		return
 	end
-	if self:GetWave() > 0 then
-		self:OpenArsenalMenu()
-	elseif MakepWorth then
-		MakepWorth()
+	if not (IsValid(MySelf) and MySelf:Team() == TEAM_HUMAN and MySelf:Alive()) then
+		return
 	end
+	self:OpenArsenalMenu()
 end
 
 function GM:ToggleOptionsMenu()

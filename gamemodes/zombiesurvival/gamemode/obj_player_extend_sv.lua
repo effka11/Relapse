@@ -317,22 +317,6 @@ function meta:ShouldReviveFrom(dmginfo, hullzplane)
 	or dmginfo:GetDamagePosition().z < self:LocalToWorld(Vector(0, 0, hullzplane)).z)
 end
 
-function meta:NearestArsenalCrateOwnedByOther()
-	local pos = self:EyePos()
-
-	local arseents = {}
-	table.Add(arseents, ents.FindByClass("prop_arsenalcrate"))
-	table.Add(arseents, ents.FindByClass("status_arsenalpack"))
-
-	for _, ent in pairs(arseents) do
-		local nearest = ent:NearestPoint(pos)
-		local owner = ent.GetObjectOwner and ent:GetObjectOwner() or ent:GetOwner()
-		if owner ~= self and owner:IsValidHuman() and pos:DistToSqr(nearest) <= 10000 and (WorldVisible(pos, nearest) or self:TraceLine(100).Entity == ent) then
-			return ent
-		end
-	end
-end
-
 local OldLastHitGroup = meta.LastHitGroup
 function meta:LastHitGroup()
 	return self.m_LastHitGroupUnset and CurTime() <= self.m_LastHitGroupUnset and self.m_LastHitGroup or OldLastHitGroup(self)
@@ -947,6 +931,9 @@ function meta:Resupply(owner, obj)
 
 	local ammotype = self:GetResupplyAmmoType()
 	local amount = GAMEMODE.AmmoCache[ammotype]
+	if isnumber(amount) and GAMEMODE.GetResupplyBoxAmmoGive then
+		amount = GAMEMODE:GetResupplyBoxAmmoGive(amount, owner, obj)
+	end
 
 	for i = 1, stockpiling and not stowage and 2 or 1 do
 		net.Start("zs_ammopickup")

@@ -100,7 +100,7 @@ function ENT:SetupPlayerSkills()
 	local loaded = false
 
 	if owner:IsValid() then
-		newmaxhealth = newmaxhealth * owner:GetTotalAdditiveModifier("ControllableHealthMul", "ManhackHealthMul")
+		newmaxhealth = newmaxhealth * GAMEMODE:GetMechanicsDeviceHealthMul(owner, self, "ControllableHealthMul", "ManhackHealthMul")
 		hitdamage = hitdamage * (owner.ManhackDamageMul or 1)
 		maxspeed = maxspeed * (owner.ControllableSpeedMul or 1)
 		acceleration = acceleration * (owner.ControllableHandlingMul or 1)

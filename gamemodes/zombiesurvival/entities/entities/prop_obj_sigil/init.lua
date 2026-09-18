@@ -48,6 +48,8 @@ function ENT:Use(pl)
 
 				pl.NextSigilTPTry = CurTime() + 1
 			end
+		else
+			pl:SendLua("GAMEMODE:OpenArsenalMenu()")
 		end
 	end
 end

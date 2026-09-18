@@ -342,7 +342,15 @@ local function MakeInvWindow(titleKey, shopKind, shopMode)
 			return
 		end
 		if shopMode then
-			surface.PlaySound("buttons/button8.wav")
+			local price = GAMEMODE:RelapseCosmeticMarks(id)
+			if price <= 0 or GAMEMODE:PlayerOwnsRelapseItem(id) or (GAMEMODE:GetRelapseMarks() or 0) < price then
+				surface.PlaySound("buttons/button8.wav")
+				return
+			end
+			surface.PlaySound("buttons/button14.wav")
+			net.Start("relapse_inv_buy")
+				net.WriteString(id)
+			net.SendToServer()
 			return
 		end
 		surface.PlaySound("buttons/button14.wav")

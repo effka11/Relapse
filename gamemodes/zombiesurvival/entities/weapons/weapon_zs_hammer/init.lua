@@ -103,7 +103,8 @@ function SWEP:SecondaryAttack()
 		return
 	end
 
-	local tr = owner:CompensatedMeleeTrace(64, self.MeleeSize, nil, nil, nil, true)
+	local range = 64 * GAMEMODE:GetUpgradePercentMul(owner, "NailRange")
+	local tr = owner:CompensatedMeleeTrace(range, self.MeleeSize, nil, nil, nil, true)
 	local trent = tr.Entity
 
 	if not trent:IsValid()

@@ -45,6 +45,7 @@ include("vgui/pendboard.lua")
 include("vgui/relapse_ui.lua")
 include("vgui/pworth.lua")
 include("vgui/parsenal.lua")
+include("vgui/parsenal_margin.lua")
 include("vgui/pinventory.lua")
 include("vgui/pcharacter.lua")
 include("vgui/premantle.lua")
@@ -73,6 +74,7 @@ include("cl_relapse_freecam.lua")
 include("cl_relapse_wmpose.lua")
 include("cl_relapse_inventory.lua")
 include("cl_relapse_loadout.lua")
+include("cl_relapse_breath.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -1847,7 +1849,7 @@ function GM:PlayerBindPress(pl, bind, wasin)
 		self:CloseRelapseInventory()
 		return true
 	end
-	if wasin and bind == "gm_showteam" and self.ShopMenuOpen and self:ShopMenuOpen() then
+	if wasin and bind == "gm_showteam" and self.ArsenalMenuOpen and self:ArsenalMenuOpen() then
 		self:CloseShopMenu()
 		return true
 	end
@@ -1973,7 +1975,11 @@ function GM:_CalcView(pl, origin, angles, fov, znear, zfar)
 
 	pl:CallZombieFunction2("CalcView", origin, angles)
 
-	return self.BaseClass.CalcView(self, pl, origin, angles, fov, znear, zfar)
+	local view = self.BaseClass.CalcView(self, pl, origin, angles, fov, znear, zfar)
+	if view and self.ApplyRelapseIdleBreath then
+		self:ApplyRelapseIdleBreath(pl, view.angles)
+	end
+	return view
 end
 
 function GM:CalcViewTaunt(pl, origin, angles, fov, znear, zfar)

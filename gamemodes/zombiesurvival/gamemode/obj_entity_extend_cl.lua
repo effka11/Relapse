@@ -41,7 +41,12 @@ function meta:HealPlayer(pl, amount)
 	local poison = pl:GetPoisonDamage()
 	local bleed = pl:GetBleedDamage()
 
-	local multiplier = self.MedicHealMul or 1
+	local multiplier = 1
+	if GAMEMODE and GAMEMODE.GetMedicHealPercentMul then
+		multiplier = GAMEMODE:GetMedicHealPercentMul(self)
+	elseif isnumber(self.MedicHealMul) then
+		multiplier = self.MedicHealMul
+	end
 
 	amount = amount * multiplier
 
