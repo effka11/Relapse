@@ -46,6 +46,9 @@ local GRID_STAT_INFO = {
 	Heal = { key = "heal", name = "char_stat_heal", fallback = "Healing received", kind = "pct" },
 	MedicHeal = { key = "medicheal", name = "char_stat_medicheal", fallback = "Healing effectiveness", kind = "pct" },
 	MeleeDamage = { key = "melee", name = "char_stat_melee", fallback = "Melee damage", kind = "pct" },
+	MeleeViewPunch = { key = "meleepunch", name = "char_stat_meleepunch", fallback = "Melee hit punch", kind = "pct" },
+	AimShake = { key = "aimshake", name = "char_stat_aimshake", fallback = "Aim tremor", kind = "pct" },
+	AimShakeThreshold = { key = "aimshakethreshold", name = "char_stat_aimshakethreshold", fallback = "Tremor health threshold", kind = "pct" },
 	ZombieHealth = { key = "zombiehealth", name = "char_stat_zombiehealth", fallback = "Zombie max health", kind = "pct" },
 	Worth = { key = "worth", name = "char_stat_worth", fallback = "Starting worth" },
 	Scrap = { key = "scrap", name = "char_stat_scrap", fallback = "Starting scrap" },
@@ -752,9 +755,16 @@ end)
 
 local gridRT
 local gridRTMat
-local matFadeU = Material("vgui/gradient-u")
-local matFadeD = Material("vgui/gradient-d")
-local matFadeR = Material("vgui/gradient-r")
+local matFadeMul = CreateMaterial("RelapseCycleGridFadeMul", "UnlitGeneric", {
+	["$basetexture"] = "vgui/white",
+	["$vertexcolor"] = "1",
+	["$vertexalpha"] = "1",
+	["$translucent"] = "1",
+	["$ignorez"] = "1",
+	["$nocull"] = "1",
+	["$nolod"] = "1"
+})
+local GRID_FADE_STEPS = 10
 
 local function EnsureGridRT()
 	if gridRT and gridRTMat then
@@ -1021,23 +1031,50 @@ function GRID:FadeBand(w, h)
 	return math.max(RelapseUI.sPx(52), math.floor(math.min(w, h) * 0.08))
 end
 
--- Black vignette on the RT: additive blit then treats RGB 0 as fully gone.
+-- Additive blit treats RGB 0 as gone. Linear vgui gradients never quite
+-- reach 0, so white lasers stay a hairline after wine is already invisible.
+local function GridEdgeKeep(t)
+	t = math.Clamp(t, 0, 1)
+	t = t * t * (3 - 2 * t)
+	return t * t
+end
+
+local function PushFadeVert(x, y, keep)
+	mesh.Color(0, 0, 0, math.floor((1 - keep) * 255 + 0.5))
+	mesh.Position(Vector(x, y, 0))
+	mesh.TexCoord(0, 0, 0)
+	mesh.AdvanceVertex()
+end
+
+local function PushFadeQuad(x0, y0, x1, y1, ktl, ktr, kbr, kbl)
+	PushFadeVert(x0, y0, ktl)
+	PushFadeVert(x1, y0, ktr)
+	PushFadeVert(x1, y1, kbr)
+	PushFadeVert(x0, y1, kbl)
+end
+
 function GRID:MaskWebEdges(w, h)
 	local band = self:FadeBand(w, h)
+	local n = GRID_FADE_STEPS
 	cam.Start2D()
-	surface.SetDrawColor(0, 0, 0, 255)
-	surface.SetMaterial(matFadeU)
-	surface.DrawTexturedRect(0, 0, w, band)
-	surface.SetMaterial(matFadeD)
-	surface.DrawTexturedRect(0, h - band, w, band)
-	surface.SetMaterial(matFadeR)
-	surface.DrawTexturedRect(w - band, 0, band, h)
-	surface.DrawTexturedRectRotated(band * 0.5, h * 0.5, band, h, 180)
+	render.SetMaterial(matFadeMul)
+	mesh.Begin(MATERIAL_QUADS, n * 4)
+	for i = 0, n - 1 do
+		local t0, t1 = i / n, (i + 1) / n
+		local k0, k1 = GridEdgeKeep(t0), GridEdgeKeep(t1)
+		local a0, a1 = band * t0, band * t1
+		PushFadeQuad(0, a0, w, a1, k0, k0, k1, k1)
+		PushFadeQuad(0, h - a1, w, h - a0, k1, k1, k0, k0)
+		PushFadeQuad(a0, 0, a1, h, k0, k1, k1, k0)
+		PushFadeQuad(w - a1, 0, w - a0, h, k1, k0, k0, k1)
+	end
+	mesh.End()
 	draw.NoTexture()
-	surface.DrawRect(0, 0, w, 2)
-	surface.DrawRect(0, h - 2, w, 2)
-	surface.DrawRect(0, 0, 2, h)
-	surface.DrawRect(w - 2, 0, 2, h)
+	surface.SetDrawColor(0, 0, 0, 255)
+	surface.DrawRect(0, 0, w, 3)
+	surface.DrawRect(0, h - 3, w, 3)
+	surface.DrawRect(0, 0, 3, h)
+	surface.DrawRect(w - 3, 0, 3, h)
 	cam.End2D()
 end
 

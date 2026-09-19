@@ -140,7 +140,7 @@ local function FormatRelapseStat(id, val)
 		end
 		return string.format("%.1f", val)
 	end
-	if id == "FireRate" or id == "Delay" or id == "Reload" then
+	if id == "FireRate" or id == "SwingRate" or id == "Delay" or id == "Reload" then
 		return RelapseUI.TF("shop_stat_sec_fmt", val)
 	end
 	if id == "Stability" then
@@ -148,6 +148,9 @@ local function FormatRelapseStat(id, val)
 	end
 	if id == "Kinetic" or id == "Recoil" or id == "Accuracy" then
 		return string.format("%.2f", val)
+	end
+	if id == "Stamina" then
+		return RelapseUI.TF("shop_stat_pct_fmt", val * 100)
 	end
 
 	return tostring(val)
@@ -190,8 +193,12 @@ function GM:ViewerStatBarUpdate(viewer, display, sweptable)
 		return
 	end
 
-	if GAMEMODE:GetWeaponRelapse(sweptable) then
+	local relapse = GAMEMODE:GetWeaponRelapse(sweptable)
+	if relapse then
 		local specs = GAMEMODE.RelapseWeaponStatBarVals
+		if relapse.Melee and GAMEMODE.RelapseMeleeStatBarVals then
+			specs = GAMEMODE.RelapseMeleeStatBarVals
+		end
 		for i = 1, barCount do
 			local spec = specs and specs[i]
 			local val = spec and GAMEMODE:RelapseStatValue(sweptable, spec[1])

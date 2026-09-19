@@ -576,6 +576,16 @@ GM.CycleGridCatalog = {
 		U = 20,
 		MeleeDamage = 0.03
 	},
+	melee_2 = {
+		tree = "melee",
+		slot = 12,
+		nameKey = "grid_skill_melee_2",
+		descKey = "grid_skill_melee_2_desc",
+		U = 20,
+		MeleeViewPunch = -0.15,
+		AimShake = 0.15,
+		AimShakeThreshold = 0.15
+	},
 	shadow_1 = {
 		tree = "shadow",
 		slot = 0,

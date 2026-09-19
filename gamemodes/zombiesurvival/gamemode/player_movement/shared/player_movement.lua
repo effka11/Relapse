@@ -45,9 +45,12 @@ function GM:StartCommand(pl, cmd)
 		return
 	end
 	-- Empty: walk anim. Leave Shift while standing so alt-use still fires.
-	if self.HumanCanSprint and not self:HumanCanSprint(pl)
-		and (cmd:GetForwardMove() ~= 0 or cmd:GetSideMove() ~= 0) then
-		cmd:RemoveKey(IN_SPEED)
+	-- Ladder uses look-wish, not only WASD.
+	if self.HumanCanSprint and not self:HumanCanSprint(pl) then
+		local onLadder = pl.RelapseLadderHold or (pl.GetNW2Bool and pl:GetNW2Bool("RelapseLadderHold", false))
+		if onLadder or cmd:GetForwardMove() ~= 0 or cmd:GetSideMove() ~= 0 then
+			cmd:RemoveKey(IN_SPEED)
+		end
 	end
 end
 
@@ -109,6 +112,10 @@ function GM:Move(pl, move)
 end
 
 function GM:FinishMove(pl, move)
+	if SERVER and self.RelapseStaminaFinishMove then
+		self:RelapseStaminaFinishMove(pl, move)
+	end
+
 	if pl:GetMoveType() == MOVETYPE_NOCLIP then return end
 
 	pt = E_GetTable(pl)
@@ -122,9 +129,5 @@ function GM:FinishMove(pl, move)
 		vel.x = vel.x * mul
 		vel.y = vel.y * mul
 		M_SetVelocity(move, vel)
-	end
-
-	if SERVER and self.RelapseStaminaFinishMove then
-		self:RelapseStaminaFinishMove(pl, move)
 	end
 end

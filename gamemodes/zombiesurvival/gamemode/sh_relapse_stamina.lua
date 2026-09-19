@@ -1,8 +1,9 @@
--- Relapse stamina. 0..1. First spend is ground run (same "бег" as Swift:
--- IN_SPEED, on ground, not crouch, not ghost, actually moving).
+-- Relapse stamina. 0..1. Spend: ground run, ladder sprint, noclip sprint.
+-- Swift run stays IN_SPEED / ground / not crouch / not ghost. ZE skips.
 
 local IN_SPEED = IN_SPEED
 local MOVETYPE_WALK = MOVETYPE_WALK
+local MOVETYPE_NOCLIP = MOVETYPE_NOCLIP
 local TEAM_HUMAN = TEAM_HUMAN
 
 local M_Entity = FindMetaTable("Entity")
@@ -43,6 +44,8 @@ function GM:ResetRelapseStamina(pl)
 	pl:SetStamina(1)
 	pl:SetStaminaExhausted(false)
 	pl.RelapseStaminaRestAt = nil
+	pl.RelapseStaminaDrainT = nil
+	pl.RelapseStaminaCoast = nil
 end
 
 function GM:HumanCanSprint(pl)
@@ -78,6 +81,54 @@ function GM:IsHumanRunning(pl, move)
 	return vel.x * vel.x + vel.y * vel.y > minSqr
 end
 
+function GM:IsHumanOnLadder(pl)
+	if not IsValid(pl) then return false end
+	if pl.RelapseNoclip then return false end
+	return pl.RelapseLadderHold or (pl.GetNW2Bool and pl:GetNW2Bool("RelapseLadderHold", false)) or false
+end
+
+function GM:IsHumanClimbing(pl)
+	if not self:IsHumanOnLadder(pl) then return false end
+	return (pl.RelapseLadderWish or 0) ~= 0
+end
+
+-- Shift climb, actually moving on the strip. Gated by HumanCanSprint via StartCommand.
+function GM:IsHumanClimbSprinting(pl, move)
+	if not self:IsHumanClimbing(pl) then return false end
+	if not self:HumanCanSprint(pl) then return false end
+	local sprint = pl.RelapseLadderSprint
+	if sprint == nil then
+		if move then
+			sprint = move:KeyDown(IN_SPEED)
+		else
+			sprint = pl:KeyDown(IN_SPEED)
+		end
+	end
+	return sprint and true or false
+end
+
+function GM:IsHumanNoclipMove(pl)
+	if not IsValid(pl) then return false end
+	if pl.RelapseNoclip then return true end
+	if self:IsHumanOnLadder(pl) then return false end
+	return E_GetMoveType(pl) == MOVETYPE_NOCLIP
+end
+
+function GM:IsHumanNoclipSprinting(pl, move)
+	if not self:IsHumanNoclipMove(pl) then return false end
+	if not self:HumanCanSprint(pl) then return false end
+	local sprinting
+	if move then
+		sprinting = move:KeyDown(IN_SPEED)
+	else
+		sprinting = pl:KeyDown(IN_SPEED)
+	end
+	if not sprinting then return false end
+	local vel = move and move:GetVelocity() or pl:GetVelocity()
+	local minSqr = self.HumanStaminaRunSpeedSqr or (64 * 64)
+	return vel:LengthSqr() > minSqr
+end
+
 function GM:IsHumanStanding(pl, move)
 	if not IsValid(pl) or not P_Alive(pl) then return false end
 	if not pl:OnGround() then return false end
@@ -97,6 +148,23 @@ function GM:GetHumanStaminaDrainMul(pl)
 end
 
 function GM:GetHumanStaminaRegenTime(pl, move)
+	if self:IsHumanOnLadder(pl) then
+		if self:IsHumanClimbing(pl) then
+			return self.HumanStaminaRegenTimeClimb or 110
+		end
+		return self.HumanStaminaRegenTimeHang or 50
+	end
+	if self:IsHumanNoclipMove(pl) then
+		local vel = move and move:GetVelocity() or (IsValid(pl) and pl:GetVelocity())
+		local minSqr = self.HumanStaminaStandSpeedSqr or (28 * 28)
+		if vel and vel:LengthSqr() > minSqr then
+			return self.HumanStaminaRegenTimeNoclip or 42
+		end
+		return self.HumanStaminaRegenTimeStand or 30
+	end
+	if IsValid(pl) and P_GetBarricadeGhosting(pl) then
+		return self.HumanStaminaRegenTimeGhost or 85
+	end
 	if self:IsHumanStanding(pl, move) then
 		return self.HumanStaminaRegenTimeStand or 30
 	end
@@ -109,8 +177,8 @@ local function RelapseLogistic(z)
 	return 1 / (1 + math.exp(-z))
 end
 
--- Remapped logistic, ends pinned to 0 and 1.
-local function RelapseLogistic01(u, inflect, steep)
+-- Remapped logistic, ends pinned to 0 and 1. Breath and palsy share this S.
+function GM:RelapseLogistic01(u, inflect, steep)
 	u = math.Clamp(u or 0, 0, 1)
 	inflect = inflect or 0.5
 	steep = steep or 6
@@ -155,6 +223,44 @@ function GM:GetHumanStaminaRegenRateMul(elapsed)
 	return RelapseSmoother01((elapsed - delay) / ease)
 end
 
+-- Tank fraction for one Relapse melee swing. Guns' bash is 0. Not from Damage.
+function GM:GetHumanStaminaMeleeCost(wep, heavy)
+	if self.ZombieEscape then return 0 end
+	if not IsValid(wep) then return 0 end
+	local R = wep.Relapse
+	if not (istable(R) and R.Melee) then return 0 end
+	local cost = tonumber(R.Stamina) or 0
+	if cost <= 0 then return 0 end
+	if heavy then
+		cost = tonumber(R.StaminaHeavy) or (cost * (self.HumanStaminaMeleeHeavyMul or 1.7))
+	end
+	return math.max(0, cost)
+end
+
+function GM:CanHumanStaminaMelee(pl, wep, heavy)
+	local cost = self:GetHumanStaminaMeleeCost(wep, heavy)
+	if cost <= 0 then return true end
+	if not IsValid(pl) or not pl.GetStamina then return true end
+	if P_Team(pl) ~= TEAM_HUMAN then return true end
+	return pl:GetStamina() > 0
+end
+
+-- Server spends. Client only checks DT so predicted VM can start.
+function GM:ConsumeHumanStaminaMelee(pl, wep, heavy)
+	if not self:CanHumanStaminaMelee(pl, wep, heavy) then
+		return false
+	end
+	local cost = self:GetHumanStaminaMeleeCost(wep, heavy)
+	if cost <= 0 or not SERVER then
+		return true
+	end
+	local stam = pl:GetStamina()
+	pl:SetStamina(math.max(0, stam - cost))
+	pl.RelapseStaminaRestAt = CurTime()
+	pl.RelapseStaminaCoast = false
+	return true
+end
+
 -- Quadratic fade below the start fraction. Status mul, not an upgrade percent.
 function GM:GetHumanStaminaSpeedMul(pl, sprint)
 	if self.ZombieEscape then return 1 end
@@ -184,7 +290,7 @@ function GM:GetHumanStaminaBreathFatigue(stam)
 	if stam >= start then return 0 end
 
 	local u = 1 - stam / start
-	return RelapseLogistic01(u, self.HumanStaminaBreathInflect or 0.50, self.HumanStaminaBreathSteep or 7.5)
+	return self:RelapseLogistic01(u, self.HumanStaminaBreathInflect or 0.50, self.HumanStaminaBreathSteep or 7.5)
 end
 
 -- Amp, rate from the S-curve. Rest stays 1, 1 (old idle wave).
@@ -203,6 +309,7 @@ function GM:RelapseStaminaFinishMove(pl, move)
 	if self.ZombieEscape then return end
 	if not IsValid(pl) or not P_Alive(pl) then return end
 	if P_Team(pl) ~= TEAM_HUMAN then return end
+	if pl.IsRelapseAIBot then return end
 
 	local dt = FrameTime()
 	if dt <= 0 then return end
@@ -215,10 +322,34 @@ function GM:RelapseStaminaFinishMove(pl, move)
 	local nextStamina = stamina
 	local nextExhausted = exhausted
 
-	if self:IsHumanRunning(pl, move) then
+	if self:IsHumanClimbSprinting(pl, move) then
+		local drainT = self.HumanStaminaClimbDrainTime or 20
 		local drainMul = self:GetHumanStaminaDrainMul(pl)
 		nextStamina = math.max(0, stamina - dt * drainMul / math.max(drainT, 0.01))
 		pl.RelapseStaminaRestAt = nil
+		pl.RelapseStaminaDrainT = drainT
+		pl.RelapseStaminaCoast = true
+		if nextStamina <= 0 then
+			nextStamina = 0
+			nextExhausted = true
+		end
+	elseif self:IsHumanRunning(pl, move) then
+		local drainMul = self:GetHumanStaminaDrainMul(pl)
+		nextStamina = math.max(0, stamina - dt * drainMul / math.max(drainT, 0.01))
+		pl.RelapseStaminaRestAt = nil
+		pl.RelapseStaminaDrainT = drainT
+		pl.RelapseStaminaCoast = true
+		if nextStamina <= 0 then
+			nextStamina = 0
+			nextExhausted = true
+		end
+	elseif self:IsHumanNoclipSprinting(pl, move) then
+		local nDrainT = self.HumanStaminaNoclipDrainTime or 24
+		local drainMul = self:GetHumanStaminaDrainMul(pl)
+		nextStamina = math.max(0, stamina - dt * drainMul / math.max(nDrainT, 0.01))
+		pl.RelapseStaminaRestAt = nil
+		pl.RelapseStaminaDrainT = nDrainT
+		pl.RelapseStaminaCoast = true
 		if nextStamina <= 0 then
 			nextStamina = 0
 			nextExhausted = true
@@ -228,11 +359,15 @@ function GM:RelapseStaminaFinishMove(pl, move)
 			pl.RelapseStaminaRestAt = CurTime()
 		end
 		local elapsed = CurTime() - pl.RelapseStaminaRestAt
-		local spendMul = self:GetHumanStaminaDrainCoastMul(elapsed)
+		local spendMul = 0
+		if pl.RelapseStaminaCoast ~= false then
+			spendMul = self:GetHumanStaminaDrainCoastMul(elapsed)
+		end
 		local regenMul = self:GetHumanStaminaRegenRateMul(elapsed)
 		local drainMul = self:GetHumanStaminaDrainMul(pl)
 		local regenT = self:GetHumanStaminaRegenTime(pl, move)
-		local flow = regenMul / math.max(regenT, 0.01) - spendMul * drainMul / math.max(drainT, 0.01)
+		local coastT = pl.RelapseStaminaDrainT or drainT
+		local flow = regenMul / math.max(regenT, 0.01) - spendMul * drainMul / math.max(coastT, 0.01)
 		nextStamina = math.Clamp(stamina + dt * flow, 0, 1)
 		if nextStamina <= 0 then
 			nextStamina = 0
@@ -242,6 +377,8 @@ function GM:RelapseStaminaFinishMove(pl, move)
 		end
 		if nextStamina >= 1 then
 			pl.RelapseStaminaRestAt = nil
+			pl.RelapseStaminaDrainT = nil
+			pl.RelapseStaminaCoast = nil
 		end
 	else
 		nextStamina = 1

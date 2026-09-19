@@ -5,18 +5,32 @@ local task = table.Copy((SWEP or weapons.GetStored("mg_base")):GetTaskByName("Me
 task.Name = "Melee_Heavy"
 
 function task:CanBeSet(weapon)
-	return weapon:GetAnimation("Melee_Heavy") != nil
-		&& weapon:GetAnimation("Melee_Heavy_Hit")
-		&& weapon:CanMelee()
+	if weapon:GetAnimation("Melee_Heavy") == nil then return false end
+	if not weapon:GetAnimation("Melee_Heavy_Hit") then return false end
+	if not weapon:CanMelee() then return false end
+	local gm = GAMEMODE or GM
+	local owner = weapon:GetOwner()
+	if gm and gm.CanHumanStaminaMelee and IsValid(owner) and owner:IsPlayer() then
+		return gm:CanHumanStaminaMelee(owner, weapon, true)
+	end
+	return true
 end
 
 function task:OnSet(weapon)
+	local gm = GAMEMODE or GM
+	local owner = weapon:GetOwner()
+	if gm and gm.ConsumeHumanStaminaMelee and IsValid(owner) and owner:IsPlayer() then
+		if not gm:ConsumeHumanStaminaMelee(owner, weapon, true) then
+			weapon:SetNextPrimaryFire(CurTime() + 0.12)
+			weapon:SetNextSecondaryFire(CurTime() + 0.12)
+			return
+		end
+	end
+
 	weapon:PlayerGesture(GESTURE_SLOT_ATTACK_AND_RELOAD, weapon.HoldTypes[weapon:GetCurrentHoldType()].Melee)
 
 	local meleeAnim = weapon:GetAnimation("Melee_Heavy")
 	local meleeHitAnim = weapon:GetAnimation("Melee_Heavy_Hit")
-
-	local owner = weapon:GetOwner()
 
 	local tr = {}
 	tr.start = owner:EyePos()

@@ -58,6 +58,7 @@ SWEP.Relapse = {
 	Stopping = 75,
 	Range = 58,
 	Weight = 0.65,
+	Stamina = 0.055,
 }
 
 local R = SWEP.Relapse

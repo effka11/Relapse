@@ -166,12 +166,22 @@ GM.ZombieEscapeSprintMultiplier = 1.2
 GM.HumanStaminaDrainTime = 24
 GM.HumanStaminaRegenTimeStand = 30
 GM.HumanStaminaRegenTimeWalk = 38
+-- Ladder hang is isometric; moving climb is much slower recovery than walk.
+-- Sprint-climb is arms+legs: empties a bit faster than ground run.
+GM.HumanStaminaRegenTimeHang = 50
+GM.HumanStaminaRegenTimeClimb = 110
+GM.HumanStaminaRegenTimeGhost = 85
+GM.HumanStaminaRegenTimeNoclip = 42
+GM.HumanStaminaClimbDrainTime = 20
+GM.HumanStaminaNoclipDrainTime = 24
 -- After sprint: spend S-tapers to 0, then regen S. They meet at 0, no overlap.
 -- Smootherstep: flat at both ends so the join does not kink.
 GM.HumanStaminaDrainCoast = 0.35
 GM.HumanStaminaRegenDelay = 0.35
 GM.HumanStaminaRegenEase = 1.25
 GM.HumanStaminaSprintResume = 0.15
+-- Heavy melee is a committed smash, not a second light swing.
+GM.HumanStaminaMeleeHeavyMul = 1.7
 GM.HumanStaminaRunSpeedSqr = 64 * 64
 GM.HumanStaminaStandSpeedSqr = 28 * 28
 -- Gait fades when the tank is low. Run first and more; walk only near empty.
@@ -193,6 +203,18 @@ GM.HumanStaminaBreathLagDown = 0.20
 GM.HumanStaminaBreathLagUp = 1.15
 GM.BarricadeGhostSpeed = 17
 GM.HumanBloodArmor = 15
+-- Camera palsy (CreateMove). Vanilla: HP frac 0.25, HP rate 7, frightened 14.
+-- Fear meter (zombies in 768u, bosses fill it) did not shake aim; it does now.
+-- 40% HP so two claws rattle you, not the first. Rate 4.5 so empty HP is still aimable.
+-- Fear deadzone: one walker in your face is 0.075 — no ADS wipe. Packs and bosses do.
+-- Ramp is the same remapped logistic as breath (inflect 0.50, steep 7.5).
+GM.HumanPalsyHPFrac = 0.40
+GM.HumanPalsyHPRate = 4.5
+GM.HumanPalsyFearStart = 0.12
+GM.HumanPalsyFearRate = 6
+GM.HumanPalsyFrightenedRate = 8
+GM.HumanPalsyInflect = 0.50
+GM.HumanPalsySteep = 7.5
 
 -- Default human unarmed. HL2 fists stay as a SWEP base for knuckles / power fists.
 GM.HumanUnarmedWeapon = "mg_fists"

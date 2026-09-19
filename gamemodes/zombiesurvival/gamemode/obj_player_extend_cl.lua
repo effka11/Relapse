@@ -188,12 +188,15 @@ function meta:SetZombieClass(cl)
 end
 
 function meta:GetRateOfPalsy(ft, frightened, health, threshold, gunsway)
-	local healthth = health <= threshold and (((threshold - health) / threshold) * 7) or 0
+	local gm = GAMEMODE
+	local healthth = gm.GetHumanPalsyHPShake and gm:GetHumanPalsyHPShake(health, threshold) or 0
+	local fear = gm.GetHumanPalsyFearPower and gm:GetHumanPalsyFearPower() or 0
+	local fearth = gm.GetHumanPalsyFearShake and gm:GetHumanPalsyFearShake(fear) or 0
+	local frightth = frightened and (gm.HumanPalsyFrightenedRate or 8) or 0
+	local shakeMul = gm.GetHumanPalsyAimShakeMul and gm:GetHumanPalsyAimShakeMul(self) or (self.AimShakeMul or 1)
+	local gun = gunsway and (4 * (self.AimSpreadMul or 1)) or 0
 
-	return ft * (
-					(frightened and 14 or healthth) * (MySelf.AimShakeMul or 1) +
-					(gunsway and (4 * (MySelf.AimSpreadMul or 1)) or 0)
-				)
+	return ft * ((healthth + fearth + frightth) * shakeMul + gun)
 end
 
 GM.CachedResupplyAmmoType = "scrap"

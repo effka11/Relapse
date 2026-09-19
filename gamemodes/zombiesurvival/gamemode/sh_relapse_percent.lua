@@ -83,6 +83,84 @@ function GM:GetMeleeDamagePercentMul(pl, victim)
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "MeleeDamage"), skill, scar)
 end
 
+function GM:GetMeleeViewPunchMul(pl)
+	if not IsValid(pl) or (pl.Team and pl:Team() ~= TEAM_HUMAN) then
+		return 1
+	end
+	return self:GetUpgradePercentMul(pl, "MeleeViewPunch")
+end
+
+function GM:GetHumanPalsyAimShakeMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.AimShakeMul) then
+		skill = pl.AimShakeMul - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "AimShake"), skill)
+end
+
+function GM:GetHumanPalsyHPFrac(pl)
+	local frac = self.HumanPalsyHPFrac or 0.40
+	if self.GetUpgradePercent then
+		frac = frac + self:GetUpgradePercent(pl, "AimShakeThreshold")
+	end
+	return math.Clamp(frac, 0.05, 0.90)
+end
+
+function GM:GetHumanPalsyHPThreshold(pl, maxhealth)
+	maxhealth = tonumber(maxhealth) or (IsValid(pl) and pl:GetMaxHealth()) or 100
+	if IsValid(pl) and pl.HasPalsy then
+		return maxhealth - 1
+	end
+	return maxhealth * self:GetHumanPalsyHPFrac(pl)
+end
+
+function GM:GetHumanPalsyFearPower()
+	if not CLIENT then
+		return 0
+	end
+	local v = self.CachedFearPower and self:CachedFearPower()
+	return tonumber(v) or 0
+end
+
+function GM:GetHumanPalsyCurve(u)
+	u = math.Clamp(tonumber(u) or 0, 0, 1)
+	local inflect = self.HumanPalsyInflect or 0.50
+	local steep = self.HumanPalsySteep or 7.5
+	if self.RelapseLogistic01 then
+		return self:RelapseLogistic01(u, inflect, steep)
+	end
+	return u
+end
+
+function GM:GetHumanPalsyHPShake(health, threshold)
+	local rate = self.HumanPalsyHPRate or 4.5
+	if not (health <= threshold and threshold > 0) then
+		return 0
+	end
+	return self:GetHumanPalsyCurve(1 - health / threshold) * rate
+end
+
+function GM:GetHumanPalsyFearShake(fear)
+	fear = tonumber(fear) or 0
+	local start = self.HumanPalsyFearStart or 0.12
+	local rate = self.HumanPalsyFearRate or 6
+	if fear <= start then
+		return 0
+	end
+	local u = math.min(1, (fear - start) / math.max(0.001, 1 - start))
+	return self:GetHumanPalsyCurve(u) * rate
+end
+
+function GM:HumanPalsyShouldShake(pl, health, threshold, frightened, gunsway)
+	if self.ZombieEscape then
+		return false
+	end
+	if health <= threshold or frightened or gunsway then
+		return true
+	end
+	return self:GetHumanPalsyFearPower() > (self.HumanPalsyFearStart or 0.12)
+end
+
 function GM:IsMeleeDamageInflictor(inflictor)
 	if not IsValid(inflictor) then
 		return false

@@ -33,12 +33,12 @@ end
 
 function GM:CreateMoveOTS(cmd)
 	local maxhealth = MySelf:GetMaxHealth()
-	local threshold = MySelf.HasPalsy and maxhealth - 1 or maxhealth * 0.25
+	local threshold = GAMEMODE:GetHumanPalsyHPThreshold(MySelf, maxhealth)
 	local health = MySelf:Health()
 	local frightened = MySelf:GetStatus("frightened")
 	local gunsway = MySelf.GunSway
 
-	if (health <= threshold or frightened or gunsway) and not GAMEMODE.ZombieEscape then
+	if GAMEMODE:HumanPalsyShouldShake(MySelf, health, threshold, frightened, gunsway) then
 		local ft = FrameTime()
 
 		staggerdir = (staggerdir + ft * 8 * VectorRand()):GetNormalized()

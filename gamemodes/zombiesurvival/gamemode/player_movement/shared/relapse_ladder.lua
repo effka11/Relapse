@@ -1139,6 +1139,9 @@ function GM:RelapseLadderClimb(pl, mv)
 	else
 		speed = wish < 0 and CLIMB_SPEED_DOWN or CLIMB_SPEED_UP
 	end
+	if sprint and gm.GetHumanStaminaSpeedMul then
+		speed = speed * gm:GetHumanStaminaSpeedMul(pl, true)
+	end
 	local _, hx = pl:GetHull()
 	local pad = math.max(CLIP_GAP, (hx and hx.z) or CLIP_GAP)
 	local z = math.Clamp(pos.z + wish * speed * dt, zmin - pad, zmax + pad)

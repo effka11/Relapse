@@ -45,6 +45,7 @@ SWEP.IsMelee = true
 -- Relapse combat stats. Source of truth for melee usefulness and the shop UI.
 -- Damage is per swing. Delay is time between swings. Swing is windup before the trace.
 -- Stopping is knockback. Range is hull trace hu. Weight is kilograms (16 lb sledge ~8 kg).
+-- Stamina is tank fraction per swing from the gesture and mass, not from Damage.
 -- Three hits on 225, not CoD 105. Heavy blunt: behind the doorway, not the scythe's next room.
 SWEP.Relapse = {
 	Melee = true,
@@ -55,6 +56,7 @@ SWEP.Relapse = {
 	Stopping = 120,
 	Range = 60,
 	Weight = 8.00,
+	Stamina = 0.145,
 	DamageType = DMG_CLUB,
 }
 

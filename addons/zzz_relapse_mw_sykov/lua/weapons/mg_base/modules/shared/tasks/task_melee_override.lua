@@ -3,13 +3,34 @@ require("mw_input")
 
 local task = table.Copy((SWEP or weapons.GetStored("mg_base")):GetTaskByName("Melee"))
 
+local canSet = task.CanBeSet
+function task:CanBeSet(weapon)
+	if isfunction(canSet) and not canSet(self, weapon) then
+		return false
+	end
+	local gm = GAMEMODE or GM
+	local owner = weapon:GetOwner()
+	if gm and gm.CanHumanStaminaMelee and IsValid(owner) and owner:IsPlayer() then
+		return gm:CanHumanStaminaMelee(owner, weapon, false)
+	end
+	return true
+end
+
 function task:OnSet(weapon)
+	local gm = GAMEMODE or GM
+	local owner = weapon:GetOwner()
+	if gm and gm.ConsumeHumanStaminaMelee and IsValid(owner) and owner:IsPlayer() then
+		if not gm:ConsumeHumanStaminaMelee(owner, weapon, false) then
+			weapon:SetNextPrimaryFire(CurTime() + 0.12)
+			weapon:SetNextSecondaryFire(CurTime() + 0.12)
+			return
+		end
+	end
+
 	weapon:PlayerGesture(GESTURE_SLOT_ATTACK_AND_RELOAD, weapon.HoldTypes[weapon:GetCurrentHoldType()].Melee)
 
 	local meleeAnim = weapon:GetAnimation("Melee")
 	local meleeHitAnim = weapon:GetAnimation("Melee_Hit")
-
-	local owner = weapon:GetOwner()
 
 	local tr = {}
 	tr.start = owner:EyePos()
@@ -82,7 +103,12 @@ function task:Think(weapon)
 	weapon:SetCone(weapon:GetConeMax())
 
 	if CurTime() > weapon:GetNextSecondaryFire() and mw_input.IsBindPressed(weapon:GetOwner(), "melee") then
-		self:OnSet(weapon)
+		local gm = GAMEMODE or GM
+		local owner = weapon:GetOwner()
+		if not (gm and gm.CanHumanStaminaMelee and IsValid(owner) and owner:IsPlayer())
+			or gm:CanHumanStaminaMelee(owner, weapon, false) then
+			self:OnSet(weapon)
+		end
 	end
 
 	if weapon:HasFlag("DelayedMeleeAttack") and CurTime() >= weapon:GetDelayedMeleeAttackTime() then

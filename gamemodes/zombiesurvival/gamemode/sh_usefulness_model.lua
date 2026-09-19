@@ -294,6 +294,7 @@ GM.RelapseShopScoreSpec = {
 	Reload = {ref = 1.85, better = "less"}, -- seconds, mixed rifle/SMG reload
 	Clip = {ref = 24, better = "more"}, -- mid rifle mag
 	Weight = {ref = 2.8, better = "less"}, -- kg of a typical carbine
+	Stamina = {ref = 0.055, better = "less"}, -- tank fraction per swing, machete
 }
 
 -- Relapse tables live here so the shop still scores a gun if workshop SWEP won.
@@ -347,6 +348,7 @@ GM.RelapseWeapons = {
 			Stopping = 0,
 			Range = 40,
 			Weight = 0,
+			Stamina = 0.024,
 			DamageType = DMG_CLUB,
 		}
 	},
@@ -377,6 +379,7 @@ GM.RelapseWeapons = {
 			Stopping = 40,
 			Range = 48,
 			Weight = 0.32,
+			Stamina = 0.028,
 		}
 	},
 	mg_me_t9bat = {
@@ -406,6 +409,7 @@ GM.RelapseWeapons = {
 			Stopping = 65,
 			Range = 56,
 			Weight = 0.90,
+			Stamina = 0.058,
 			DamageType = DMG_CLUB,
 		}
 	},
@@ -436,6 +440,7 @@ GM.RelapseWeapons = {
 			Stopping = 50,
 			Range = 52,
 			Weight = 0.80,
+			Stamina = 0.050,
 			DamageType = DMG_CLUB,
 		}
 	},
@@ -465,6 +470,7 @@ GM.RelapseWeapons = {
 			Stopping = 55,
 			Range = 54,
 			Weight = 0.50,
+			Stamina = 0.042,
 			DamageType = DMG_CLUB,
 		}
 	},
@@ -493,6 +499,7 @@ GM.RelapseWeapons = {
 			Stopping = 70,
 			Range = 44,
 			Weight = 12.00,
+			Stamina = 0.160,
 			DamageType = DMG_CLUB,
 		}
 	},
@@ -524,6 +531,7 @@ GM.RelapseWeapons = {
 			Stopping = 75,
 			Range = 58,
 			Weight = 0.65,
+			Stamina = 0.055,
 		}
 	},
 	mg_me_t9wakizashi = {
@@ -553,6 +561,7 @@ GM.RelapseWeapons = {
 			Stopping = 80,
 			Range = 62,
 			Weight = 0.55,
+			Stamina = 0.046,
 		}
 	},
 	mg_me_t9scythe = {
@@ -582,6 +591,7 @@ GM.RelapseWeapons = {
 			Stopping = 95,
 			Range = 75,
 			Weight = 2.00,
+			Stamina = 0.090,
 		}
 	},
 	mg_me_t9sledgehammer = {
@@ -611,6 +621,7 @@ GM.RelapseWeapons = {
 			Stopping = 120,
 			Range = 60,
 			Weight = 8.00,
+			Stamina = 0.145,
 			DamageType = DMG_CLUB,
 		}
 	},
@@ -1352,6 +1363,9 @@ function GM:RelapseShopCurve(x, spec)
 end
 
 function GM:RelapseShopScore(id, raw)
+	if id == "SwingRate" then
+		id = "FireRate"
+	end
 	local spec = self.RelapseShopScoreSpec and self.RelapseShopScoreSpec[id]
 	if not spec then return raw end
 	return math.floor(self:RelapseShopCurve(raw, spec) + 0.5)
@@ -1365,11 +1379,14 @@ function GM:RelapseStatValue(sweptable, id)
 	if r.Melee and (id == "Stability" or id == "Payback" or id == "Clip" or id == "Reload" or id == "Kinetic") then
 		return nil
 	end
+	if id == "Stamina" and not r.Melee then
+		return nil
+	end
 
 	if id == "Payback" then
 		return self:ComputeWeaponPayback(sweptable)
 	end
-	if id == "FireRate" then
+	if id == "FireRate" or id == "SwingRate" then
 		return tonumber(r.Delay)
 	end
 	if id == "Stability" then
@@ -1387,7 +1404,7 @@ end
 -- Units the hill curve expects. FireRate is RPM even though the shop prints Delay.
 -- Damage fill uses pellet total so a 12-gauge is not scored as a single 16.
 function GM:RelapseShopBarInput(sweptable, id)
-	if id == "FireRate" then
+	if id == "FireRate" or id == "SwingRate" then
 		local r = self:GetWeaponRelapse(sweptable)
 		local delay = r and tonumber(r.Delay) or 0
 		if delay <= 0 then return nil end

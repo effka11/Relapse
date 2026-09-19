@@ -61,6 +61,13 @@ GM.RelapseWeaponStatBarVals = {
 	{"Weight", "Weight"},
 }
 
+GM.RelapseMeleeStatBarVals = {
+	{"Damage", "Damage"},
+	{"SwingRate", "Swing Rate"},
+	{"Stamina", "Stamina"},
+	{"Weight", "Weight"},
+}
+
 GM.WeaponStatBarCount = 7
 
 GM.LifeStatsLifeTime = 5

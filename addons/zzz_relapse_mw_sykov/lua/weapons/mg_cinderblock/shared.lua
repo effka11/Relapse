@@ -52,6 +52,7 @@ SWEP.Relapse = {
 	Stopping = 70,
 	Range = 44,
 	Weight = 12.00,
+	Stamina = 0.160,
 	DamageType = DMG_CLUB,
 }
 

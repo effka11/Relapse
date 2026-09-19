@@ -5,7 +5,15 @@ task.Name = "Melee_Heavy_In"
 task.Priority = 3
 
 function task:CanBeSet(weapon)
-	return weapon:GetAnimation("Melee_Heavy_In") ~= nil and weapon:CanMelee()
+	if weapon:GetAnimation("Melee_Heavy_In") == nil or not weapon:CanMelee() then
+		return false
+	end
+	local gm = GAMEMODE or GM
+	local owner = weapon:GetOwner()
+	if gm and gm.CanHumanStaminaMelee and IsValid(owner) and owner:IsPlayer() then
+		return gm:CanHumanStaminaMelee(owner, weapon, true)
+	end
+	return true
 end
 
 function task:OnSet(weapon)

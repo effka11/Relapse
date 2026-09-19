@@ -224,7 +224,11 @@ function meta:DispatchAltUse()
 end
 
 function meta:MeleeViewPunch(damage)
-	local maxpunch = (damage + 25) * 0.5
+	local scale = 1
+	if GAMEMODE and GAMEMODE.GetMeleeViewPunchMul then
+		scale = GAMEMODE:GetMeleeViewPunchMul(self)
+	end
+	local maxpunch = (damage + 25) * 0.5 * scale
 	local minpunch = -maxpunch
 	self:ViewPunch(Angle(math.Rand(minpunch, maxpunch), math.Rand(minpunch, maxpunch), math.Rand(minpunch, maxpunch)))
 end
