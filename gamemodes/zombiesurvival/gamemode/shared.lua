@@ -87,6 +87,7 @@ include("sh_relapse_loadout.lua")
 include("sh_relapse_scars.lua")
 include("sh_cycle_grid.lua")
 include("sh_relapse_percent.lua")
+include("sh_relapse_stamina.lua")
 include("sh_relapse_wmpose.lua")
 
 include("noxapi/noxapi.lua")

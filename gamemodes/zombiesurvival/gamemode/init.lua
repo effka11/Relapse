@@ -36,6 +36,7 @@ AddCSLuaFile("sh_relapse_loadout.lua")
 AddCSLuaFile("sh_relapse_scars.lua")
 AddCSLuaFile("sh_cycle_grid.lua")
 AddCSLuaFile("sh_relapse_percent.lua")
+AddCSLuaFile("sh_relapse_stamina.lua")
 AddCSLuaFile("sh_relapse_wmpose.lua")
 
 AddCSLuaFile("vault/shared.lua")
@@ -2269,6 +2270,9 @@ function GM:AttemptHumanDynamicSpawn(pl)
 end
 
 function GM:PlayerInitialSpawn(pl)
+	if self.ResetRelapseStamina then
+		self:ResetRelapseStamina(pl)
+	end
 	pl.MaxBloodArmor = GAMEMODE.ZombieEscape and 0 or (GAMEMODE.HumanBloodArmor or 15)
 	pl.NextFlashlightSwitch = 0
 	pl.NextPainSound = 0
@@ -4073,6 +4077,9 @@ VoiceSetTranslate["models/jazzmcfly/kantai/yuudachi/yuudachi.mdl"] = VOICESET_FE
 VoiceSetTranslate["models/player/dewobedil/vocaloid/haku/bikini_p.mdl"] = VOICESET_FEMALE
 VoiceSetTranslate["models/player/dewobedil/touhou/junko/default_p.mdl"] = VOICESET_FEMALE
 function GM:PlayerSpawn(pl)
+	if self.ResetRelapseStamina then
+		self:ResetRelapseStamina(pl)
+	end
 	if self.ResetRelapseLoadout then
 		self:ResetRelapseLoadout(pl)
 	end

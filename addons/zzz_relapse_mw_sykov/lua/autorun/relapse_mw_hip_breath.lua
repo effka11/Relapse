@@ -33,31 +33,56 @@ local function adsMul(wep)
 	return 1
 end
 
-local function sprintMul(wep, ply)
-	if IsValid(wep) then
-		if wep.HasFlag and wep:HasFlag("Sprinting") then
-			return 0
-		end
-		if wep.GetIsSprinting and wep:GetIsSprinting() then
-			return 0
-		end
+local breathExtra = 0
+local breathAmp = 1
+local breathRate = 1
+local breathShown = 0
+local breathClock
+
+-- Rest is the old CurTime() wave. Extra time only accrues while rate > 1.
+-- Shown fatigue lags the bar: fast on drain, short pant on refill.
+function RelapseBreath.Fatigue(ply)
+	local now = UnPredictedCurTime()
+	local amp, rate = 1, 1
+	local gm = GAMEMODE
+	if gm and gm.GetHumanStaminaBreathMul then
+		amp, rate = gm:GetHumanStaminaBreathMul(ply)
 	end
-	if not IsValid(ply) then
-		return 1
-	end
-	local stride = GAMEMODE and GAMEMODE.Stride
-	if stride and stride.Get then
-		local st = stride:Get(ply)
-		if st then
-			if st.sprinting then
-				return 0
+
+	if breathClock ~= now then
+		local dt = breathClock and math.Clamp(now - breathClock, 0, 0.1) or 0
+		breathClock = now
+
+		local ampMax = (gm and gm.HumanStaminaBreathAmpMax) or 1.60
+		local rateMax = (gm and gm.HumanStaminaBreathRateMax) or 2.55
+		local lagDown = (gm and gm.HumanStaminaBreathLagDown) or 0.20
+		local lagUp = (gm and gm.HumanStaminaBreathLagUp) or 1.15
+		local target = math.Clamp((amp - 1) / math.max(ampMax, 0.001), 0, 1)
+		if dt <= 0 then
+			if target >= breathShown then
+				breathShown = target
 			end
-			if st.sprintBlend then
-				return 1 - math.Clamp(st.sprintBlend, 0, 1)
+		else
+			local tau = target >= breathShown and lagDown or lagUp
+			if tau <= 0 then
+				breathShown = target
+			else
+				local k = 1 - math.exp(-dt / tau)
+				breathShown = breathShown + (target - breathShown) * k
 			end
 		end
+		if target <= 0 and breathShown <= 0.002 then
+			breathShown = 0
+			breathAmp, breathRate = 1, 1
+		else
+			breathAmp = 1 + ampMax * breathShown
+			breathRate = 1 + rateMax * breathShown
+		end
+
+		breathExtra = breathExtra + dt * math.max(0, breathRate - 1)
 	end
-	return 1
+
+	return CurTime() + breathExtra, breathAmp
 end
 
 function RelapseBreath.IdleAngle(wep, ply)
@@ -67,14 +92,17 @@ function RelapseBreath.IdleAngle(wep, ply)
 	if IsValid(wep) then
 		ply = ply or wep:GetOwner()
 		if wep.HasFlag and wep:HasFlag("Customizing") then
+			RelapseBreath.Fatigue(ply)
 			return Angle(0, 0, 0)
 		end
 	end
-	local mul = adsMul(wep) * sprintMul(wep, ply)
+	local mul = adsMul(wep)
 	if mul <= 0.001 then
+		RelapseBreath.Fatigue(ply)
 		return Angle(0, 0, 0)
 	end
-	local t = CurTime()
+	local t, amp = RelapseBreath.Fatigue(ply)
+	mul = mul * amp
 	return Angle(
 		math.sin(t * 1.35) * math.cos(t * 0.62) * HIP_PITCH * mul,
 		math.cos(t * 1.05) * math.sin(t * 0.47) * HIP_YAW * mul,
@@ -118,10 +146,10 @@ local function patchBase(wep)
 				end
 			end
 
-			local t = CurTime()
+			local t, amp = RelapseBreath.Fatigue(owner)
 			local pitch = math.sin(t * 3) * math.cos(t * 1.5)
 			local yaw = math.cos(t * 1.5) * math.sin(t * 0.75)
-			self:SetBreathingAngle(Angle(pitch * mul, yaw * mul, 0))
+			self:SetBreathingAngle(Angle(pitch * mul * amp, yaw * mul * amp, 0))
 		end
 	end
 

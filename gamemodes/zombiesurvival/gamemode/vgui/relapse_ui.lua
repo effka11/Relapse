@@ -1662,6 +1662,19 @@ function RelapseUI.RoundFill(r, x, y, w, h, col)
 		surface.DrawRect(x, y, w, h)
 		return
 	end
+	-- 1px corners: DrawPoly on a 2–3px bar aliases to a rectangle.
+	if r == 1 then
+		local inner = w - 2
+		if inner > 0 then
+			surface.DrawRect(x + 1, y, inner, h)
+		end
+		if h > 2 then
+			surface.DrawRect(x, y + 1, w, h - 2)
+		elseif inner <= 0 then
+			surface.DrawRect(x, y, w, h)
+		end
+		return
+	end
 
 	draw.NoTexture()
 	local segs = math.max(4, math.min(8, r))
@@ -2600,11 +2613,15 @@ function RelapseUI.HudText(text, font, x, y, col, ax, ay, shadow)
 	surface.DrawText(text)
 end
 
-function RelapseUI.PaintHudHairBar(x, y, w, h, frac, col, extrafrac, extracol, shadow)
+function RelapseUI.PaintHudHairBar(x, y, w, h, frac, col, extrafrac, extracol, shadow, rad)
 	if w < 2 or h < 1 then return end
 	frac = math.Clamp(frac or 0, 0, 1)
 	extrafrac = math.Clamp(extrafrac or 0, 0, 1 - frac)
-	local r = math.min(RelapseUI.RadPx("Bar"), math.floor(math.min(w, h) * 0.5))
+	local r = rad
+	if r == nil then
+		r = RelapseUI.RadPx("Bar")
+	end
+	r = math.min(r, math.floor(math.min(w, h) * 0.5))
 	local c = RelapseUI.Col
 	RelapseUI.EachShadow(function(ox, oy)
 		RelapseUI.RoundFill(r, x + ox, y + oy, w, h, c.Shadow)

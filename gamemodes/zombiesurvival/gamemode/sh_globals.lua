@@ -46,6 +46,8 @@ DT_PLAYER_BOOL_FRAIL = 8
 DT_PLAYER_FLOAT_WIDELOAD = 5
 DT_PLAYER_FLOAT_PHANTOMHEALTH = 6
 DT_PLAYER_FLOAT_EXTRAWEIGHT = 7
+DT_PLAYER_FLOAT_STAMINA = 8
+DT_PLAYER_BOOL_STAMINAEXHAUST = 9
 
 VOICESET_MALE = 0
 VOICESET_FEMALE = 1
@@ -159,6 +161,36 @@ SPEED_FASTEST = SPEED_NORMAL + 20
 
 GM.HumanSprintMultiplier = 240 / 95
 GM.ZombieEscapeSprintMultiplier = 1.2
+-- Stamina 0..1. Ground run (Shift, moving) is the first spend. ZE skips.
+-- Unladen empty in DrainTime. Load uses the same mass law as sprint slowdown.
+GM.HumanStaminaDrainTime = 24
+GM.HumanStaminaRegenTimeStand = 30
+GM.HumanStaminaRegenTimeWalk = 38
+-- After sprint: spend S-tapers to 0, then regen S. They meet at 0, no overlap.
+-- Smootherstep: flat at both ends so the join does not kink.
+GM.HumanStaminaDrainCoast = 0.35
+GM.HumanStaminaRegenDelay = 0.35
+GM.HumanStaminaRegenEase = 1.25
+GM.HumanStaminaSprintResume = 0.15
+GM.HumanStaminaRunSpeedSqr = 64 * 64
+GM.HumanStaminaStandSpeedSqr = 28 * 28
+-- Gait fades when the tank is low. Run first and more; walk only near empty.
+-- Quadratic: 40% still almost full pace, empty is a heavy wall.
+GM.HumanStaminaRunSlowStart = 0.40
+GM.HumanStaminaRunSlowMax = 0.26
+GM.HumanStaminaWalkSlowStart = 0.18
+GM.HumanStaminaWalkSlowMax = 0.12
+-- Breath heaves before gait fades. Rest is the old idle wave (mul 1).
+-- S-curve below 90%: climbs 90→20, rounding onto the shelf from ~20% (already near peak).
+-- Inflect is spent-fraction midpoint (stam ≈ 45%). Steep is logistic k.
+-- Lag is slight: follows drain fast, holds a short pant while the bar refills.
+GM.HumanStaminaBreathStart = 0.90
+GM.HumanStaminaBreathAmpMax = 1.60
+GM.HumanStaminaBreathRateMax = 2.55
+GM.HumanStaminaBreathInflect = 0.50
+GM.HumanStaminaBreathSteep = 7.5
+GM.HumanStaminaBreathLagDown = 0.20
+GM.HumanStaminaBreathLagUp = 1.15
 GM.BarricadeGhostSpeed = 17
 GM.HumanBloodArmor = 15
 

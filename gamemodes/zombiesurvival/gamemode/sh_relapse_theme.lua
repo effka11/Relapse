@@ -72,7 +72,8 @@ RelapseUI.Col = {
 	HealthMax = With(Fog, 255),
 	HealthMin = Color(128, 42, 56, 255),
 	Phantom   = With(Gray, 160),
-	Armor     = Color(102, 32, 44, 230)
+	Armor     = Color(102, 32, 44, 230),
+	Stamina   = With(Gray, 255)
 }
 
 -- Flora-like radii in reference px (sPx). Fills only — no 1px outlines.

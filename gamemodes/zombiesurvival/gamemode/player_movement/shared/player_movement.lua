@@ -40,20 +40,26 @@ local M_KeyDown = M_CMoveData.KeyDown
 -- Ghosting (Z) already caps speed in Move; drop IN_SPEED so anims do not sprint.
 function GM:StartCommand(pl, cmd)
 	if P_Team(pl) ~= TEAM_HUMAN then return end
-	if not P_GetBarricadeGhosting(pl) then return end
-
-	cmd:RemoveKey(IN_SPEED)
+	if P_GetBarricadeGhosting(pl) then
+		cmd:RemoveKey(IN_SPEED)
+		return
+	end
+	-- Empty: walk anim. Leave Shift while standing so alt-use still fires.
+	if self.HumanCanSprint and not self:HumanCanSprint(pl)
+		and (cmd:GetForwardMove() ~= 0 or cmd:GetSideMove() ~= 0) then
+		cmd:RemoveKey(IN_SPEED)
+	end
 end
 
 function GM:SetupMove(pl, move, cmd)
 	if P_Team(pl) ~= TEAM_HUMAN then return end
 	if E_GetMoveType(pl) == MOVETYPE_NOCLIP then return end
 
-	local spd
-	if M_KeyDown(move, IN_SPEED) and not P_Crouching(pl) then
-		spd = P_GetRunSpeed(pl)
-	else
-		spd = P_GetWalkSpeed(pl)
+	local sprint = M_KeyDown(move, IN_SPEED) and not P_Crouching(pl)
+		and (not self.HumanCanSprint or self:HumanCanSprint(pl))
+	local spd = sprint and P_GetRunSpeed(pl) or P_GetWalkSpeed(pl)
+	if self.GetHumanStaminaSpeedMul then
+		spd = spd * self:GetHumanStaminaSpeedMul(pl, sprint)
 	end
 
 	M_SetMaxSpeed(move, spd)
@@ -116,5 +122,9 @@ function GM:FinishMove(pl, move)
 		vel.x = vel.x * mul
 		vel.y = vel.y * mul
 		M_SetVelocity(move, vel)
+	end
+
+	if SERVER and self.RelapseStaminaFinishMove then
+		self:RelapseStaminaFinishMove(pl, move)
 	end
 end

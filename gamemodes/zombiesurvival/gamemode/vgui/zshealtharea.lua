@@ -66,6 +66,25 @@ function PANEL:Paint(w, h)
 	surface.DisableClipping(true)
 
 	RelapseUI.PaintHudHairBar(x, y - barh, barw, barh, self.LerpFrac, hpcol, phantomfrac, c.Phantom, 4)
+
+	local stam = 1
+	local spending = false
+	if lp:Team() == TEAM_HUMAN and lp:Alive() and not GAMEMODE.ZombieEscape and lp.GetStamina then
+		stam = lp:GetStamina()
+		spending = GAMEMODE.IsHumanRunning and GAMEMODE:IsHumanRunning(lp)
+	end
+	-- Appear while stamina is being spent. Stay until full so the remaining pool is readable.
+	local showStam = spending or stam < 0.995
+	self.StaminaAlpha = Lerp(FrameTime() * 8, self.StaminaAlpha or 0, showStam and 1 or 0)
+	self.LerpStamina = Lerp(FrameTime() * 10, self.LerpStamina or stam, stam)
+	if self.StaminaAlpha > 0.02 then
+		-- 3px tall so 1px corners have a middle row.
+		local stamh = math.max(3, RelapseUI.sPx(3))
+		surface.SetAlphaMultiplier(self.StaminaAlpha)
+		RelapseUI.PaintHudHairBar(x, y + RelapseUI.sPx(4), barw, stamh, self.LerpStamina, c.Stamina or c.Muted, nil, nil, 4, 1)
+		surface.SetAlphaMultiplier(1)
+	end
+
 	y = y - barh - RelapseUI.sPx(15)
 
 	RelapseUI.HudText(tostring(math.Round(self.LerpHP)), "Relapse64", x, y, hpcol, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
