@@ -32,7 +32,13 @@ function meta:HealPlayer(pl, amount, pointmul, nobymsg, poisononly)
 	local poison = pl:GetPoisonDamage()
 	local bleed = pl:GetBleedDamage()
 
-	local healrec = (pl.HealingReceived or 1) - (pl:GetPhantomHealth() > 0.5 and 0.5 or 0) - (pl:GetStatus("sickness") and 0.5 or 0)
+	local healrec = 1
+	if GAMEMODE and GAMEMODE.GetHealReceivedPercentMul then
+		healrec = GAMEMODE:GetHealReceivedPercentMul(pl)
+	elseif isnumber(pl.HealingReceived) then
+		healrec = pl.HealingReceived
+	end
+	healrec = healrec - (pl:GetPhantomHealth() > 0.5 and 0.5 or 0) - (pl:GetStatus("sickness") and 0.5 or 0)
 	local healmul = 1
 	if GAMEMODE and GAMEMODE.GetMedicHealPercentMul then
 		healmul = GAMEMODE:GetMedicHealPercentMul(self)
@@ -687,18 +693,32 @@ function meta:RecalculateNailBonuses()
 	local max_health = self:GetMaxBarricadeHealth()
 	if max_health == 0 then return end
 
-	local num_extra_nails = math.Clamp(self:NumLivingNails() - 1, 0, 3)
-	local repairs_frac = self:GetBarricadeRepairs() / self:GetMaxBarricadeRepairs()
+	local nails = self:GetLivingNails()
+	local extra_cap = math.max(0, (GAMEMODE.MaxNails or 4) - 1)
+	if GAMEMODE.GetMaxNails then
+		for _, nail in pairs(nails) do
+			local dep = nail:GetDeployer()
+			if IsValid(dep) then
+				extra_cap = math.max(extra_cap, GAMEMODE:GetMaxNails(dep) - 1)
+			end
+		end
+	end
+	local num_extra_nails = math.Clamp(#nails - 1, 0, extra_cap)
 
 	self.OriginalMaxHealth = self.OriginalMaxHealth or max_health
-	self.OriginalMaxBarricadeRepairs = self.OriginalMaxBarricadeRepairs or max_repairs
+	self.OriginalMaxBarricadeRepairs = self.OriginalMaxBarricadeRepairs or self:GetMaxBarricadeRepairs()
 
 	local health = self:GetBarricadeHealth()
-	local new_max_health = self.OriginalMaxHealth + num_extra_nails * GAMEMODE.ExtraHealthPerExtraNail
+	local repairs = self:GetBarricadeRepairs()
+	local old_max_repairs = self:GetMaxBarricadeRepairs()
+
+	local extra = num_extra_nails * (GAMEMODE.ExtraNailHealth or 0)
+	local new_max_health = self.OriginalMaxHealth * (1 + extra)
 	self:SetMaxBarricadeHealth(new_max_health)
 	self:SetBarricadeHealth(health / max_health * new_max_health)
 
-	self:SetBarricadeRepairs(repairs_frac * self:GetMaxBarricadeRepairs())
+	local new_max_repairs = self:GetMaxBarricadeRepairs()
+	self:SetBarricadeRepairs(math.Clamp(repairs + (new_max_repairs - old_max_repairs), 0, new_max_repairs))
 end
 
 function meta:SetupDeployableSkillHealth(extramodifier)

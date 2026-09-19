@@ -1,8 +1,8 @@
 -- Cycle grid skeleton.
 -- Law: documents/cycle-grid.md
--- Nine bushes in outward lanes. Free angles, a turn every hop, no crossings.
+-- Nine bushes traced from the hand-drawn web. Slot 0 is the gate. Graph follows the drawing.
 
-GM.CycleGridSlots = 15
+GM.CycleGridSlots = 19
 GM.CycleGridUnit = 20
 GM.CycleGridTrees = {
 	{ id = "vitality", nameKey = "grid_tree_vitality" },
@@ -16,324 +16,236 @@ GM.CycleGridTrees = {
 	{ id = "agility", nameKey = "grid_tree_agility" }
 }
 
-local function MakeArms(n)
-	local arms = {}
-	for i = 0, n - 1 do
-		local a = math.rad(90 - i * (360 / n))
-		arms[i + 1] = { outX = math.cos(a), outY = math.sin(a) }
-	end
-	return arms
-end
+-- Positions are layout x,y (y up), hub at origin. Parent is a slot on the same tree.
+local BUSH_PARENT = {
+	{ -- vitality
+		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 2, [6] = 3, [7] = 3, [8] = 4, [9] = 6, [10] = 7, [11] = 7, [12] = 8, [13] = 8, [14] = 9, [15] = 9
+	},
+	{ -- supply
+		[1] = 0, [2] = 0, [3] = 1, [4] = 2, [5] = 4, [6] = 4, [7] = 5, [8] = 5, [9] = 6, [10] = 7, [11] = 9, [12] = 9, [13] = 11, [14] = 11
+	},
+	{ -- mechanics
+		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 1, [6] = 2, [7] = 3, [8] = 4, [9] = 5, [10] = 8, [11] = 8, [12] = 9, [13] = 9, [14] = 10, [15] = 10, [16] = 12, [17] = 13
+	},
+	{ -- medicine
+		[1] = 0, [2] = 0, [3] = 1, [4] = 2, [5] = 3, [6] = 3, [7] = 4, [8] = 6, [9] = 6, [10] = 8, [11] = 8, [12] = 9, [13] = 9
+	},
+	{ -- ranged
+		[1] = 0, [2] = 0, [3] = 1, [4] = 2, [5] = 2, [6] = 3, [7] = 3, [8] = 5, [9] = 5, [10] = 6, [11] = 7, [12] = 8, [13] = 8, [14] = 9, [15] = 11, [16] = 12
+	},
+	{ -- shadow
+		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 3, [6] = 4, [7] = 4, [8] = 5, [9] = 5, [10] = 6, [11] = 6, [12] = 8, [13] = 12
+	},
+	{ -- build
+		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 2, [6] = 3, [7] = 4, [8] = 4, [9] = 5, [10] = 6, [11] = 6, [12] = 7, [13] = 8, [14] = 8, [15] = 10, [16] = 10, [17] = 11, [18] = 13
+	},
+	{ -- melee
+		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 2, [6] = 2, [7] = 3, [8] = 4, [9] = 4, [10] = 8, [11] = 8, [12] = 9, [13] = 10, [14] = 11, [15] = 11, [16] = 14, [17] = 14
+	},
+	{ -- agility
+		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 2, [6] = 3, [7] = 3, [8] = 4, [9] = 6, [10] = 7, [11] = 7, [12] = 8, [13] = 9, [14] = 12, [15] = 12
+	},
+}
 
-local MIN_TURN = 17
-local MIN_SEP = 0.70
-local CORE_R = 0.94
+local BUSH_POS = {
+	{ -- vitality
+		{ -0.489, 0.305 },
+		{ -1.097, 0.543 },
+		{ -0.663, 0.652 },
+		{ -1.551, 0.387 },
+		{ -1.711, 0.961 },
+		{ -1.122, 0.895 },
+		{ -2.089, -0.099 },
+		{ -2.056, 0.538 },
+		{ -1.945, 1.389 },
+		{ -2.718, 0.407 },
+		{ -2.063, 0.295 },
+		{ -2.232, 1.021 },
+		{ -2.441, 1.609 },
+		{ -2.062, 1.787 },
+		{ -3.306, 0.508 },
+		{ -2.871, 1.075 },
+	},
+	{ -- supply
+		{ 0.234, -0.403 },
+		{ 0.639, -0.444 },
+		{ 0.323, -0.821 },
+		{ 0.697, -0.781 },
+		{ 0.629, -1.189 },
+		{ 1.052, -1.581 },
+		{ 0.452, -1.632 },
+		{ 1.667, -1.723 },
+		{ 1.171, -1.879 },
+		{ 0.969, -2.185 },
+		{ 2.024, -2.201 },
+		{ 1.578, -2.457 },
+		{ 0.614, -2.474 },
+		{ 1.776, -2.787 },
+		{ 1.126, -2.809 },
+	},
+	{ -- mechanics
+		{ 0.464, 0.254 },
+		{ 1.000, 0.427 },
+		{ 0.925, 0.106 },
+		{ 1.019, 0.888 },
+		{ 1.444, 0.738 },
+		{ 1.672, 0.382 },
+		{ 1.388, 0.113 },
+		{ 1.728, 1.134 },
+		{ 1.943, 0.787 },
+		{ 2.132, 0.182 },
+		{ 2.421, 1.072 },
+		{ 2.040, 0.543 },
+		{ 2.771, 0.615 },
+		{ 2.693, 0.144 },
+		{ 2.088, 1.307 },
+		{ 2.514, 1.683 },
+		{ 2.957, 1.248 },
+		{ 3.288, 0.389 },
+	},
+	{ -- medicine
+		{ -0.083, -0.634 },
+		{ -0.399, -1.010 },
+		{ 0.121, -1.123 },
+		{ -0.364, -1.445 },
+		{ 0.065, -1.493 },
+		{ -0.146, -1.139 },
+		{ -0.217, -1.805 },
+		{ 0.281, -2.038 },
+		{ 0.067, -2.506 },
+		{ -0.459, -2.335 },
+		{ 0.574, -3.041 },
+		{ -0.077, -3.097 },
+		{ -0.569, -2.861 },
+		{ -0.824, -2.401 },
+	},
+	{ -- ranged
+		{ 0.212, 0.556 },
+		{ 0.145, 0.989 },
+		{ 0.648, 0.653 },
+		{ 0.277, 1.479 },
+		{ 0.424, 0.926 },
+		{ 0.698, 1.203 },
+		{ 0.143, 2.019 },
+		{ 0.603, 1.720 },
+		{ 1.052, 1.635 },
+		{ 1.208, 1.288 },
+		{ 0.187, 2.744 },
+		{ 0.639, 2.318 },
+		{ 1.198, 2.108 },
+		{ 1.816, 2.034 },
+		{ 1.766, 1.571 },
+		{ 0.952, 2.858 },
+		{ 1.727, 2.629 },
+	},
+	{ -- shadow
+		{ -0.368, -0.351 },
+		{ -0.701, -0.813 },
+		{ -0.815, -0.490 },
+		{ -0.744, -1.229 },
+		{ -1.288, -1.189 },
+		{ -0.757, -1.284 },
+		{ -1.697, -1.877 },
+		{ -1.845, -1.305 },
+		{ -0.716, -1.852 },
+		{ -1.098, -1.728 },
+		{ -2.236, -2.390 },
+		{ -2.293, -1.728 },
+		{ -1.328, -2.260 },
+		{ -1.221, -2.738 },
+	},
+	{ -- build
+		{ 0.642, -0.149 },
+		{ 1.211, -0.195 },
+		{ 1.085, -0.567 },
+		{ 1.785, -0.110 },
+		{ 1.500, -0.528 },
+		{ 1.035, -0.953 },
+		{ 2.299, -0.347 },
+		{ 1.842, -0.471 },
+		{ 1.570, -0.970 },
+		{ 1.364, -1.343 },
+		{ 2.877, -0.201 },
+		{ 2.531, -0.771 },
+		{ 2.105, -0.734 },
+		{ 2.196, -1.080 },
+		{ 1.816, -1.367 },
+		{ 3.402, -0.546 },
+		{ 2.853, -0.506 },
+		{ 3.014, -1.066 },
+		{ 2.418, -1.622 },
+	},
+	{ -- melee
+		{ -0.693, -0.073 },
+		{ -1.151, -0.309 },
+		{ -0.921, 0.219 },
+		{ -1.146, -0.771 },
+		{ -1.829, -0.496 },
+		{ -1.044, -0.025 },
+		{ -1.599, -0.034 },
+		{ -1.751, -0.906 },
+		{ -2.240, -1.031 },
+		{ -2.479, -0.395 },
+		{ -2.819, -1.378 },
+		{ -2.797, -0.893 },
+		{ -2.791, -0.064 },
+		{ -2.942, -1.849 },
+		{ -2.942, -0.461 },
+		{ -2.356, -0.717 },
+		{ -3.519, -0.471 },
+		{ -3.376, -0.016 },
+	},
+	{ -- agility
+		{ -0.172, 0.427 },
+		{ -0.496, 0.917 },
+		{ -0.080, 0.822 },
+		{ -0.841, 1.205 },
+		{ -0.593, 1.526 },
+		{ -0.266, 1.371 },
+		{ -1.364, 1.271 },
+		{ -1.035, 1.790 },
+		{ -0.134, 1.760 },
+		{ -1.602, 1.824 },
+		{ -1.439, 2.450 },
+		{ -0.682, 1.893 },
+		{ -0.694, 2.453 },
+		{ -2.214, 2.403 },
+		{ -0.466, 2.932 },
+		{ -0.257, 2.420 },
+	},
+}
 
-local function SeedRand(seed)
-	local s = math.floor(seed % 2147483647)
-	if s <= 0 then
-		s = s + 2147483646
-	end
-	return function()
-		s = (s * 48271) % 2147483647
-		return s / 2147483647
-	end
-end
-
-local function Dist2(ax, ay, bx, by)
-	local dx, dy = ax - bx, ay - by
-	return dx * dx + dy * dy
-end
-
-local function AngleDiff(a, b)
-	return math.AngleDifference(math.deg(a), math.deg(b))
-end
-
-local function ArmAxes(arm)
-	local ox, oy = arm.outX, arm.outY
-	local len = math.sqrt(ox * ox + oy * oy)
-	ox, oy = ox / len, oy / len
-	return ox, oy, -oy, ox
-end
-
-local function ArmDot(x, y, arm)
-	local ox, oy = ArmAxes(arm)
-	return x * ox + y * oy
-end
-
-local function InBush(x, y, arm, pad, cone)
-	local ox, oy, rx, ry = ArmAxes(arm)
-	local par = x * ox + y * oy
-	if par < 0.88 or par > 7.2 then
-		return false
-	end
-	local perp = math.abs(x * rx + y * ry)
-	return perp <= 0.58 + par * cone + (pad or 0)
-end
-
-local function Near(ax, ay, bx, by)
-	return Dist2(ax, ay, bx, by) < 1e-8
-end
-
-local function Orient(ax, ay, bx, by, cx, cy)
-	return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-end
-
-local function SegsCross(ax, ay, bx, by, cx, cy, dx, dy)
-	if Near(ax, ay, cx, cy) or Near(ax, ay, dx, dy) or Near(bx, by, cx, cy) or Near(bx, by, dx, dy) then
-		return false
-	end
-	local o1 = Orient(ax, ay, bx, by, cx, cy)
-	local o2 = Orient(ax, ay, bx, by, dx, dy)
-	local o3 = Orient(cx, cy, dx, dy, ax, ay)
-	local o4 = Orient(cx, cy, dx, dy, bx, by)
-	return ((o1 > 0 and o2 < 0) or (o1 < 0 and o2 > 0)) and ((o3 > 0 and o4 < 0) or (o3 < 0 and o4 > 0))
-end
-
-local function SegDist2(px, py, ax, ay, bx, by)
-	local vx, vy = bx - ax, by - ay
-	local len2 = vx * vx + vy * vy
-	if len2 < 1e-8 then
-		return Dist2(px, py, ax, ay)
-	end
-	local t = math.Clamp(((px - ax) * vx + (py - ay) * vy) / len2, 0, 1)
-	local qx, qy = ax + vx * t, ay + vy * t
-	return Dist2(px, py, qx, qy)
-end
-
-local function NewGrower(treeIndex, tree, arm, rnd, allNodes, segs, cone)
-	local nSlots = GAMEMODE.CycleGridSlots
+local function LayoutBush(treeIndex, tree)
+	local coords = BUSH_POS[treeIndex]
+	local parents = BUSH_PARENT[treeIndex]
 	local nodes = {}
-	local childCount = {}
-	local spine = {}
-	local lean = (rnd() < 0.5) and 1 or -1
-	local center = math.atan2(arm.outY, arm.outX)
-	local pad = 0
-	local sep = MIN_SEP
-	local spineN = (rnd() < 0.5) and 5 or 6
-
-	local function tooClose(x, y, skip)
-		if Dist2(x, y, 0, 0) < CORE_R * CORE_R then
-			return true
+	local bySlot = {}
+	for slot = 0, #coords - 1 do
+		local c = coords[slot + 1]
+		local x, y = c[1], c[2]
+		local parent = slot == 0 and nil or bySlot[parents[slot]]
+		local ang
+		if parent then
+			ang = math.atan2(y - parent.y, x - parent.x)
+		else
+			ang = math.atan2(y, x)
 		end
-		for _, n in ipairs(allNodes) do
-			if n ~= skip and Dist2(x, y, n.x, n.y) < sep * sep then
-				return true
-			end
-		end
-		return false
-	end
-
-	local function edgeBlocked(ax, ay, bx, by, skipNode)
-		for _, e in ipairs(segs) do
-			if SegsCross(ax, ay, bx, by, e[1], e[2], e[3], e[4]) then
-				return true
-			end
-		end
-		local lim = 0.28 * 0.28
-		for _, n in ipairs(allNodes) do
-			if n ~= skipNode and SegDist2(n.x, n.y, ax, ay, bx, by) < lim then
-				return true
-			end
-		end
-		return false
-	end
-
-	local function addNode(x, y, parent, ang, kind)
-		local dx, dy = math.cos(ang), math.sin(ang)
-		local node = {
+		local n = {
 			tree = treeIndex,
 			treeId = tree.id,
-			slot = #nodes,
+			slot = slot,
 			x = x,
 			y = y,
 			parent = parent,
 			ang = ang,
-			kind = kind,
-			inx = dx,
-			iny = dy
+			kind = slot == 0 and "gate" or "twig",
+			inx = math.cos(ang),
+			iny = math.sin(ang)
 		}
-		nodes[#nodes + 1] = node
-		allNodes[#allNodes + 1] = node
-		if parent then
-			childCount[parent] = (childCount[parent] or 0) + 1
-			segs[#segs + 1] = { parent.x, parent.y, x, y }
-		else
-			segs[#segs + 1] = { 0, 0, x, y }
-		end
-		return node
+		nodes[#nodes + 1] = n
+		bySlot[slot] = n
 	end
-
-	local function sample(parent, mode)
-		local ox, oy, rx, ry = ArmAxes(arm)
-		local radial = math.atan2(oy, ox)
-		local pr = math.sqrt(parent.x * parent.x + parent.y * parent.y)
-		local prevLen = pr
-		if parent.parent then
-			prevLen = math.sqrt(Dist2(parent.x, parent.y, parent.parent.x, parent.parent.y))
-		end
-		local tip = spine[#spine]
-		local cands = {}
-		for k = 1, 41 do
-			local sign = lean
-			if k % 2 == 0 then
-				sign = -lean
-			end
-			if mode == "twig" then
-				if k % 3 == 0 then
-					sign = lean
-				else
-					sign = -lean
-				end
-			end
-			if rnd() < 0.12 then
-				sign = -sign
-			end
-			local turn, len, band = 0, 0, rnd()
-			if mode == "spine" then
-				turn = 18 + rnd() * 24
-				if band < 0.34 then
-					len = 0.74 + rnd() * 0.16
-				elseif band < 0.70 then
-					len = 0.98 + rnd() * 0.22
-				else
-					len = 1.24 + rnd() * 0.28
-				end
-			else
-				turn = 26 + rnd() * 34
-				if band < 0.40 then
-					len = 0.72 + rnd() * 0.16
-				elseif band < 0.74 then
-					len = 0.92 + rnd() * 0.22
-				else
-					len = 1.18 + rnd() * 0.30
-				end
-			end
-			local ang = radial + sign * math.rad(turn)
-			if math.abs(AngleDiff(ang, parent.ang)) < MIN_TURN then
-				ang = parent.ang + sign * math.rad(MIN_TURN + 7 + rnd() * 14)
-			end
-			local x = parent.x + math.cos(ang) * len
-			local y = parent.y + math.sin(ang) * len
-			local r = math.sqrt(x * x + y * y)
-			local ok = true
-			if mode == "spine" and r < pr + 0.12 then
-				ok = false
-			end
-			if ok and InBush(x, y, arm, pad, cone) and not tooClose(x, y, parent) and not edgeBlocked(parent.x, parent.y, x, y, parent) then
-				local par = x * ox + y * oy
-				local perp = math.abs(x * rx + y * ry)
-				local s = rnd() * 1.7 + math.abs(len - prevLen) * 1.8
-				if mode == "spine" then
-					s = s - perp * 0.8
-					if r > pr then
-						s = s + 1.1
-					end
-				else
-					s = s + perp * 1.6 + (3.1 - math.abs(par - 2.8)) * 0.5
-					if parent == tip then
-						s = s - 2.2
-					end
-				end
-				cands[#cands + 1] = { x = x, y = y, ang = ang, s = s }
-			end
-		end
-		if #cands == 0 then
-			return nil
-		end
-		table.sort(cands, function(a, b)
-			return a.s > b.s
-		end)
-		local pick = cands[1]
-		if #cands >= 2 and rnd() < 0.38 then
-			pick = cands[1 + math.floor(rnd() * math.min(3, #cands))]
-		end
-		return pick
-	end
-
-	local function growFrom(parent, mode)
-		local pick = sample(parent, mode)
-		if not pick then
-			return nil
-		end
-		local n = addNode(pick.x, pick.y, parent, pick.ang, mode)
-		if mode == "spine" then
-			spine[#spine + 1] = n
-			if rnd() < 0.82 then
-				lean = -lean
-			end
-		end
-		return n
-	end
-
-	local grower = { nodes = nodes, treeIndex = treeIndex, arm = arm }
-
-	function grower.PlaceGate()
-		local jitter = (rnd() - 0.5) * 0.12
-		local ang = center + jitter
-		local rad = 0.98 + rnd() * 0.40
-		local x, y = math.cos(ang) * rad, math.sin(ang) * rad
-		if tooClose(x, y, nil) then
-			ang = center
-			rad = 1.18
-			x, y = math.cos(ang) * rad, math.sin(ang) * rad
-		end
-		local n = addNode(x, y, nil, ang, "gate")
-		spine[#spine + 1] = n
-	end
-
-	function grower.StepSpine()
-		if #nodes >= nSlots or #spine >= spineN then
-			return false
-		end
-		if growFrom(spine[#spine], "spine") then
-			return true
-		end
-		for i = #spine, 1, -1 do
-			if growFrom(spine[i], "spine") then
-				return true
-			end
-		end
-		return false
-	end
-
-	function grower.StepTwig()
-		if #nodes >= nSlots then
-			return false
-		end
-		local ranked = {}
-		local tip = spine[#spine]
-		for _, n in ipairs(nodes) do
-			local cc = childCount[n] or 0
-			local cap = (n.kind == "twig") and 1 or 2
-			if cc < cap then
-				local s = rnd() * 2.2 - cc * 3.5
-				if n == tip then
-					s = s - 2.8
-				end
-				if n.kind == "gate" then
-					s = s - 0.8
-				end
-				ranked[#ranked + 1] = { s = s, n = n }
-			end
-		end
-		table.sort(ranked, function(a, b)
-			return a.s > b.s
-		end)
-		for _, row in ipairs(ranked) do
-			if growFrom(row.n, "twig") then
-				return true
-			end
-		end
-		return false
-	end
-
-	function grower.Widen()
-		pad = math.min(0.55, pad + 0.12)
-		sep = math.max(0.60, sep - 0.03)
-	end
-
-	return grower
+	return nodes
 end
 
 GM.CycleGridLayout = nil
@@ -343,76 +255,14 @@ function GM:GetCycleGridLayout()
 		return self.CycleGridLayout
 	end
 
-	local allNodes = {}
-	local segs = {}
-	local growers = {}
-	local nTrees = #self.CycleGridTrees
-	local arms = MakeArms(nTrees)
-	local cone = math.tan(math.pi / nTrees * 0.85)
-
-	for i, tree in ipairs(self.CycleGridTrees) do
-		local rnd = SeedRand(9041 + i * 7919)
-		growers[i] = NewGrower(i, tree, arms[i], rnd, allNodes, segs, cone)
-		growers[i].PlaceGate()
-	end
-
-	local function GrowRound(kind, allowWiden)
-		local order = {}
-		for i, g in ipairs(growers) do
-			order[i] = g
-		end
-		table.sort(order, function(a, b)
-			if #a.nodes ~= #b.nodes then
-				return #a.nodes < #b.nodes
-			end
-			return a.treeIndex < b.treeIndex
-		end)
-		local moved = false
-		for _, g in ipairs(order) do
-			local ok = false
-			if kind == "spine" then
-				ok = g.StepSpine()
-			else
-				ok = g.StepTwig() or g.StepSpine()
-			end
-			if ok then
-				moved = true
-			elseif allowWiden and #g.nodes < self.CycleGridSlots then
-				g.Widen()
-				if kind == "spine" then
-					ok = g.StepSpine()
-				else
-					ok = g.StepTwig() or g.StepSpine()
-				end
-				if ok then
-					moved = true
-				end
-			end
-		end
-		return moved
-	end
-
-	local moved = true
-	local guard = 0
-	while moved and guard < 40 do
-		moved = GrowRound("spine", false)
-		guard = guard + 1
-	end
-	moved = true
-	guard = 0
-	while moved and guard < 80 do
-		moved = GrowRound("twig", true)
-		guard = guard + 1
-	end
-
 	local nodes = {}
 	local edges = {}
 	local labels = {}
 	local hub = { x = 0, y = 0 }
 	local byTree = {}
 
-	for i, g in ipairs(growers) do
-		local tnodes = g.nodes
+	for i, tree in ipairs(self.CycleGridTrees) do
+		local tnodes = LayoutBush(i, tree)
 		byTree[i] = tnodes
 		local far = tnodes[1]
 		local farD = -1
@@ -423,16 +273,20 @@ function GM:GetCycleGridLayout()
 			elseif n.parent then
 				edges[#edges + 1] = { n.parent, n }
 			end
-			local d = ArmDot(n.x, n.y, g.arm)
+			local d = n.x * n.x + n.y * n.y
 			if d > farD then
 				far, farD = n, d
 			end
 		end
-		local ux, uy = ArmAxes(g.arm)
+		local len = math.sqrt(far.x * far.x + far.y * far.y)
+		local ux, uy = 0, 1
+		if len > 0.001 then
+			ux, uy = far.x / len, far.y / len
+		end
 		labels[#labels + 1] = {
 			tree = i,
-			treeId = self.CycleGridTrees[i].id,
-			nameKey = self.CycleGridTrees[i].nameKey,
+			treeId = tree.id,
+			nameKey = tree.nameKey,
 			x = far.x + ux * 0.7,
 			y = far.y + uy * 0.7
 		}
@@ -449,6 +303,7 @@ function GM:GetCycleGridLayout()
 end
 
 -- Catalog. Law: documents/cycle-grid.md
+-- Slot 0 is the gate. Other slots are nests on that tree's drawn bush.
 GM.CycleGridCatalog = {
 	vitality_1 = {
 		tree = "vitality",
@@ -458,12 +313,74 @@ GM.CycleGridCatalog = {
 		U = 20,
 		Health = 3
 	},
+	vitality_3 = {
+		tree = "vitality",
+		slot = 2,
+		nameKey = "grid_skill_vitality_3",
+		descKey = "grid_skill_vitality_3_desc",
+		U = 20,
+		need = "vitality_1",
+		Health = 3
+	},
+	vitality_4 = {
+		tree = "vitality",
+		slot = 5,
+		nameKey = "grid_skill_vitality_4",
+		descKey = "grid_skill_vitality_4_desc",
+		U = 20,
+		need = "vitality_3",
+		Health = 3
+	},
+	vitality_2 = {
+		tree = "vitality",
+		slot = 1,
+		nameKey = "grid_skill_vitality_2",
+		descKey = "grid_skill_vitality_2_desc",
+		U = 20,
+		Blood = 2
+	},
+	vitality_5 = {
+		tree = "vitality",
+		slot = 3,
+		nameKey = "grid_skill_vitality_5",
+		descKey = "grid_skill_vitality_5_desc",
+		U = 20,
+		need = "vitality_2",
+		Blood = 2
+	},
+	vitality_6 = {
+		tree = "vitality",
+		slot = 7,
+		nameKey = "grid_skill_vitality_6",
+		descKey = "grid_skill_vitality_6_desc",
+		U = 20,
+		need = "vitality_5",
+		Blood = 2
+	},
 	agility_1 = {
 		tree = "agility",
 		slot = 0,
 		nameKey = "grid_skill_agility_1",
 		descKey = "grid_skill_agility_1_desc",
 		U = 20,
+		RunSpeed = 0.03
+	},
+	agility_3 = {
+		tree = "agility",
+		slot = 2,
+		nameKey = "grid_skill_agility_3",
+		descKey = "grid_skill_agility_3_desc",
+		U = 20,
+		need = "agility_1",
+		RunSpeed = 0.03
+	},
+	agility_6 = {
+		tree = "agility",
+		slot = 5,
+		nameKey = "grid_skill_agility_6",
+		descKey = "grid_skill_agility_6_desc",
+		U = 20,
+		need = "agility_3",
 		RunSpeed = 0.03
 	},
 	agility_2 = {
@@ -475,17 +392,29 @@ GM.CycleGridCatalog = {
 		Jump = 0.02,
 		Climb = 0.02
 	},
-	agility_3 = {
+	agility_7 = {
 		tree = "agility",
-		slot = 2,
-		nameKey = "grid_skill_agility_3",
-		descKey = "grid_skill_agility_3_desc",
+		slot = 4,
+		nameKey = "grid_skill_agility_7",
+		descKey = "grid_skill_agility_7_desc",
 		U = 20,
-		RunSpeed = 0.03
+		need = "agility_2",
+		Jump = 0.02,
+		Climb = 0.02
+	},
+	agility_8 = {
+		tree = "agility",
+		slot = 8,
+		nameKey = "grid_skill_agility_8",
+		descKey = "grid_skill_agility_8_desc",
+		U = 20,
+		need = "agility_7",
+		Jump = 0.02,
+		Climb = 0.02
 	},
 	agility_4 = {
 		tree = "agility",
-		slot = 12,
+		slot = 7,
 		nameKey = "grid_skill_agility_4",
 		descKey = "grid_skill_agility_4_desc",
 		U = 20,
@@ -495,7 +424,7 @@ GM.CycleGridCatalog = {
 	},
 	agility_5 = {
 		tree = "agility",
-		slot = 13,
+		slot = 10,
 		nameKey = "grid_skill_agility_5",
 		descKey = "grid_skill_agility_5_desc",
 		U = 20,
@@ -512,12 +441,48 @@ GM.CycleGridCatalog = {
 		U = 20,
 		Reload = 0.03
 	},
-	ranged_2 = {
+	ranged_3 = {
 		tree = "ranged",
 		slot = 1,
+		nameKey = "grid_skill_ranged_3",
+		descKey = "grid_skill_ranged_3_desc",
+		U = 20,
+		need = "ranged_1",
+		Reload = 0.03
+	},
+	ranged_4 = {
+		tree = "ranged",
+		slot = 3,
+		nameKey = "grid_skill_ranged_4",
+		descKey = "grid_skill_ranged_4_desc",
+		U = 20,
+		need = "ranged_3",
+		Reload = 0.03
+	},
+	ranged_2 = {
+		tree = "ranged",
+		slot = 2,
 		nameKey = "grid_skill_ranged_2",
 		descKey = "grid_skill_ranged_2_desc",
 		U = 20,
+		Recoil = -0.03
+	},
+	ranged_5 = {
+		tree = "ranged",
+		slot = 5,
+		nameKey = "grid_skill_ranged_5",
+		descKey = "grid_skill_ranged_5_desc",
+		U = 20,
+		need = "ranged_2",
+		Recoil = -0.03
+	},
+	ranged_6 = {
+		tree = "ranged",
+		slot = 9,
+		nameKey = "grid_skill_ranged_6",
+		descKey = "grid_skill_ranged_6_desc",
+		U = 20,
+		need = "ranged_5",
 		Recoil = -0.03
 	},
 	build_1 = {
@@ -528,6 +493,24 @@ GM.CycleGridCatalog = {
 		U = 20,
 		Repair = 0.04
 	},
+	build_5 = {
+		tree = "build",
+		slot = 2,
+		nameKey = "grid_skill_build_5",
+		descKey = "grid_skill_build_5_desc",
+		U = 20,
+		need = "build_1",
+		Repair = 0.04
+	},
+	build_6 = {
+		tree = "build",
+		slot = 5,
+		nameKey = "grid_skill_build_6",
+		descKey = "grid_skill_build_6_desc",
+		U = 20,
+		need = "build_5",
+		Repair = 0.04
+	},
 	build_2 = {
 		tree = "build",
 		slot = 1,
@@ -536,21 +519,65 @@ GM.CycleGridCatalog = {
 		U = 20,
 		HammerSwing = 0.07
 	},
+	build_7 = {
+		tree = "build",
+		slot = 4,
+		nameKey = "grid_skill_build_7",
+		descKey = "grid_skill_build_7_desc",
+		U = 20,
+		need = "build_2",
+		HammerSwing = 0.07
+	},
+	build_8 = {
+		tree = "build",
+		slot = 7,
+		nameKey = "grid_skill_build_8",
+		descKey = "grid_skill_build_8_desc",
+		U = 20,
+		need = "build_7",
+		HammerSwing = 0.07
+	},
 	build_3 = {
 		tree = "build",
-		slot = 2,
+		slot = 8,
 		nameKey = "grid_skill_build_3",
 		descKey = "grid_skill_build_3_desc",
 		U = 20,
 		NailRange = 0.15
 	},
+	build_9 = {
+		tree = "build",
+		slot = 14,
+		nameKey = "grid_skill_build_9",
+		descKey = "grid_skill_build_9_desc",
+		U = 20,
+		need = "build_3",
+		NailRange = 0.15
+	},
 	build_4 = {
 		tree = "build",
-		slot = 9,
+		slot = 12,
 		nameKey = "grid_skill_build_4",
 		descKey = "grid_skill_build_4_desc",
 		U = 20,
 		DoorDamage = 0.40
+	},
+	build_10 = {
+		tree = "build",
+		slot = 13,
+		nameKey = "grid_skill_build_10",
+		descKey = "grid_skill_build_10_desc",
+		U = 20,
+		MaxNails = 1
+	},
+	build_11 = {
+		tree = "build",
+		slot = 18,
+		nameKey = "grid_skill_build_11",
+		descKey = "grid_skill_build_11_desc",
+		U = 20,
+		need = "build_10",
+		MaxNails = 1
 	},
 	mechanics_1 = {
 		tree = "mechanics",
@@ -558,6 +585,24 @@ GM.CycleGridCatalog = {
 		nameKey = "grid_skill_mechanics_1",
 		descKey = "grid_skill_mechanics_1_desc",
 		U = 20,
+		DeviceHealth = 0.05
+	},
+	mechanics_2 = {
+		tree = "mechanics",
+		slot = 2,
+		nameKey = "grid_skill_mechanics_2",
+		descKey = "grid_skill_mechanics_2_desc",
+		U = 20,
+		need = "mechanics_1",
+		DeviceHealth = 0.05
+	},
+	mechanics_3 = {
+		tree = "mechanics",
+		slot = 6,
+		nameKey = "grid_skill_mechanics_3",
+		descKey = "grid_skill_mechanics_3_desc",
+		U = 20,
+		need = "mechanics_2",
 		DeviceHealth = 0.05
 	},
 	medicine_1 = {
@@ -568,6 +613,24 @@ GM.CycleGridCatalog = {
 		U = 20,
 		MedicHeal = 0.03
 	},
+	medicine_2 = {
+		tree = "medicine",
+		slot = 2,
+		nameKey = "grid_skill_medicine_2",
+		descKey = "grid_skill_medicine_2_desc",
+		U = 20,
+		need = "medicine_1",
+		MedicHeal = 0.03
+	},
+	medicine_3 = {
+		tree = "medicine",
+		slot = 4,
+		nameKey = "grid_skill_medicine_3",
+		descKey = "grid_skill_medicine_3_desc",
+		U = 20,
+		need = "medicine_2",
+		MedicHeal = 0.03
+	},
 	melee_1 = {
 		tree = "melee",
 		slot = 0,
@@ -576,15 +639,154 @@ GM.CycleGridCatalog = {
 		U = 20,
 		MeleeDamage = 0.03
 	},
-	melee_2 = {
+	melee_5 = {
+		tree = "melee",
+		slot = 2,
+		nameKey = "grid_skill_melee_5",
+		descKey = "grid_skill_melee_5_desc",
+		U = 20,
+		need = "melee_1",
+		MeleeDamage = 0.03
+	},
+	melee_8 = {
+		tree = "melee",
+		slot = 6,
+		nameKey = "grid_skill_melee_8",
+		descKey = "grid_skill_melee_8_desc",
+		U = 20,
+		need = "melee_5",
+		MeleeDamage = 0.03
+	},
+	melee_3 = {
+		tree = "melee",
+		slot = 1,
+		nameKey = "grid_skill_melee_3",
+		descKey = "grid_skill_melee_3_desc",
+		U = 20,
+		MeleeSwing = 0.03
+	},
+	melee_7 = {
+		tree = "melee",
+		slot = 3,
+		nameKey = "grid_skill_melee_7",
+		descKey = "grid_skill_melee_7_desc",
+		U = 20,
+		need = "melee_3",
+		MeleeSwing = 0.03
+	},
+	melee_10 = {
+		tree = "melee",
+		slot = 7,
+		nameKey = "grid_skill_melee_10",
+		descKey = "grid_skill_melee_10_desc",
+		U = 20,
+		need = "melee_7",
+		MeleeSwing = 0.03
+	},
+	melee_6 = {
+		tree = "melee",
+		slot = 4,
+		nameKey = "grid_skill_melee_6",
+		descKey = "grid_skill_melee_6_desc",
+		U = 20,
+		MeleeStamina = -0.04
+	},
+	melee_9 = {
+		tree = "melee",
+		slot = 9,
+		nameKey = "grid_skill_melee_9",
+		descKey = "grid_skill_melee_9_desc",
+		U = 20,
+		need = "melee_6",
+		MeleeStamina = -0.04
+	},
+	melee_11 = {
 		tree = "melee",
 		slot = 12,
+		nameKey = "grid_skill_melee_11",
+		descKey = "grid_skill_melee_11_desc",
+		U = 20,
+		need = "melee_9",
+		MeleeStamina = -0.04
+	},
+	melee_12 = {
+		tree = "melee",
+		slot = 8,
+		nameKey = "grid_skill_melee_12",
+		descKey = "grid_skill_melee_12_desc",
+		U = 20,
+		BloodFromMelee = 0.01
+	},
+	melee_13 = {
+		tree = "melee",
+		slot = 10,
+		nameKey = "grid_skill_melee_13",
+		descKey = "grid_skill_melee_13_desc",
+		U = 20,
+		need = "melee_12",
+		BloodFromMelee = 0.01
+	},
+	melee_14 = {
+		tree = "melee",
+		slot = 13,
+		nameKey = "grid_skill_melee_14",
+		descKey = "grid_skill_melee_14_desc",
+		U = 20,
+		need = "melee_13",
+		BloodFromMelee = 0.01
+	},
+	melee_2 = {
+		tree = "melee",
+		slot = 11,
 		nameKey = "grid_skill_melee_2",
 		descKey = "grid_skill_melee_2_desc",
 		U = 20,
-		MeleeViewPunch = -0.15,
-		AimShake = 0.15,
-		AimShakeThreshold = 0.15
+		MeleeDamage = 0.03,
+		MeleeViewPunch = -0.30,
+		AimShake = 0.15
+	},
+	melee_4 = {
+		tree = "melee",
+		slot = 15,
+		nameKey = "grid_skill_melee_4",
+		descKey = "grid_skill_melee_4_desc",
+		U = 20,
+		need = "melee_2",
+		MeleeDamage = 0.03,
+		AimShakeFear = -0.10,
+		AimShakeHP = 0.20
+	},
+	melee_15 = {
+		tree = "melee",
+		slot = 17,
+		nameKey = "grid_skill_melee_15",
+		descKey = "grid_skill_melee_15_desc",
+		U = 20,
+		need = "melee_2",
+		MeleeDamage = 0.03,
+		MeleeSwing = 0.07,
+		AimShakeFear = 0.25
+	},
+	melee_16 = {
+		tree = "melee",
+		slot = 14,
+		nameKey = "grid_skill_melee_16",
+		descKey = "grid_skill_melee_16_desc",
+		U = 20,
+		need = "melee_2",
+		MeleeDamage = 0.03,
+		Heal = -0.05
+	},
+	melee_17 = {
+		tree = "melee",
+		slot = 16,
+		nameKey = "grid_skill_melee_17",
+		descKey = "grid_skill_melee_17_desc",
+		U = 20,
+		need = "melee_2",
+		MeleeDamage = 0.03,
+		MeleeMiss = 0.04,
+		HitSlow = -0.75
 	},
 	shadow_1 = {
 		tree = "shadow",
@@ -602,33 +804,71 @@ GM.CycleGridCatalog = {
 		U = 20,
 		ResupplyAmmo = 0.04
 	},
-	supply_2 = {
+	supply_3 = {
 		tree = "supply",
 		slot = 1,
+		nameKey = "grid_skill_supply_3",
+		descKey = "grid_skill_supply_3_desc",
+		U = 20,
+		need = "supply_1",
+		ResupplyAmmo = 0.04
+	},
+	supply_7 = {
+		tree = "supply",
+		slot = 3,
+		nameKey = "grid_skill_supply_7",
+		descKey = "grid_skill_supply_7_desc",
+		U = 20,
+		need = "supply_3",
+		ResupplyAmmo = 0.04
+	},
+	supply_2 = {
+		tree = "supply",
+		slot = 5,
 		nameKey = "grid_skill_supply_2",
 		descKey = "grid_skill_supply_2_desc",
 		U = 20,
 		ArsenalMargin = 0.02
 	},
-	supply_3 = {
-		tree = "supply",
-		slot = 2,
-		nameKey = "grid_skill_supply_3",
-		descKey = "grid_skill_supply_3_desc",
-		U = 20,
-		ResupplyAmmo = 0.04
-	},
 	supply_4 = {
 		tree = "supply",
-		slot = 3,
+		slot = 7,
 		nameKey = "grid_skill_supply_4",
 		descKey = "grid_skill_supply_4_desc",
 		U = 20,
+		need = "supply_2",
 		ArsenalMargin = 0.02
+	},
+	supply_8 = {
+		tree = "supply",
+		slot = 10,
+		nameKey = "grid_skill_supply_8",
+		descKey = "grid_skill_supply_8_desc",
+		U = 20,
+		need = "supply_4",
+		ArsenalMargin = 0.02
+	},
+	supply_9 = {
+		tree = "supply",
+		slot = 8,
+		nameKey = "grid_skill_supply_9",
+		descKey = "grid_skill_supply_9_desc",
+		U = 20,
+		ArsenalBreakPoints = 30,
+		ArsenalMargin = -0.01
+	},
+	supply_10 = {
+		tree = "supply",
+		slot = 12,
+		nameKey = "grid_skill_supply_10",
+		descKey = "grid_skill_supply_10_desc",
+		U = 20,
+		ArsenalCrateCost = -0.80,
+		ArsenalMargin = -0.01
 	},
 	supply_5 = {
 		tree = "supply",
-		slot = 13,
+		slot = 11,
 		nameKey = "grid_skill_supply_5",
 		descKey = "grid_skill_supply_5_desc",
 		U = 20,
@@ -637,7 +877,7 @@ GM.CycleGridCatalog = {
 	},
 	supply_6 = {
 		tree = "supply",
-		slot = 14,
+		slot = 13,
 		nameKey = "grid_skill_supply_6",
 		descKey = "grid_skill_supply_6_desc",
 		U = 20,
@@ -645,21 +885,14 @@ GM.CycleGridCatalog = {
 		ArsenalRivalOthers = 0.02,
 		ArsenalRivalSelf = 0.01
 	},
-	vitality_2 = {
-		tree = "vitality",
-		slot = 1,
-		nameKey = "grid_skill_vitality_2",
-		descKey = "grid_skill_vitality_2_desc",
+	supply_11 = {
+		tree = "supply",
+		slot = 14,
+		nameKey = "grid_skill_supply_11",
+		descKey = "grid_skill_supply_11_desc",
 		U = 20,
-		Blood = 2
-	},
-	vitality_3 = {
-		tree = "vitality",
-		slot = 2,
-		nameKey = "grid_skill_vitality_3",
-		descKey = "grid_skill_vitality_3_desc",
-		U = 20,
-		Health = 3
+		ArsenalMonopoly = 0.02,
+		ArsenalMargin = -0.01
 	}
 }
 
@@ -835,6 +1068,20 @@ end
 
 function GM:GetCycleGridBloodAdd(pl)
 	return self:GetCycleGridStatAdd(pl, "Blood")
+end
+
+function GM:GetMaxNails(pl)
+	return math.max(0, (self.MaxNails or 4) + self:GetCycleGridStatAdd(pl, "MaxNails"))
+end
+
+function GM:CycleGridPayArsenalBreak(pl)
+	if not SERVER or not IsValid(pl) or not pl.AddPoints then
+		return
+	end
+	local pts = self:GetCycleGridStatAdd(pl, "ArsenalBreakPoints")
+	if pts > 0 then
+		pl:AddPoints(pts, nil, nil, true)
+	end
 end
 
 function GM:GetHumanBloodArmorMax(pl)

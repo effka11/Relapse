@@ -128,8 +128,11 @@ end
 
 function SWEP:SetNextAttack()
 	local owner = self:GetOwner()
-	local armdelay = owner:GetMeleeSpeedMul()
-	self:SetNextPrimaryFire(CurTime() + self.Primary.Delay * armdelay)
+	local delayMul = owner:GetMeleeSpeedMul()
+	if GAMEMODE and GAMEMODE.GetMeleeAttackDelayMul then
+		delayMul = GAMEMODE:GetMeleeAttackDelayMul(owner, self)
+	end
+	self:SetNextPrimaryFire(CurTime() + self.Primary.Delay * delayMul)
 end
 
 function SWEP:Holster()
@@ -153,8 +156,11 @@ function SWEP:StartSwinging()
 	end
 	self:PlayStartSwingSound()
 
-	local armdelay = owner:GetMeleeSpeedMul()
-	self:SetSwingEnd(CurTime() + self.SwingTime * (owner.MeleeSwingDelayMul or 1) * armdelay)
+	local delayMul = owner:GetMeleeSpeedMul() * (owner.MeleeSwingDelayMul or 1)
+	if GAMEMODE and GAMEMODE.GetMeleeAttackDelayMul then
+		delayMul = GAMEMODE:GetMeleeAttackDelayMul(owner, self)
+	end
+	self:SetSwingEnd(CurTime() + self.SwingTime * delayMul)
 end
 
 function SWEP:DoMeleeAttackAnim()
@@ -168,7 +174,7 @@ function SWEP:MeleeSwing()
 
 	local tr = owner:CompensatedMeleeTrace(self.MeleeRange * (owner.MeleeRangeMul or 1), self.MeleeSize)
 
-	if not tr.Hit then
+	if not tr.Hit or (GAMEMODE and GAMEMODE.ShouldMeleeMiss and GAMEMODE:ShouldMeleeMiss(owner, self)) then
 		if self.MissAnim then
 			self:SendWeaponAnim(self.MissAnim)
 		end

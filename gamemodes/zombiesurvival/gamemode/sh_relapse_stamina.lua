@@ -224,7 +224,7 @@ function GM:GetHumanStaminaRegenRateMul(elapsed)
 end
 
 -- Tank fraction for one Relapse melee swing. Guns' bash is 0. Not from Damage.
-function GM:GetHumanStaminaMeleeCost(wep, heavy)
+function GM:GetHumanStaminaMeleeCost(wep, heavy, pl)
 	if self.ZombieEscape then return 0 end
 	if not IsValid(wep) then return 0 end
 	local R = wep.Relapse
@@ -234,11 +234,14 @@ function GM:GetHumanStaminaMeleeCost(wep, heavy)
 	if heavy then
 		cost = tonumber(R.StaminaHeavy) or (cost * (self.HumanStaminaMeleeHeavyMul or 1.7))
 	end
+	if IsValid(pl) and self.GetUpgradePercentMul then
+		cost = cost * self:GetUpgradePercentMul(pl, "MeleeStamina")
+	end
 	return math.max(0, cost)
 end
 
 function GM:CanHumanStaminaMelee(pl, wep, heavy)
-	local cost = self:GetHumanStaminaMeleeCost(wep, heavy)
+	local cost = self:GetHumanStaminaMeleeCost(wep, heavy, pl)
 	if cost <= 0 then return true end
 	if not IsValid(pl) or not pl.GetStamina then return true end
 	if P_Team(pl) ~= TEAM_HUMAN then return true end
@@ -250,7 +253,7 @@ function GM:ConsumeHumanStaminaMelee(pl, wep, heavy)
 	if not self:CanHumanStaminaMelee(pl, wep, heavy) then
 		return false
 	end
-	local cost = self:GetHumanStaminaMeleeCost(wep, heavy)
+	local cost = self:GetHumanStaminaMeleeCost(wep, heavy, pl)
 	if cost <= 0 or not SERVER then
 		return true
 	end

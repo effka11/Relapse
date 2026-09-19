@@ -3,6 +3,14 @@ require("mw_input")
 
 local task = table.Copy((SWEP or weapons.GetStored("mg_base")):GetTaskByName("Melee"))
 
+local function meleeTimeMul(weapon)
+	local gm = GAMEMODE or GM
+	if gm and gm.GetMeleeAttackDelayMul then
+		return gm:GetMeleeAttackDelayMul(weapon:GetOwner(), weapon)
+	end
+	return 1
+end
+
 local canSet = task.CanBeSet
 function task:CanBeSet(weapon)
 	if isfunction(canSet) and not canSet(self, weapon) then
@@ -43,17 +51,17 @@ function task:OnSet(weapon)
 	local bTrace = util.TraceHull(tr)
 
 	if bTrace and bTrace.Hit then
-		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee_Hit", meleeHitAnim.Length))
+		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee_Hit", meleeHitAnim.Length) * meleeTimeMul(weapon))
 		weapon:PlayViewModelAnimation("Melee_Hit")
 	else
-		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee", meleeAnim.Length))
+		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee", meleeAnim.Length) * meleeTimeMul(weapon))
 		weapon:PlayViewModelAnimation("Melee")
 	end
 
 	weapon:SetNextSecondaryFire(weapon:GetNextPrimaryFire())
 
 	if owner:IsNPC() then
-		timer.Create("mwb_melee_" .. owner:EntIndex() .. "_" .. weapon:EntIndex(), meleeAnim.Delay or 0, 0, function()
+		timer.Create("mwb_melee_" .. owner:EntIndex() .. "_" .. weapon:EntIndex(), (meleeAnim.Delay or 0) * meleeTimeMul(weapon), 0, function()
 			if IsValid(weapon) then
 				self:DelayedMeleeHit(weapon)
 			end
@@ -62,7 +70,7 @@ function task:OnSet(weapon)
 		return -- SWEP:Think doesn't run for NPCs so tasks don't tick as well
 	end
 
-	weapon:SetDelayedMeleeAttackTime(CurTime() + (meleeAnim.Delay or 0))
+	weapon:SetDelayedMeleeAttackTime(CurTime() + (meleeAnim.Delay or 0) * meleeTimeMul(weapon))
 	weapon:AddFlag("DelayedMeleeAttack")
 end
 

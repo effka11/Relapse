@@ -193,10 +193,11 @@ function meta:GetRateOfPalsy(ft, frightened, health, threshold, gunsway)
 	local fear = gm.GetHumanPalsyFearPower and gm:GetHumanPalsyFearPower() or 0
 	local fearth = gm.GetHumanPalsyFearShake and gm:GetHumanPalsyFearShake(fear) or 0
 	local frightth = frightened and (gm.HumanPalsyFrightenedRate or 8) or 0
-	local shakeMul = gm.GetHumanPalsyAimShakeMul and gm:GetHumanPalsyAimShakeMul(self) or (self.AimShakeMul or 1)
+	local hpMul = gm.GetHumanPalsyHPShakeMul and gm:GetHumanPalsyHPShakeMul(self) or 1
+	local fearMul = gm.GetHumanPalsyFearShakeMul and gm:GetHumanPalsyFearShakeMul(self) or 1
 	local gun = gunsway and (4 * (self.AimSpreadMul or 1)) or 0
 
-	return ft * ((healthth + fearth + frightth) * shakeMul + gun)
+	return ft * (healthth * hpMul + (fearth + frightth) * fearMul + gun)
 end
 
 GM.CachedResupplyAmmoType = "scrap"

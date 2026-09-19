@@ -600,6 +600,104 @@ concommand.Add("relapse_givemarks", function(pl, _, args)
 	ReplyGiveMarks(pl, string.format("[Relapse] gave %d marks to %s (now %d, offline)", n, sid64, now))
 end)
 
+local function TokensFromCommand(args, argStr)
+	local tokens = {}
+	argStr = string.Trim(tostring(argStr or ""))
+	if argStr ~= "" then
+		for token in string.gmatch(argStr, "%S+") do
+			tokens[#tokens + 1] = token
+		end
+		return tokens
+	end
+	for i = 1, #(args or {}) do
+		tokens[i] = args[i]
+	end
+	return tokens
+end
+
+local function ParseGivePlayerAmount(pl, args, argStr, cmd)
+	local usage = string.format("[Relapse] usage: %s <n>  or  %s <nick|steamid|steamid64> <n>", cmd, cmd)
+	local tokens = TokensFromCommand(args, argStr)
+	if #tokens == 0 then
+		return nil, nil, usage
+	end
+
+	local n = tonumber(tokens[#tokens])
+	n = n and math.floor(n) or nil
+	if not n or n == 0 then
+		return nil, nil, "[Relapse] n must be a non-zero number"
+	end
+
+	if #tokens == 1 then
+		if not IsValid(pl) then
+			return nil, nil, usage
+		end
+		return pl, n
+	end
+
+	local who = table.concat(tokens, " ", 1, #tokens - 1)
+	local target = FindPlayerByArg(who)
+	if not IsValid(target) then
+		local err
+		target, err = FindPlayerByNickPartial(who)
+		if err then
+			return nil, nil, "[Relapse] " .. err
+		end
+	end
+	if not IsValid(target) then
+		return nil, nil, "[Relapse] player not found"
+	end
+	return target, n
+end
+
+local function SaveProgressVault(target)
+	if GAMEMODE.SaveVault then
+		GAMEMODE:SaveVault(target, true)
+	end
+end
+
+concommand.Add("relapse_giveremorts", function(pl, _, args, argStr)
+	if not CanManageInventory(pl) then return end
+
+	local target, n, err = ParseGivePlayerAmount(pl, args, argStr, "relapse_giveremorts")
+	if not target then
+		ReplyGiveMarks(pl, err)
+		return
+	end
+
+	local now = math.max(0, (target:GetZSRemortLevel() or 0) + n)
+	target:SetZSRemortLevel(now)
+	SaveProgressVault(target)
+	ReplyGiveMarks(pl, string.format("[Relapse] gave %d remorts to %s (now %d)", n, target:Nick(), now))
+	if target ~= pl then
+		target:ChatPrint(string.format("[Relapse] you received %d remorts (now %d)", n, now))
+	end
+end)
+
+concommand.Add("relapse_givelevels", function(pl, _, args, argStr)
+	if not CanManageInventory(pl) then return end
+
+	local target, n, err = ParseGivePlayerAmount(pl, args, argStr, "relapse_givelevels")
+	if not target then
+		ReplyGiveMarks(pl, err)
+		return
+	end
+
+	local maxLevel = GAMEMODE.MaxLevel or 30
+	local now = math.Clamp((target:GetZSLevel() or 1) + n, 0, maxLevel)
+	if now < 1 then
+		target:SetZSXP(0)
+	else
+		target:SetZSLevel(now)
+	end
+	now = target:GetZSLevel()
+	SaveProgressVault(target)
+	ReplyGiveMarks(pl, string.format("[Relapse] gave %d levels to %s (now %d)", n, target:Nick(), now))
+	if target ~= pl then
+		target:ChatPrint(string.format("[Relapse] you received %d levels (now %d)", n, now))
+	end
+end)
+
 net.Receive("relapse_inv_equip", function(_, pl)
 	if not IsValid(pl) then return end
 	if pl.RelapseInvEquipAt and pl.RelapseInvEquipAt > CurTime() then return end

@@ -48,13 +48,14 @@ function meta:ProcessDamage(dmginfo)
 			local wep = attacker:GetActiveWeapon()
 			local attackermaxhp = math.floor(attacker:GetMaxHealth() * (attacker:IsSkillActive(SKILL_D_FRAIL) and 0.25 or 1))
 
-			if wep.IsMelee then
+				if wep.IsMelee then
 				if attacker:IsSkillActive(SKILL_CHEAPKNUCKLE) and math.abs(self:GetForward():Angle().yaw - attacker:GetForward():Angle().yaw) <= 90 then
 					self:AddLegDamage(12)
 				end
 
-				if attacker.MeleeDamageToBloodArmorMul and attacker.MeleeDamageToBloodArmorMul > 0 and attacker:GetBloodArmor() < attacker.MaxBloodArmor then
-					attacker:SetBloodArmor(math.min(attacker.MaxBloodArmor, attacker:GetBloodArmor() + math.min(damage, self:Health()) * attacker.MeleeDamageToBloodArmorMul * attacker.BloodarmorGainMul))
+				local bloodrate = GAMEMODE.GetMeleeBloodArmorRate and GAMEMODE:GetMeleeBloodArmorRate(attacker) or (attacker.MeleeDamageToBloodArmorMul or 0)
+				if bloodrate > 0 and attacker:GetBloodArmor() < attacker.MaxBloodArmor then
+					attacker:SetBloodArmor(math.min(attacker.MaxBloodArmor, attacker:GetBloodArmor() + math.min(damage, self:Health()) * bloodrate * (attacker.BloodarmorGainMul or 1)))
 				end
 
 				if attacker:IsSkillActive(SKILL_HEAVYSTRIKES) and not self:GetZombieClassTable().Boss and (wep.IsFistWeapon and attacker:IsSkillActive(SKILL_CRITICALKNUCKLE) or wep.MeleeKnockBack > 0) then
@@ -114,8 +115,12 @@ function meta:ProcessDamage(dmginfo)
 		if inflictor == attacker:GetActiveWeapon() then
 			local damage = dmginfo:GetDamage()
 
+			local slowtaken = self.SlowEffTakenMul or 1
+			if GAMEMODE.GetZombieHitSlowMul then
+				slowtaken = GAMEMODE:GetZombieHitSlowMul(self)
+			end
 			if self:IsBarricadeGhosting() then
-				self:SetLegDamage(21 * (self.SlowEffTakenMul or 1))
+				self:SetLegDamage(21 * slowtaken)
 			else
 				local scale = inflictor.SlowDownScale or 1
 				if damage >= 45 or scale > 1 then
@@ -128,7 +133,7 @@ function meta:ProcessDamage(dmginfo)
 						end
 					end
 					if dolegdamage then
-						self:RawCapLegDamage(self:GetLegDamage() + CurTime() + damage * 0.04 * (inflictor.SlowDownScale or 1) * (self.SlowEffTakenMul or 1))
+						self:RawCapLegDamage(self:GetLegDamage() + CurTime() + damage * 0.04 * (inflictor.SlowDownScale or 1) * slowtaken)
 					end
 				end
 			end

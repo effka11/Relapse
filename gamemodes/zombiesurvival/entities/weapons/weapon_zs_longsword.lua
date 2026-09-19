@@ -98,6 +98,8 @@ function SWEP:MeleeSwing()
 	local damage = self:GetDamage(self:GetTracesNumPlayers(tr))
 	local ent
 
+	local forceMiss = GAMEMODE and GAMEMODE.ShouldMeleeMiss and GAMEMODE:ShouldMeleeMiss(owner, self)
+
 	local standmul = 1
 	if owner:IsSkillActive(SKILL_LASTSTAND) then
 		if owner:Health() <= owner:GetMaxHealth() * 0.25 then
@@ -108,7 +110,7 @@ function SWEP:MeleeSwing()
 	end
 
 	for _, trace in ipairs(tr) do
-		if not trace.Hit then continue end
+		if forceMiss or not trace.Hit then continue end
 
 		ent = trace.Entity
 

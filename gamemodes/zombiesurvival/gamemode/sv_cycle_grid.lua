@@ -100,7 +100,7 @@ net.Receive("zs_cycle_grid_unlock", function(_, pl)
 		return
 	end
 	local treeId = net.ReadString()
-	local slot = net.ReadUInt(4)
+	local slot = net.ReadUInt(5)
 	if #treeId > 32 then
 		return
 	end

@@ -42,18 +42,23 @@ function task:OnSet(weapon)
 
 	local bTrace = util.TraceHull(tr)
 
+	local timeMul = 1
+	if gm and gm.GetMeleeAttackDelayMul then
+		timeMul = gm:GetMeleeAttackDelayMul(owner, weapon)
+	end
+
 	if bTrace and bTrace.Hit then
-		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee_Heavy_Hit", meleeHitAnim.Length))
+		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee_Heavy_Hit", meleeHitAnim.Length) * timeMul)
 		weapon:PlayViewModelAnimation("Melee_Heavy_Hit")
 	else
-		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee_Heavy", meleeAnim.Length))
+		weapon:SetNextPrimaryFire(CurTime() + weapon:GetAnimLength("Melee_Heavy", meleeAnim.Length) * timeMul)
 		weapon:PlayViewModelAnimation("Melee_Heavy")
 	end
 
 	weapon:SetNextSecondaryFire(weapon:GetNextPrimaryFire())
 
 	if owner:IsNPC() then
-		timer.Create("mwb_melee_" .. owner:EntIndex() .. "_" .. weapon:EntIndex(), meleeAnim.Delay or 0, 0, function()
+		timer.Create("mwb_melee_" .. owner:EntIndex() .. "_" .. weapon:EntIndex(), (meleeAnim.Delay or 0) * timeMul, 0, function()
 			if IsValid(weapon) then
 				self:DelayedMeleeHit(weapon)
 			end
@@ -62,7 +67,7 @@ function task:OnSet(weapon)
 		return -- SWEP:Think doesn't run for NPCs so tasks don't tick as well
 	end
 
-	weapon:SetDelayedMeleeAttackTime(CurTime() + (meleeAnim.Delay or 0))
+	weapon:SetDelayedMeleeAttackTime(CurTime() + (meleeAnim.Delay or 0) * timeMul)
 	weapon:AddFlag("DelayedMeleeAttack")
 end
 

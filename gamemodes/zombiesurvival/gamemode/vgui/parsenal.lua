@@ -1,7 +1,7 @@
-local function ShopPointsCost(price)
+local function ShopPointsCost(price, item)
 	price = tonumber(price) or 0
 	if IsValid(MySelf) and GAMEMODE and GAMEMODE.GetArsenalShopCost then
-		return GAMEMODE:GetArsenalShopCost(MySelf, price)
+		return GAMEMODE:GetArsenalShopCost(MySelf, price, item)
 	end
 	if IsValid(MySelf) then
 		return math.floor(price * (MySelf.ArsenalDiscount or 1))
@@ -40,7 +40,7 @@ local function CanBuy(item, pan)
 		return false
 	end
 
-	if not pan.NoPoints and MySelf:GetPoints() < ShopPointsCost(item.Price) then
+	if not pan.NoPoints and MySelf:GetPoints() < ShopPointsCost(item.Price, item) then
 		return false
 	elseif pan.NoPoints and MySelf:GetAmmoCount("scrap") < math.ceil(GAMEMODE:PointsToScrap(item.Price)) then
 		return false
@@ -475,7 +475,7 @@ SetupViewerPurchase = function(self, viewer, shoptbl, sweptable)
 	purl:SetVisible(true)
 
 	local ppurbl = viewer.m_PurchasePrice
-	local price = self.NoPoints and math.ceil(GAMEMODE:PointsToScrap(shoptbl.Worth)) or ShopPointsCost(shoptbl.Worth)
+	local price = self.NoPoints and math.ceil(GAMEMODE:PointsToScrap(shoptbl.Worth)) or ShopPointsCost(shoptbl.Worth, shoptbl)
 	ppurbl:SetText(self.NoPoints and RelapseUI.TF("shop_price_scrap", price) or RelapseUI.TF("shop_price_points", price))
 	ppurbl:SizeToContents()
 	ppurbl:SetPos(purb:GetWide() / 2 - ppurbl:GetWide() / 2, purb:GetTall() * 0.75 - ppurbl:GetTall() * 0.5)
@@ -677,7 +677,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 		pricelabel:SetTextColor(RelapseUI.Col.Danger)
 		pricelabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
 	else
-		local points = ShopPointsCost(tab.Price)
+		local points = ShopPointsCost(tab.Price, tab)
 		local price = tostring(points)
 		if nopointshop then
 			price = tostring(math.ceil(self:PointsToScrap(tab.Price)))
@@ -1078,7 +1078,7 @@ function ARSENAL_CARD:SetShopItem(id, tab)
 		self.PriceLabel:SetTextColor(RelapseUI.Col.Danger)
 		self.PriceLabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
 	elseif tab.Price then
-		local price = ShopPointsCost(tab.Price)
+		local price = ShopPointsCost(tab.Price, tab)
 		self.m_LastShopPrice = price
 		self.PriceLabel:SetTextColor(RelapseUI.Col.Accent)
 		self.PriceLabel:SetText(tostring(price))
@@ -1119,7 +1119,7 @@ function ARSENAL_CARD:Think()
 	self.m_LastAbleToBuy = CanBuy(tab, self)
 
 	if tab.Price and not (tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))) then
-		local price = ShopPointsCost(tab.Price)
+		local price = ShopPointsCost(tab.Price, tab)
 		if price ~= self.m_LastShopPrice and IsValid(self.PriceLabel) then
 			self.m_LastShopPrice = price
 			self.PriceLabel:SetText(tostring(price))

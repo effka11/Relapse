@@ -62,7 +62,7 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 	if usescrap then
 		cost = math.ceil(GAMEMODE:PointsToScrap(cost))
 	elseif GAMEMODE.GetArsenalShopCost then
-		local ok, priced = pcall(GAMEMODE.GetArsenalShopCost, GAMEMODE, sender, cost)
+		local ok, priced = pcall(GAMEMODE.GetArsenalShopCost, GAMEMODE, sender, cost, itemtab)
 		if ok then
 			cost = priced
 		end
@@ -339,7 +339,7 @@ concommand.Add("worthcheckout", function(sender, command, arguments)
 
 		local tab = FindStartingItem(id)
 		if tab and not hasalready[id] and (not tab.SkillRequirement or sender:IsSkillActive(tab.SkillRequirement)) then
-			cost = cost + tab.Price
+			cost = cost + (GAMEMODE.GetWorthShopCost and GAMEMODE:GetWorthShopCost(sender, tab) or tab.Price)
 			hasalready[id] = true
 		end
 	end

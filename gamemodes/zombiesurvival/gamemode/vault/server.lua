@@ -126,11 +126,12 @@ function GM:PlayerReadyVault(pl)
 	end
 end
 
-function GM:SaveVault(pl)
-	if not self:ShouldSaveVault(pl) then return end
+function GM:SaveVault(pl, force)
+	if pl:IsBot() then return end
+	if not force and not self:ShouldSaveVault(pl) then return end
 
 	local tosave = {
-		Points = math.floor(pl.PointsVault),
+		Points = math.floor(pl.PointsVault or 0),
 		XP = pl:GetZSXP(),
 		RemortLevel = pl:GetZSRemortLevel(),
 		DesiredActiveSkills = util.CompressBitTable({}),

@@ -303,7 +303,7 @@ function PANEL:SetWorthID(id)
 	end
 
 	self.Signature = tab.Signature
-	self.Price = tab.Price
+	self.Price = (GAMEMODE.GetWorthShopCost and IsValid(MySelf) and GAMEMODE:GetWorthShopCost(MySelf, tab)) or tab.Price
 
 	local missing_skill = tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))
 
@@ -338,7 +338,7 @@ function PANEL:SetWorthID(id)
 		self.PriceLabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
 	elseif tab.Price then
 		self.PriceLabel:SetTextColor(RelapseUI.Col.Accent)
-		self.PriceLabel:SetText(tostring(tab.Price))
+		self.PriceLabel:SetText(tostring(self.Price))
 	else
 		self.PriceLabel:SetText("")
 	end
@@ -389,12 +389,13 @@ function PANEL:DoClick(silent, force)
 		if not silent then
 			surface.PlaySound("buttons/button18.wav")
 		end
-		remainingworth = remainingworth + tab.Price
+		remainingworth = remainingworth + (self.Price or tab.Price)
 	elseif tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement)) then
 		surface.PlaySound("buttons/button8.wav")
 		return
 	else
-		if remainingworth < tab.Price then
+		local price = self.Price or tab.Price
+		if remainingworth < price then
 			if not force then
 				surface.PlaySound("buttons/button8.wav")
 				return
@@ -406,7 +407,7 @@ function PANEL:DoClick(silent, force)
 		if not silent then
 			surface.PlaySound("buttons/button17.wav")
 		end
-		remainingworth = remainingworth - tab.Price
+		remainingworth = remainingworth - price
 	end
 
 	RelapseUI.UpdateWorthLabel(pWorth.WorthLab, remainingworth, GetStartingWorth())

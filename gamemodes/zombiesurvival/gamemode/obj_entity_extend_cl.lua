@@ -47,6 +47,9 @@ function meta:HealPlayer(pl, amount)
 	elseif isnumber(self.MedicHealMul) then
 		multiplier = self.MedicHealMul
 	end
+	if GAMEMODE and GAMEMODE.GetHealReceivedPercentMul then
+		multiplier = multiplier + GAMEMODE:GetHealReceivedPercentMul(pl) - 1
+	end
 
 	amount = amount * multiplier
 

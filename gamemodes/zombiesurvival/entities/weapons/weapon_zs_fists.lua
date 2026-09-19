@@ -128,6 +128,11 @@ function SWEP:DealDamage()
 
 	local tr = owner:CompensatedMeleeTrace(self.HitDistance * (owner.MeleeRangeMul or 1), 3)
 
+	if GAMEMODE and GAMEMODE.ShouldMeleeMiss and GAMEMODE:ShouldMeleeMiss(owner, self) then
+		tr.Hit = false
+		tr.Entity = NULL
+	end
+
 	local hitent = tr.Entity
 
 	-- We need the second part for single player because SWEP:Think is ran shared in SP.

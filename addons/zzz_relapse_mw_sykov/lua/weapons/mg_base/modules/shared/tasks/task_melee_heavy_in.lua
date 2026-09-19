@@ -18,8 +18,13 @@ end
 
 function task:OnSet(weapon)
 	local anim = weapon:GetAnimation("Melee_Heavy_In")
+	local gm = GAMEMODE or GM
+	local owner = weapon:GetOwner()
 
 	local time = weapon:GetAnimLength("Melee_Heavy_In", anim.Length)
+	if gm and gm.GetMeleeAttackDelayMul then
+		time = time * gm:GetMeleeAttackDelayMul(owner, weapon)
+	end
 	local ct = CurTime()
 
 	weapon:SetNextSecondaryFire(ct + time)

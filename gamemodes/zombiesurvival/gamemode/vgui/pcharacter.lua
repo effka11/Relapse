@@ -29,7 +29,9 @@ local GRID_CORE_STATS = {
 
 local GRID_STAT_SKIP = {
 	ArsenalRivalOthers = true,
-	ArsenalRivalSelf = true
+	ArsenalRivalSelf = true,
+	ArsenalBreakPoints = true,
+	ArsenalMonopoly = true
 }
 
 local GRID_STAT_INFO = {
@@ -40,14 +42,23 @@ local GRID_STAT_INFO = {
 	DeviceHealth = { key = "devicehealth", name = "char_stat_devicehealth", fallback = "Device durability", kind = "pct" },
 	ResupplyAmmo = { key = "crateammo", name = "char_stat_crateammo", fallback = "Crate ammo", kind = "pct" },
 	ArsenalMargin = { key = "arsenalcut", name = "char_stat_arsenalcut", fallback = "Arsenal margin", kind = "pct" },
+	ArsenalCrateCost = { key = "arsenalcratecost", name = "char_stat_arsenalcratecost", fallback = "Arsenal crate cost", kind = "pct" },
 	HammerSwing = { key = "hammerswing", name = "char_stat_hammerswing", fallback = "Hammer attack speed", kind = "pct" },
+	MeleeSwing = { key = "meleeattack", name = "char_stat_meleeattack", fallback = "Melee attack speed", kind = "pct" },
+	MeleeStamina = { key = "meleestamina", name = "char_stat_meleestamina", fallback = "Melee stamina cost", kind = "pct" },
 	NailRange = { key = "nailrange", name = "char_stat_nailrange", fallback = "Nail range", kind = "pct" },
+	MaxNails = { key = "maxnails", name = "char_stat_maxnails", fallback = "Nails per prop" },
 	DoorDamage = { key = "doordamage", name = "char_stat_doordamage", fallback = "Door damage", kind = "pct" },
 	Heal = { key = "heal", name = "char_stat_heal", fallback = "Healing received", kind = "pct" },
 	MedicHeal = { key = "medicheal", name = "char_stat_medicheal", fallback = "Healing effectiveness", kind = "pct" },
 	MeleeDamage = { key = "melee", name = "char_stat_melee", fallback = "Melee damage", kind = "pct" },
-	MeleeViewPunch = { key = "meleepunch", name = "char_stat_meleepunch", fallback = "Melee hit punch", kind = "pct" },
+	MeleeMiss = { key = "meleemiss", name = "char_stat_meleemiss", fallback = "Melee miss chance", kind = "pct" },
+	HitSlow = { key = "hitslow", name = "char_stat_hitslow", fallback = "Slow from incoming melee", kind = "pct" },
+	BloodFromMelee = { key = "bloodfrommelee", name = "char_stat_bloodfrommelee", fallback = "Blood armor from melee", kind = "pct" },
+	MeleeViewPunch = { key = "meleepunch", name = "char_stat_meleepunch", fallback = "Incoming melee camera kick", kind = "pct" },
 	AimShake = { key = "aimshake", name = "char_stat_aimshake", fallback = "Aim tremor", kind = "pct" },
+	AimShakeFear = { key = "aimshakefear", name = "char_stat_aimshakefear", fallback = "Fear tremor", kind = "pct" },
+	AimShakeHP = { key = "aimshakehp", name = "char_stat_aimshakehp", fallback = "Low-health tremor", kind = "pct" },
 	AimShakeThreshold = { key = "aimshakethreshold", name = "char_stat_aimshakethreshold", fallback = "Tremor health threshold", kind = "pct" },
 	ZombieHealth = { key = "zombiehealth", name = "char_stat_zombiehealth", fallback = "Zombie max health", kind = "pct" },
 	Worth = { key = "worth", name = "char_stat_worth", fallback = "Starting worth" },
@@ -958,7 +969,7 @@ function GRID:GridNodeInk(n)
 	local remortHub = n and n.tree == nil and self:CanHubRelapse()
 	local rest
 	if remortHub then
-		rest = self:GridWine(175)
+		rest = self:GridWine(230)
 	elseif self:NodeOwned(n) then
 		rest = RelapseUI.Col.Text
 	else
@@ -987,6 +998,11 @@ function GRID:GridEdgeInk(e)
 	return self:GridWine(110)
 end
 
+local function DrawGridBeam(pa, pb, col, u0, u1)
+	render.DrawBeam(pa, pb, 3, u0, u1, Color(col.r, col.g, col.b, math.min(col.a or 255, 220)))
+	render.DrawBeam(pa, pb, 7, u0, u1, Color(col.r, col.g, col.b, math.min((col.a or 255) * 0.4, 90)))
+end
+
 function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx, vy, vw, vh)
 	cam.Start3D(campos, ang, self.FOV, vx, vy, vw, vh, 5, self.FarZ)
 	cam.IgnoreZ(true)
@@ -995,21 +1011,59 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 	render.OverrideBlend(true, BLEND_SRC_ALPHA, BLEND_ONE, BLENDFUNC_ADD, BLEND_ZERO, BLEND_ONE, BLENDFUNC_ADD)
 
 	render.SetMaterial(matGridBeam)
+	local remort = self:CanHubRelapse()
+	local wine = remort and self:GridWine(110)
+	local lit = remort and RelapseUI.Col.Text
+	local spokeN = 8
+	local function spokeCol(t)
+		local u = math.Clamp((t - 0.25) / 0.5, 0, 1)
+		u = u * u * (3 - 2 * u)
+		return Color(
+			Lerp(u, wine.r, lit.r),
+			Lerp(u, wine.g, lit.g),
+			Lerp(u, wine.b, lit.b),
+			Lerp(u, wine.a, 210)
+		)
+	end
 	for _, e in ipairs(layout.edges) do
-		local col = self:GridEdgeInk(e)
 		local pa = self:DrawPos(e[1].x, e[1].y)
 		local pb = self:DrawPos(e[2].x, e[2].y)
-		render.DrawBeam(pa, pb, 3, 0, 1, Color(col.r, col.g, col.b, math.min(col.a or 255, 220)))
-		render.DrawBeam(pa, pb, 7, 0, 1, Color(col.r, col.g, col.b, math.min((col.a or 255) * 0.4, 90)))
+		if remort and e.hub and self:NodeOwned(e[2]) then
+			local dx, dy, dz = pb.x - pa.x, pb.y - pa.y, pb.z - pa.z
+			for pass = 1, 2 do
+				local width = pass == 1 and 3 or 7
+				render.StartBeam(spokeN + 1)
+				for i = 0, spokeN do
+					local t = i / spokeN
+					local col = spokeCol(t)
+					local a = pass == 1 and math.min(col.a, 220) or math.min(col.a * 0.4, 90)
+					render.AddBeam(
+						Vector(pa.x + dx * t, pa.y + dy * t, pa.z + dz * t),
+						width, t, Color(col.r, col.g, col.b, a)
+					)
+				end
+				render.EndBeam()
+			end
+		else
+			DrawGridBeam(pa, pb, self:GridEdgeInk(e), 0, 1)
+		end
 	end
 
 	render.SetMaterial(matGridGlow)
 	local function paintDot(n)
+		local remortHub = n.tree == nil and self:CanHubRelapse()
 		local t = self:HoverAmt(n)
 		t = t * t * (3 - 2 * t)
 		local col = self:GridNodeInk(n)
 		local size = Lerp(t, 9, 12)
 		local pos = self:DrawPos(n.x, n.y)
+		if remortHub then
+			local g = Lerp(t, 1, 1.12)
+			render.DrawQuadEasy(pos, to_camera, 40 * g, 40 * g, Color(col.r, col.g, col.b, 55), 0)
+			render.DrawQuadEasy(pos, to_camera, 24 * g, 24 * g, Color(col.r, col.g, col.b, 120), 0)
+			render.DrawQuadEasy(pos, to_camera, 14 * g, 14 * g, col, 0)
+			return
+		end
 		if t > 0.01 then
 			render.DrawQuadEasy(pos, to_camera, size * 1.7, size * 1.7, Color(col.r, col.g, col.b, math.floor(55 * t)), 0)
 		end
@@ -1142,7 +1196,7 @@ function GRID:OnMouseReleased()
 		and GAMEMODE:CycleGridIsOffered(MySelf, n.treeId, n.slot) then
 		net.Start("zs_cycle_grid_unlock")
 		net.WriteString(n.treeId)
-		net.WriteUInt(n.slot, 4)
+		net.WriteUInt(n.slot, 5)
 		net.SendToServer()
 	end
 end
@@ -1675,6 +1729,20 @@ local function PaintIdentity(frame, w, h)
 	x = x + Ink(Phrase("char_remort_lab", "Реморт") .. ":", font, x, met.remortY, c.Muted)
 	x = x + gap
 	Ink(frame.RemortNum or "0", font, x, met.remortY, c.Text)
+	if (frame.CharPage or CHAR_PAGE_GRID) == CHAR_PAGE_GRID then
+		local sp = 0
+		if GAMEMODE.GetCycleGridSPRemaining and IsValid(MySelf) then
+			sp = GAMEMODE:GetCycleGridSPRemaining(MySelf) or 0
+		end
+		local lab = Phrase("char_sp_lab", "SP") .. ":"
+		local num = tostring(sp)
+		surface.SetFont(font)
+		local labW = surface.GetTextSize(lab) or 0
+		local numW = surface.GetTextSize(num) or 0
+		local spX = w - RelapseUI.Grid15() - labW - gap - numW
+		Ink(lab, font, spX, met.remortY, c.Muted)
+		Ink(num, font, spX + labW + gap, met.remortY, c.Text)
+	end
 	return true
 end
 

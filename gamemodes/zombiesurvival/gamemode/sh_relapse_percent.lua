@@ -58,12 +58,83 @@ function GM:GetHammerSwingPercentMul(pl)
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "HammerSwing"), skill)
 end
 
+function GM:GetMeleeSwingPercentMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.MeleeSwingDelayMul) then
+		skill = (1 / math.max(pl.MeleeSwingDelayMul, 0.01)) - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "MeleeSwing"), skill)
+end
+
+-- Shorter delay = faster melee. Hammer stays on HammerSwing. Gun bash unchanged.
+function GM:GetMeleeAttackDelayMul(pl, wep)
+	local arm = 1
+	if IsValid(pl) and pl.GetMeleeSpeedMul then
+		arm = pl:GetMeleeSpeedMul()
+	end
+	if not IsValid(wep) or not self:IsMeleeDamageInflictor(wep) then
+		return 1
+	end
+	if wep.GetClass and wep:GetClass() == "weapon_zs_hammer" then
+		return arm
+	end
+	return arm / math.max(self:GetMeleeSwingPercentMul(pl), 0.01)
+end
+
+-- Chance, not 1+Σp. 0.03 = 3% of connecting melee swings miss.
+function GM:GetMeleeMissChance(pl)
+	return math.max(0, self:GetUpgradePercent(pl, "MeleeMiss"))
+end
+
+function GM:ShouldMeleeMiss(pl, wep)
+	if not IsValid(pl) or pl:Team() ~= TEAM_HUMAN then
+		return false
+	end
+	if IsValid(wep) then
+		if wep.GetClass and wep:GetClass() == "weapon_zs_hammer" then
+			return false
+		end
+		if not self:IsMeleeDamageInflictor(wep) then
+			return false
+		end
+	end
+	local chance = self:GetMeleeMissChance(pl)
+	if chance <= 0 then
+		return false
+	end
+	local seed = pl:EntIndex()
+	local cmd = pl.GetCurrentCommand and pl:GetCurrentCommand()
+	if cmd then
+		seed = seed + cmd:CommandNumber() * 32
+	end
+	if IsValid(wep) then
+		seed = seed + wep:EntIndex()
+	end
+	return util.SharedRandom("relapse_melee_miss", 0, 1, seed) < chance
+end
+
+function GM:GetZombieHitSlowMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.SlowEffTakenMul) then
+		skill = pl.SlowEffTakenMul - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "HitSlow"), skill)
+end
+
 function GM:GetMedicHealPercentMul(pl)
 	local skill = 0
 	if IsValid(pl) and isnumber(pl.MedicHealMul) then
 		skill = pl.MedicHealMul - 1
 	end
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "MedicHeal"), skill)
+end
+
+function GM:GetHealReceivedPercentMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.HealingReceived) then
+		skill = pl.HealingReceived - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "Heal"), skill)
 end
 
 function GM:GetMeleeDamagePercentMul(pl, victim)
@@ -83,6 +154,15 @@ function GM:GetMeleeDamagePercentMul(pl, victim)
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "MeleeDamage"), skill, scar)
 end
 
+-- Conversion rate, not 1+Σp. 0.01 = 1% of melee damage to blood armor.
+function GM:GetMeleeBloodArmorRate(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.MeleeDamageToBloodArmorMul) then
+		skill = pl.MeleeDamageToBloodArmorMul
+	end
+	return math.max(0, skill + self:GetUpgradePercent(pl, "BloodFromMelee"))
+end
+
 function GM:GetMeleeViewPunchMul(pl)
 	if not IsValid(pl) or (pl.Team and pl:Team() ~= TEAM_HUMAN) then
 		return 1
@@ -90,12 +170,31 @@ function GM:GetMeleeViewPunchMul(pl)
 	return self:GetUpgradePercentMul(pl, "MeleeViewPunch")
 end
 
-function GM:GetHumanPalsyAimShakeMul(pl)
-	local skill = 0
+function GM:GetHumanPalsySkillShakeAdd(pl)
 	if IsValid(pl) and isnumber(pl.AimShakeMul) then
-		skill = pl.AimShakeMul - 1
+		return pl.AimShakeMul - 1
 	end
-	return self:StackPercentMul(self:GetUpgradePercent(pl, "AimShake"), skill)
+	return 0
+end
+
+function GM:GetHumanPalsyAimShakeMul(pl)
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "AimShake"), self:GetHumanPalsySkillShakeAdd(pl))
+end
+
+function GM:GetHumanPalsyHPShakeMul(pl)
+	return self:StackPercentMul(
+		self:GetUpgradePercent(pl, "AimShake"),
+		self:GetUpgradePercent(pl, "AimShakeHP"),
+		self:GetHumanPalsySkillShakeAdd(pl)
+	)
+end
+
+function GM:GetHumanPalsyFearShakeMul(pl)
+	return self:StackPercentMul(
+		self:GetUpgradePercent(pl, "AimShake"),
+		self:GetUpgradePercent(pl, "AimShakeFear"),
+		self:GetHumanPalsySkillShakeAdd(pl)
+	)
 end
 
 function GM:GetHumanPalsyHPFrac(pl)
@@ -226,6 +325,29 @@ local function ArsenalCrateList()
 end
 
 -- Unfair Competition: rival crate overlapping yours −Others; own crate −Self per such crate.
+function GM:HasArsenalRivalOverlap(crate)
+	if not IsValid(crate) then
+		return false
+	end
+	local owner = self:GetArsenalCrateOwner(crate)
+	if not IsValid(owner) then
+		return false
+	end
+	local origin = crate:WorldSpaceCenter()
+	local crates = ArsenalCrateList()
+	for i = 1, #crates do
+		local other = crates[i]
+		if other ~= crate and IsValid(other) then
+			local rival = self:GetArsenalCrateOwner(other)
+			if IsValid(rival) and rival ~= owner
+				and origin:DistToSqr(other:WorldSpaceCenter()) <= ARSENAL_RIVAL_OVERLAP_SQR then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 function GM:GetArsenalRivalCut(crate)
 	if not IsValid(crate) then
 		return 0
@@ -255,6 +377,22 @@ function GM:GetArsenalRivalCut(crate)
 	return cut
 end
 
+-- Monopoly: +pp on your crate while no rival shop circle overlaps. Same 100u as Competition.
+function GM:GetArsenalMonopolyBonus(crate)
+	if not IsValid(crate) then
+		return 0
+	end
+	local owner = self:GetArsenalCrateOwner(crate)
+	if not IsValid(owner) then
+		return 0
+	end
+	local add = self:GetUpgradePercent(owner, "ArsenalMonopoly")
+	if add <= 0 or self:HasArsenalRivalOverlap(crate) then
+		return 0
+	end
+	return add
+end
+
 -- Cut is 4% plus stacked pp (grid, later Merchant p(n)). Not 4% × 1.03.
 -- Rival cut is spatial: pass the crate. No crate → ceiling without competition.
 function GM:GetArsenalMarginRate(owner, crate)
@@ -262,6 +400,7 @@ function GM:GetArsenalMarginRate(owner, crate)
 	rate = rate + self:GetUpgradePercent(owner, "ArsenalMargin")
 	if IsValid(crate) then
 		rate = rate - self:GetArsenalRivalCut(crate)
+		rate = rate + self:GetArsenalMonopolyBonus(crate)
 	end
 	return math.max(0, rate)
 end
@@ -395,7 +534,30 @@ function GM:GetArsenalPurchaseMul(pl)
 	return math.max(0, 1 - off)
 end
 
-function GM:GetArsenalShopCost(pl, price)
+function GM:IsArsenalCrateShopItem(item)
+	if not item then
+		return false
+	end
+	local sig = item.Signature
+	if sig == "arsenalcrate" or sig == "arscrate" then
+		return true
+	end
+	return item.SWEP == "weapon_zs_arsenalcrate"
+end
+
+function GM:GetArsenalCrateCostMul(pl)
+	return self:GetUpgradePercentMul(pl, "ArsenalCrateCost")
+end
+
+function GM:GetWorthShopCost(pl, item)
+	local price = tonumber(item and item.Price) or 0
+	if self:IsArsenalCrateShopItem(item) then
+		price = math.max(0, math.floor(price * self:GetArsenalCrateCostMul(pl)))
+	end
+	return price
+end
+
+function GM:GetArsenalShopCost(pl, price, item)
 	price = tonumber(price) or 0
 	local mul = 1
 	if self.GetArsenalPurchaseMul then
@@ -404,5 +566,9 @@ function GM:GetArsenalShopCost(pl, price)
 			mul = tonumber(v) or 1
 		end
 	end
-	return math.max(0, math.floor(price * mul))
+	local cost = math.max(0, math.floor(price * mul))
+	if self:IsArsenalCrateShopItem(item) then
+		cost = math.max(0, math.floor(cost * self:GetArsenalCrateCostMul(pl)))
+	end
+	return cost
 end

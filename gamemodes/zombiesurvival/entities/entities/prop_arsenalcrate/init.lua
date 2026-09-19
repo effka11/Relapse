@@ -57,7 +57,11 @@ function ENT:SetObjectHealth(health)
 		self.Destroyed = true
 
 		if self:GetObjectOwner():IsValidLivingHuman() then
-			self:GetObjectOwner():SendDeployableLostMessage(self)
+			local owner = self:GetObjectOwner()
+			owner:SendDeployableLostMessage(self)
+			if GAMEMODE.CycleGridPayArsenalBreak then
+				GAMEMODE:CycleGridPayArsenalBreak(owner)
+			end
 		end
 
 		local ent = ents.Create("prop_physics")
