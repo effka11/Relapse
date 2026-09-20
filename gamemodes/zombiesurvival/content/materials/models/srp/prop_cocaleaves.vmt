@@ -1,0 +1,5 @@
+"VertexLitGeneric"
+{
+	"$basetexture" "models/srp/prop_cocaleaves"
+	"$alphatest" 1
+}

@@ -520,6 +520,10 @@ function meta:PoisonDamage(damage, attacker, inflictor, hitpos, noreduction, ins
 			damage = damage * self.PoisonDamageTakenMul
 		end
 
+		if GAMEMODE.GetAloePoisonTakenMul then
+			damage = damage * GAMEMODE:GetAloePoisonTakenMul(self)
+		end
+
 		if inflictor:IsProjectile() and self.ProjDamageTakenMul then
 			damage = damage * self.ProjDamageTakenMul
 		end

@@ -51,7 +51,7 @@ end
 
 local function ItemIsLocked(item)
 	if not item then return true end
-	if item.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(item.SkillRequirement)) then
+	if GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, item) then
 		return true
 	end
 	if item.NoClassicMode and GAMEMODE:IsClassicMode() then
@@ -616,7 +616,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 	local screenscale = BetterScreenScale()
 
 	local nottrinkets = tab.Category ~= ITEMCAT_TRINKETS
-	local missing_skill = tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))
+	local missing_skill = GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, tab)
 	local wid = 280
 
 	local itempan = vgui.Create("DButton")
@@ -675,7 +675,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 	local pricelabel = EasyLabel(itempan, "", "Relapse20")
 	if missing_skill then
 		pricelabel:SetTextColor(RelapseUI.Col.Danger)
-		pricelabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
+		pricelabel:SetText(GAMEMODE:GetItemSkillLockName(tab))
 	else
 		local points = ShopPointsCost(tab.Price, tab)
 		local price = tostring(points)
@@ -1040,7 +1040,7 @@ function ARSENAL_CARD:SetShopItem(id, tab)
 		return
 	end
 
-	local missing_skill = tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))
+	local missing_skill = GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, tab)
 	local nottrinkets = tab.Category ~= ITEMCAT_TRINKETS
 	self:SetCardSize(self.CardW or self:GetWide(), nottrinkets and m.cardH or m.trinketH)
 
@@ -1076,7 +1076,7 @@ function ARSENAL_CARD:SetShopItem(id, tab)
 
 	if missing_skill then
 		self.PriceLabel:SetTextColor(RelapseUI.Col.Danger)
-		self.PriceLabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
+		self.PriceLabel:SetText(GAMEMODE:GetItemSkillLockName(tab))
 	elseif tab.Price then
 		local price = ShopPointsCost(tab.Price, tab)
 		self.m_LastShopPrice = price
@@ -1118,7 +1118,7 @@ function ARSENAL_CARD:Think()
 	self.Locked = ItemIsLocked(tab)
 	self.m_LastAbleToBuy = CanBuy(tab, self)
 
-	if tab.Price and not (tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))) then
+	if tab.Price and not (GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, tab)) then
 		local price = ShopPointsCost(tab.Price, tab)
 		if price ~= self.m_LastShopPrice and IsValid(self.PriceLabel) then
 			self.m_LastShopPrice = price

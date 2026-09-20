@@ -1111,6 +1111,7 @@ local SIGIL_VANISH_RADIUS = 64
 local SIGIL_HINT_FADE_OUT = 40
 local colSigilHint = Color(0, 0, 0, 255)
 local sigilHintFont
+local sigilHintHover = {}
 
 local function SigilVanishRadius()
 	return SIGIL_VANISH_RADIUS
@@ -1175,6 +1176,35 @@ local function SigilHintAlpha(dist)
 	return SigilGapAlpha(dist - innerR, appearR)
 end
 
+-- Mouse aim: full inside ~10°, none by ~23°.
+local function SigilAimAmt(pos)
+	local eye = EyePos()
+	local dx, dy, dz = pos.x - eye.x, pos.y - eye.y, pos.z - eye.z
+	local len = math.sqrt(dx * dx + dy * dy + dz * dz)
+	if len < 12 then return 1 end
+	local ev = EyeVector()
+	local dot = (ev.x * dx + ev.y * dy + ev.z * dz) / len
+	return math.Clamp((dot - 0.92) / 0.065, 0, 1)
+end
+
+local function StepSigilHover(ent, want)
+	local prev = sigilHintHover[ent] or 0
+	local dt = FrameTime()
+	if dt <= 0 then dt = 0.015 elseif dt > 0.05 then dt = 0.05 end
+	local nextv
+	if want > prev then
+		nextv = math.min(want, prev + dt * 4)
+	else
+		nextv = math.max(want, prev - dt * 5)
+	end
+	if nextv < 0.01 then
+		sigilHintHover[ent] = nil
+		return 0
+	end
+	sigilHintHover[ent] = nextv
+	return nextv
+end
+
 local function EnsureSigilHintFont()
 	if sigilHintFont then return end
 	sigilHintFont = true
@@ -1189,9 +1219,9 @@ local function EnsureSigilHintFont()
 	})
 end
 
-local function DrawSigilUseHint(sigil, circleDist)
+local function DrawSigilUseHint(sigil, circleDist, hover)
 	if sigil:GetSigilCorrupted() then return end
-	local alpha = SigilHintAlpha(circleDist)
+	local alpha = SigilHintAlpha(circleDist) * (hover or 0)
 	if alpha <= 0.02 then return end
 
 	local pl = LocalPlayer()
@@ -1249,6 +1279,12 @@ function GM:DrawSigilIndicators()
 	local health, pos, distance, maxhealth, frac, ang, alpha, letterA
 	local eyepos = EyePos()
 
+	for ent in pairs(sigilHintHover) do
+		if not IsValid(ent) then
+			sigilHintHover[ent] = nil
+		end
+	end
+
 	for i, sigil in pairs(GAMEMODE.CachedSigils) do
 		if not sigil:IsValid() then continue end
 
@@ -1285,8 +1321,9 @@ function GM:DrawSigilIndicators()
 				cam_IgnoreZ(false)
 			end
 
+			local hover = StepSigilHover(sigil, showHint and SigilAimAmt(pos) or 0)
 			if showHint then
-				DrawSigilUseHint(sigil, circleDist)
+				DrawSigilUseHint(sigil, circleDist, hover)
 			end
 		end
 	end

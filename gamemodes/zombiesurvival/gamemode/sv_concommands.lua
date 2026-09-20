@@ -44,7 +44,7 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 		return
 	end
 
-	if itemtab.SkillRequirement and not sender:IsSkillActive(itemtab.SkillRequirement) then
+	if GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(sender, itemtab) then
 		GAMEMODE:ConCommandErrorMessage(sender, translate.ClientFormat(sender, "x_requires_a_skill_you_dont_have", itemtab.Name))
 		return
 	end
@@ -338,7 +338,7 @@ concommand.Add("worthcheckout", function(sender, command, arguments)
 		id = tonumber(id) or id
 
 		local tab = FindStartingItem(id)
-		if tab and not hasalready[id] and (not tab.SkillRequirement or sender:IsSkillActive(tab.SkillRequirement)) then
+		if tab and not hasalready[id] and not (GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(sender, tab)) then
 			cost = cost + (GAMEMODE.GetWorthShopCost and GAMEMODE:GetWorthShopCost(sender, tab) or tab.Price)
 			hasalready[id] = true
 		end
@@ -353,7 +353,7 @@ concommand.Add("worthcheckout", function(sender, command, arguments)
 
 		local tab = FindStartingItem(id)
 		if tab and not hasalready[id] then
-			if tab.SkillRequirement and not sender:IsSkillActive(tab.SkillRequirement) then
+			if GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(sender, tab) then
 				sender:PrintMessage(HUD_PRINTTALK, translate.ClientFormat(sender, "x_requires_a_skill_you_dont_have", tab.Name))
 			elseif tab.NoClassicMode and GAMEMODE:IsClassicMode() then
 				sender:PrintMessage(HUD_PRINTTALK, translate.ClientFormat(sender, "cant_use_x_in_classic_mode", tab.Name))

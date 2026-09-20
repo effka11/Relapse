@@ -305,7 +305,7 @@ function PANEL:SetWorthID(id)
 	self.Signature = tab.Signature
 	self.Price = (GAMEMODE.GetWorthShopCost and IsValid(MySelf) and GAMEMODE:GetWorthShopCost(MySelf, tab)) or tab.Price
 
-	local missing_skill = tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement))
+	local missing_skill = GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, tab)
 
 	local nottrinkets = tab.Category ~= ITEMCAT_TRINKETS
 	self:SetCardSize(self.CardW or self:GetWide(), nottrinkets and m.cardH or m.trinketH)
@@ -335,7 +335,7 @@ function PANEL:SetWorthID(id)
 
 	if missing_skill then
 		self.PriceLabel:SetTextColor(RelapseUI.Col.Danger)
-		self.PriceLabel:SetText(GAMEMODE.Skills[tab.SkillRequirement].Name)
+		self.PriceLabel:SetText(GAMEMODE:GetItemSkillLockName(tab))
 	elseif tab.Price then
 		self.PriceLabel:SetTextColor(RelapseUI.Col.Accent)
 		self.PriceLabel:SetText(tostring(self.Price))
@@ -390,7 +390,7 @@ function PANEL:DoClick(silent, force)
 			surface.PlaySound("buttons/button18.wav")
 		end
 		remainingworth = remainingworth + (self.Price or tab.Price)
-	elseif tab.SkillRequirement and not (IsValid(MySelf) and MySelf:IsSkillActive(tab.SkillRequirement)) then
+	elseif GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, tab) then
 		surface.PlaySound("buttons/button8.wav")
 		return
 	else

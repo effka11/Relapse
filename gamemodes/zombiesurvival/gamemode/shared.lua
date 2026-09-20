@@ -7,6 +7,7 @@ GM.Website	=	"http://www.noxiousnet.com"
 -- when someone else ships Relapse work. roleKey is optional.
 GM.RelapseStudioPeople = {
 	{ "effka", "credits_role_relapse_author" },
+	{ "Flora Studio (Егор Озерских)", "credits_role_relapse_lore" },
 }
 
 GM.RelapseCreditSections = {
@@ -195,6 +196,7 @@ function GM:AddCustomAmmo()
 	game.AddAmmoType({name = "turret_rocket"})
 	game.AddAmmoType({name = "camera"})
 	game.AddAmmoType({name = "tv"})
+	game.AddAmmoType({name = "aloe"})
 
 	game.AddAmmoType({name = "foodwatermelon"})
 	game.AddAmmoType({name = "foodorange"})

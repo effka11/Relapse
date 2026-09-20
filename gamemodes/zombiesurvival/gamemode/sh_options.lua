@@ -117,6 +117,7 @@ GM.AmmoCache["airboatgun"]					= 1			-- Arsenal crates.
 GM.AmmoCache["striderminigun"]				= 1			-- Message beacons.
 GM.AmmoCache["helicoptergun"]				= 1			-- Resupply boxes.
 GM.AmmoCache["spotlamp"]					= 1
+GM.AmmoCache["aloe"]						= 1
 GM.AmmoCache["manhack"]						= 1
 GM.AmmoCache["repairfield"]					= 1
 GM.AmmoCache["zapper"]						= 1
@@ -158,6 +159,8 @@ GM:AddStartingItem("resupplybox",		ITEMCAT_DEPLOYABLES,			50,				"weapon_zs_resu
 .Countables = "prop_resupplybox"
 GM:AddStartingItem("remantler",			ITEMCAT_DEPLOYABLES,			50,				"weapon_zs_remantler")
 .Countables = "prop_remantler"
+item = GM:AddStartingItem("aloe",			ITEMCAT_DEPLOYABLES,			45,				"weapon_zs_aloe")
+item.CycleGridNeed = "medicine_4"
 
 GM:AddStartingItem("wrench",			ITEMCAT_TOOLS,			20,				"weapon_zs_wrench").NoClassicMode = true
 GM:AddStartingItem("crphmr",			ITEMCAT_TOOLS,			40,				"weapon_zs_hammer").NoClassicMode = true
@@ -256,6 +259,8 @@ GM:AddPointShopItem("wrench",			ITEMCAT_TOOLS,			20,				"weapon_zs_wrench").NoCl
 GM:AddPointShopItem("arsenalcrate",		ITEMCAT_DEPLOYABLES,			40,				"weapon_zs_arsenalcrate").Countables = "prop_arsenalcrate"
 GM:AddPointShopItem("resupplybox",		ITEMCAT_DEPLOYABLES,			40,				"weapon_zs_resupplybox").Countables = "prop_resupplybox"
 GM:AddPointShopItem("remantler",		ITEMCAT_DEPLOYABLES,			40,				"weapon_zs_remantler").Countables = "prop_remantler"
+item = GM:AddPointShopItem("aloe",				ITEMCAT_DEPLOYABLES,			45,				"weapon_zs_aloe")
+item.CycleGridNeed = "medicine_4"
 
 -- These are the honorable mentions that come at the end of the round.
 
@@ -337,6 +342,7 @@ GM:AddDeployableInfo("prop_drone",				"Drone",				"weapon_zs_drone")
 GM:AddDeployableInfo("prop_drone_pulse",		"Pulse Drone",			"weapon_zs_drone_pulse")
 GM:AddDeployableInfo("prop_drone_hauler",		"Hauler Drone",			"weapon_zs_drone_hauler")
 GM:AddDeployableInfo("prop_rollermine",			"Rollermine",			"weapon_zs_rollermine")
+GM:AddDeployableInfo("prop_aloe",				"Ficus K-4",				"weapon_zs_aloe")
 GM:AddDeployableInfo("prop_tv",                   	 "TV",                    	"weapon_zs_tv")
 
 GM.MaxSigils = 3

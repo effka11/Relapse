@@ -34,7 +34,7 @@ local BUSH_PARENT = {
 		[1] = 0, [2] = 0, [3] = 1, [4] = 2, [5] = 2, [6] = 3, [7] = 3, [8] = 5, [9] = 5, [10] = 6, [11] = 7, [12] = 8, [13] = 8, [14] = 9, [15] = 11, [16] = 12
 	},
 	{ -- shadow
-		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 3, [6] = 4, [7] = 4, [8] = 5, [9] = 5, [10] = 6, [11] = 6, [12] = 8, [13] = 12
+		[1] = 0, [2] = 0, [4] = 1, [5] = 1, [6] = 4, [7] = 4, [8] = 5, [9] = 5, [10] = 6, [11] = 6, [12] = 8, [13] = 12
 	},
 	{ -- build
 		[1] = 0, [2] = 0, [3] = 1, [4] = 1, [5] = 2, [6] = 3, [7] = 4, [8] = 4, [9] = 5, [10] = 6, [11] = 6, [12] = 7, [13] = 8, [14] = 8, [15] = 10, [16] = 10, [17] = 11, [18] = 13
@@ -142,7 +142,7 @@ local BUSH_POS = {
 		{ -0.368, -0.351 },
 		{ -0.701, -0.813 },
 		{ -0.815, -0.490 },
-		{ -0.744, -1.229 },
+		false, -- slot 3 overlapped 5
 		{ -1.288, -1.189 },
 		{ -0.757, -1.284 },
 		{ -1.697, -1.877 },
@@ -222,8 +222,19 @@ local function LayoutBush(treeIndex, tree)
 	local bySlot = {}
 	for slot = 0, #coords - 1 do
 		local c = coords[slot + 1]
+		if not c then
+			continue
+		end
 		local x, y = c[1], c[2]
-		local parent = slot == 0 and nil or bySlot[parents[slot]]
+		local parent
+		local parentSlot = parents[slot]
+		while parentSlot do
+			parent = bySlot[parentSlot]
+			if parent then
+				break
+			end
+			parentSlot = parents[parentSlot]
+		end
 		local ang
 		if parent then
 			ang = math.atan2(y - parent.y, x - parent.x)
@@ -631,6 +642,14 @@ GM.CycleGridCatalog = {
 		need = "medicine_2",
 		MedicHeal = 0.03
 	},
+	medicine_4 = {
+		tree = "medicine",
+		slot = 9,
+		nameKey = "grid_skill_medicine_4",
+		descKey = "grid_skill_medicine_4_desc",
+		U = 20,
+		UnlockShop = "aloe"
+	},
 	melee_1 = {
 		tree = "melee",
 		slot = 0,
@@ -796,6 +815,15 @@ GM.CycleGridCatalog = {
 		U = 20,
 		ZombieHealth = 0.03
 	},
+	shadow_2 = {
+		tree = "shadow",
+		slot = 2,
+		nameKey = "grid_skill_shadow_2",
+		descKey = "grid_skill_shadow_2_desc",
+		U = 20,
+		need = "shadow_1",
+		ZombieHealth = 0.03
+	},
 	supply_1 = {
 		tree = "supply",
 		slot = 0,
@@ -955,6 +983,45 @@ function GM:HasCycleGridSkill(pl, id)
 	return IsValid(pl) and id and pl.CycleGridTaken and pl.CycleGridTaken[id] == true
 end
 
+function GM:ItemSkillLocked(pl, item)
+	if not item then
+		return true
+	end
+	if item.SkillRequirement then
+		if not (IsValid(pl) and pl.IsSkillActive and pl:IsSkillActive(item.SkillRequirement)) then
+			return true
+		end
+	end
+	if item.CycleGridNeed then
+		if not self:HasCycleGridSkill(pl, item.CycleGridNeed) then
+			return true
+		end
+	end
+	return false
+end
+
+function GM:GetItemSkillLockName(item)
+	if not item then
+		return ""
+	end
+	if item.CycleGridNeed then
+		local skill = self:GetCycleGridSkillById(item.CycleGridNeed)
+		if skill and skill.nameKey then
+			if CLIENT then
+				return translate.Get(skill.nameKey)
+			end
+			return skill.nameKey
+		end
+	end
+	if item.SkillRequirement then
+		local sk = self.Skills and self.Skills[item.SkillRequirement]
+		if sk and sk.Name then
+			return sk.Name
+		end
+	end
+	return ""
+end
+
 function GM:CycleGridSlotTaken(pl, treeId, slot)
 	local skill = self:GetCycleGridSkill(treeId, slot)
 	if not skill then
@@ -1044,7 +1111,8 @@ local GRID_SKILL_META = {
 	descKey = true,
 	U = true,
 	id = true,
-	need = true
+	need = true,
+	UnlockShop = true
 }
 
 function GM:GetCycleGridStatAdd(pl, field)
@@ -1116,7 +1184,7 @@ function GM:ApplyCycleGridModifiers(pl)
 	if not SERVER or not IsValid(pl) or pl:Team() ~= TEAM_HUMAN then
 		return
 	end
-	local add = self:GetCycleGridHealthAdd(pl)
+	local add = self:GetCycleGridHealthAdd(pl) + (tonumber(pl.AloeMaxHealthAdd) or 0)
 	if add ~= 0 then
 		local current = math.max(1, pl:GetMaxHealth())
 		local new = current + add

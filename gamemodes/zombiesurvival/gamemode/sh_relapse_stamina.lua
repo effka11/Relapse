@@ -16,8 +16,47 @@ local P_Alive = M_Player.Alive
 local P_Crouching = M_Player.Crouching
 local P_GetBarricadeGhosting = M_Player.GetBarricadeGhosting
 
+local function RelapseRawStamina(pl)
+	local v = math.Clamp(E_GetDTFloat(pl, DT_PLAYER_FLOAT_STAMINA) or 0, 0, 1)
+	-- DT defaults to 0. Unset (not exhausted) reads as full so sprint is not gated on connect.
+	if v <= 0 and not E_GetDTBool(pl, DT_PLAYER_BOOL_STAMINAEXHAUST) then
+		return 1
+	end
+	return v
+end
+
+local function RelapseStaminaPredLive(pl)
+	local predAt = pl.RelapseStaminaPredAt
+	if not predAt or pl.RelapseStaminaPred == nil then
+		return false
+	end
+	if CurTime() - predAt > 0.5 then
+		return false
+	end
+	local dt = RelapseRawStamina(pl)
+	local base = pl.RelapseStaminaPredBase
+	-- Server spent: DT dropped below the tank we predicted from.
+	if base ~= nil and dt < base - 1e-4 then
+		return false
+	end
+	return true
+end
+
+local function RelapseClearStaminaPred(pl)
+	pl.RelapseStaminaPred = nil
+	pl.RelapseStaminaPredExhaust = nil
+	pl.RelapseStaminaPredAt = nil
+	pl.RelapseStaminaPredBase = nil
+end
+
 function M_Player:GetStaminaExhausted()
-	return E_GetDTBool(self, DT_PLAYER_BOOL_STAMINAEXHAUST) and true or false
+	if E_GetDTBool(self, DT_PLAYER_BOOL_STAMINAEXHAUST) then
+		return true
+	end
+	if CLIENT and RelapseStaminaPredLive(self) and self.RelapseStaminaPredExhaust then
+		return true
+	end
+	return false
 end
 
 function M_Player:SetStaminaExhausted(on)
@@ -26,17 +65,26 @@ function M_Player:SetStaminaExhausted(on)
 end
 
 function M_Player:GetStamina()
-	local v = math.Clamp(E_GetDTFloat(self, DT_PLAYER_FLOAT_STAMINA) or 0, 0, 1)
-	-- DT defaults to 0. Unset (not exhausted) reads as full so sprint is not gated on connect.
-	if v <= 0 and not self:GetStaminaExhausted() then
-		return 1
+	local v = RelapseRawStamina(self)
+	if CLIENT and RelapseStaminaPredLive(self) then
+		local pred = self.RelapseStaminaPred
+		if pred < v then
+			v = pred
+		end
+	elseif CLIENT then
+		RelapseClearStaminaPred(self)
 	end
 	return v
 end
 
 function M_Player:SetStamina(frac)
 	if not SERVER then return end
-	self:SetDTFloat(DT_PLAYER_FLOAT_STAMINA, math.Clamp(frac or 0, 0, 1))
+	frac = math.Clamp(frac or 0, 0, 1)
+	-- DT 0 without exhaust reads as full (unset). Empty tank must be exhausted.
+	if frac <= 0 then
+		self:SetStaminaExhausted(true)
+	end
+	self:SetDTFloat(DT_PLAYER_FLOAT_STAMINA, frac)
 end
 
 function GM:ResetRelapseStamina(pl)
@@ -46,16 +94,23 @@ function GM:ResetRelapseStamina(pl)
 	pl.RelapseStaminaRestAt = nil
 	pl.RelapseStaminaDrainT = nil
 	pl.RelapseStaminaCoast = nil
+	RelapseClearStaminaPred(pl)
+end
+
+-- Empty stops the effort. Resume after the same lock as sprint (15%).
+function GM:HumanStaminaEffortReady(pl)
+	if not IsValid(pl) or not pl.GetStamina then return true end
+	if pl:GetStaminaExhausted() then
+		return pl:GetStamina() >= (self.HumanStaminaSprintResume or 0.15)
+	end
+	return pl:GetStamina() > 0
 end
 
 function GM:HumanCanSprint(pl)
 	if self.ZombieEscape then return true end
 	if not IsValid(pl) or not P_Alive(pl) then return false end
 	if P_Team(pl) ~= TEAM_HUMAN then return false end
-	if pl:GetStaminaExhausted() then
-		return pl:GetStamina() >= (self.HumanStaminaSprintResume or 0.15)
-	end
-	return pl:GetStamina() > 0
+	return self:HumanStaminaEffortReady(pl)
 end
 
 -- Same ground-run test as scars.md Swift. Standing / air / wall / ghost / crouch do not spend.
@@ -245,23 +300,48 @@ function GM:CanHumanStaminaMelee(pl, wep, heavy)
 	if cost <= 0 then return true end
 	if not IsValid(pl) or not pl.GetStamina then return true end
 	if P_Team(pl) ~= TEAM_HUMAN then return true end
-	return pl:GetStamina() > 0
+	return self:HumanStaminaEffortReady(pl)
 end
 
--- Server spends. Client only checks DT so predicted VM can start.
+-- Server writes DT. Client predicts the spend so the next swing gates before DT arrives.
 function GM:ConsumeHumanStaminaMelee(pl, wep, heavy)
 	if not self:CanHumanStaminaMelee(pl, wep, heavy) then
 		return false
 	end
 	local cost = self:GetHumanStaminaMeleeCost(wep, heavy, pl)
-	if cost <= 0 or not SERVER then
+	if cost <= 0 then
 		return true
 	end
-	local stam = pl:GetStamina()
-	pl:SetStamina(math.max(0, stam - cost))
-	pl.RelapseStaminaRestAt = CurTime()
-	pl.RelapseStaminaCoast = false
+
+	local applyPred = true
+	if CLIENT and isfunction(IsFirstTimePredicted) and not IsFirstTimePredicted() then
+		applyPred = false
+	end
+
+	local nextStamina = math.max(0, pl:GetStamina() - cost)
+
+	if CLIENT and applyPred then
+		pl.RelapseStaminaPred = nextStamina
+		pl.RelapseStaminaPredExhaust = nextStamina <= 0 or pl:GetStaminaExhausted()
+		pl.RelapseStaminaPredAt = CurTime()
+		if pl.RelapseStaminaPredBase == nil then
+			pl.RelapseStaminaPredBase = RelapseRawStamina(pl)
+		end
+	end
+
+	if SERVER then
+		pl:SetStamina(nextStamina)
+		pl.RelapseStaminaRestAt = CurTime()
+		pl.RelapseStaminaCoast = false
+	end
 	return true
+end
+
+-- Same quadratic as run: from 40% tank, empty is 26% slower → longer swing delay.
+function GM:GetHumanStaminaMeleeDelayMul(pl, wep)
+	if self.ZombieEscape then return 1 end
+	if self:GetHumanStaminaMeleeCost(wep, false, pl) <= 0 then return 1 end
+	return 1 / math.max(self:GetHumanStaminaSpeedMul(pl, true), 0.01)
 end
 
 -- Quadratic fade below the start fraction. Status mul, not an upgrade percent.

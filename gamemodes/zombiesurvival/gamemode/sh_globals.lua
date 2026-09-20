@@ -179,7 +179,7 @@ GM.HumanStaminaNoclipDrainTime = 24
 GM.HumanStaminaDrainCoast = 0.35
 GM.HumanStaminaRegenDelay = 0.35
 GM.HumanStaminaRegenEase = 1.25
-GM.HumanStaminaSprintResume = 0.15
+GM.HumanStaminaSprintResume = 0.15 -- melee uses the same lock
 -- Heavy melee is a committed smash, not a second light swing.
 GM.HumanStaminaMeleeHeavyMul = 1.7
 GM.HumanStaminaRunSpeedSqr = 64 * 64
@@ -203,6 +203,42 @@ GM.HumanStaminaBreathLagDown = 0.20
 GM.HumanStaminaBreathLagUp = 1.15
 GM.BarricadeGhostSpeed = 17
 GM.HumanBloodArmor = 15
+GM.AloeGrowTime = 180
+GM.AloeUseMaxHealth = 3
+-- ~3.7 m around the pot: a cade pocket, not a hallway.
+GM.AloeAuraRadius = 192
+GM.AloeRegenInterval = 5
+GM.AloeRegenHeal = 1
+GM.AloePoisonResist = 0.02
+
+function GM:CountAloeAura(pl)
+	if not IsValid(pl) then
+		return 0
+	end
+
+	local radius = self.AloeAuraRadius or 192
+	local r2 = radius * radius
+	local origin = pl:WorldSpaceCenter()
+	local n = 0
+	for _, ent in ipairs(ents.FindByClass("prop_aloe")) do
+		if ent:IsValid() and ent.GetGrown and ent:GetGrown() then
+			if origin:DistToSqr(ent:WorldSpaceCenter()) <= r2 then
+				n = n + 1
+			end
+		end
+	end
+
+	return n
+end
+
+function GM:GetAloePoisonTakenMul(pl)
+	local n = self:CountAloeAura(pl)
+	if n <= 0 then
+		return 1
+	end
+
+	return math.max(0, 1 - n * (self.AloePoisonResist or 0.02))
+end
 -- Camera palsy (CreateMove). Vanilla: HP frac 0.25, HP rate 7, frightened 14.
 -- Fear meter (zombies in 768u, bosses fill it) did not shake aim; it does now.
 -- 40% HP so two claws rattle you, not the first. Rate 4.5 so empty HP is still aimable.
@@ -280,6 +316,7 @@ GM.AmmoNames["striderminigun"] = "Beacons"
 GM.AmmoNames["helicoptergun"] = "Resupply Boxes"
 GM.AmmoNames["slam"] = "Force Field Emitters"
 GM.AmmoNames["spotlamp"] = "Spot Lamps"
+GM.AmmoNames["aloe"] = "Ficus K-4"
 GM.AmmoNames["stone"] = "Stones"
 GM.AmmoNames["flashbomb"] = "Flash Bombs"
 GM.AmmoNames["betty"] = "Proximity Mines"
@@ -336,6 +373,7 @@ GM.AmmoModels["striderminigun"] = "models/props_combine/combine_mine01.mdl" -- M
 GM.AmmoModels["helicoptergun"] = "models/Items/ammocrate_ar2.mdl" -- Resupply boxes
 GM.AmmoModels["slam"] = "models/props_lab/lab_flourescentlight002b.mdl" -- Force Field Emitters
 GM.AmmoModels["spotlamp"] = "models/props_combine/combine_light001a.mdl"
+GM.AmmoModels["aloe"] = "models/srp/prop_pbucket.mdl"
 GM.AmmoModels["stone"] = "models/props_junk/rock001a.mdl"
 GM.AmmoModels["pulse"] = "models/Items/combine_rifle_ammo01.mdl"
 GM.AmmoModels["impactmine"] = "models/weapons/w_missile_closed.mdl"

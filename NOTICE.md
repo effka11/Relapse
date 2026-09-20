@@ -54,9 +54,13 @@ JetBoom.
 
 ## 2. Design and non-code materials
 
-Documentation under `documents/`, Relapse visual identity, UI/UX concepts, and other non-code
-Relapse materials are licensed under [`LICENSE-DESIGN.md`](LICENSE-DESIGN.md)
-(**CC BY-SA 4.0** or a commercial content license from the copyright holder).
+Documentation under `documents/` (other than original fiction), Relapse visual identity, UI/UX
+concepts, and other non-code Relapse **design** materials are licensed under
+[`LICENSE-DESIGN.md`](LICENSE-DESIGN.md) (**CC BY-SA 4.0** or a commercial content license).
+
+Relapse **original lore** (setting, coined names, stories, in-game narrative prose) is **all
+rights reserved** Flora Studio / Egor Ozerskikh. See [`documents/lore.md`](documents/lore.md).
+It is not CC BY-SA and not JBGM.
 
 The Relapse adaptation of the Flora design language is licensed there as Relapse design, **not**
 under AGPLv3, and does **not** relicense Flora Ecosystem source.

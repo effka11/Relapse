@@ -81,7 +81,7 @@ function PANEL:Paint(w, h)
 		-- 3px tall so 1px corners have a middle row.
 		local stamh = math.max(3, RelapseUI.sPx(3))
 		surface.SetAlphaMultiplier(self.StaminaAlpha)
-		RelapseUI.PaintHudHairBar(x, y + RelapseUI.sPx(4), barw, stamh, self.LerpStamina, c.Stamina or c.Muted, nil, nil, 4, 1)
+		RelapseUI.PaintHudHairBar(x, y + RelapseUI.sPx(4) + 1, barw, stamh, self.LerpStamina, c.Stamina or c.Muted, nil, nil, 4, 1)
 		surface.SetAlphaMultiplier(1)
 	end
 

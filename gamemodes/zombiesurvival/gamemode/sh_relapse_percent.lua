@@ -67,6 +67,7 @@ function GM:GetMeleeSwingPercentMul(pl)
 end
 
 -- Shorter delay = faster melee. Hammer stays on HammerSwing. Gun bash unchanged.
+-- Low stamina stretches delay (status mul, not an upgrade percent).
 function GM:GetMeleeAttackDelayMul(pl, wep)
 	local arm = 1
 	if IsValid(pl) and pl.GetMeleeSpeedMul then
@@ -78,7 +79,11 @@ function GM:GetMeleeAttackDelayMul(pl, wep)
 	if wep.GetClass and wep:GetClass() == "weapon_zs_hammer" then
 		return arm
 	end
-	return arm / math.max(self:GetMeleeSwingPercentMul(pl), 0.01)
+	local delay = arm / math.max(self:GetMeleeSwingPercentMul(pl), 0.01)
+	if self.GetHumanStaminaMeleeDelayMul then
+		delay = delay * self:GetHumanStaminaMeleeDelayMul(pl, wep)
+	end
+	return delay
 end
 
 -- Chance, not 1+Σp. 0.03 = 3% of connecting melee swings miss.

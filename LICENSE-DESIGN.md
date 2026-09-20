@@ -66,16 +66,31 @@ software under the JBGM LICENSE (see [`NOTICE.md`](NOTICE.md)).
 
 This notice covers Relapse non-code materials in this repository, including:
 
-- documentation and design notes under `documents/`;
+- documentation and design notes under `documents/`, except original fiction covered below;
 - the Relapse visual identity as a creative work (palette, radii, layout and HUD concepts,
   UI/UX descriptions);
 - illustrations, brand graphics, and media created for Relapse, except third-party assets.
+
+## Original lore (all rights reserved)
+
+Relapse **original fiction** — the setting, coined names, stories, and lore prose written for
+Relapse (including **Mycelida** / мицелида, the Ficus K-4 origin, and other Relapse-only
+narrative) — is **not** under CC BY-SA 4.0.
+
+Copyright © 2026 Egor Ozerskikh (Егор Озерских) / Flora Studio. All rights reserved.
+
+The canon notice is [`documents/lore.md`](documents/lore.md). Embedding that prose in Lua or UI
+does not license the narrative under JBGM.
+
+Use outside Relapse needs a written license from the copyright holder (e.ozerskikh@gmail.com).
 
 ## Mixed materials
 
 Where a file mixes prose and code (for example a Markdown note with Lua fragments):
 
-- prose, diagrams, and other explanatory material are covered by this notice;
+- original Relapse fiction and coined setting (including item lore) follow [`documents/lore.md`](documents/lore.md) (all rights reserved);
+- other prose, diagrams, and explanatory material are covered by this notice (CC BY-SA 4.0 or a
+  commercial content license);
 - source code, executable examples, schemas, configuration samples, and other code-like material
   are covered by [`LICENSE`](LICENSE) (JBGM LICENSE), unless a more specific notice says otherwise.
 
