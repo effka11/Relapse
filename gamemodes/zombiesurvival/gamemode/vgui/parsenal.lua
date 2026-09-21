@@ -306,7 +306,7 @@ function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
 	viewer.m_Title:SetText(RelapseUI.WepName(sweptable))
 	viewer.m_Title:PerformLayout()
 
-	local desctext = RelapseUI.WepDesc(sweptable)
+	local desctext = RelapseUI.WepDesc(sweptable, true)
 	if not self.ZSInventoryItemData[shoptbl.SWEP] then
 		RelapseUI.SetShopPreview(viewer.ModelPanel, sweptable, viewer)
 		viewer.m_VBG:SetVisible(true)
@@ -393,7 +393,7 @@ local function SupplyArsenalItemViewer(viewer, shoptbl)
 	if viewer.m_Title.PerformLayout then
 		viewer.m_Title:PerformLayout()
 	end
-	viewer.m_Desc:SetText(RelapseUI.WepDesc(shoptbl) or "")
+	viewer.m_Desc:SetText(RelapseUI.WepDesc(shoptbl, true) or "")
 	GAMEMODE:ViewerStatBarUpdate(viewer, true, shoptbl)
 
 	if IsValid(viewer.m_AmmoType) then

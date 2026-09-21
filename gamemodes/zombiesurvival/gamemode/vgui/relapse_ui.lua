@@ -143,7 +143,7 @@ function RelapseUI.ViewerModelH()
 end
 
 function RelapseUI.ViewerDescH()
-	return RelapseUI.Grid15(4)
+	return RelapseUI.Grid15(5)
 end
 
 function RelapseUI.ViewerStatMax()
@@ -227,6 +227,11 @@ function RelapseUI.FitIcon(img, maximgx, maximgy)
 	img:Center()
 end
 
+-- Shop card: ficus matches remantler killicon height (that PNG is not upscaled).
+RelapseUI.CardIconFitH = {
+	weapon_zs_aloe = "zombiesurvival/killicons/weapon_zs_remantler2.png",
+}
+
 function RelapseUI.MakeSilhouetteIcon(parent, path)
 	local img = vgui.Create("DImage", parent)
 	img:SetMouseInputEnabled(false)
@@ -245,6 +250,7 @@ RelapseUI.InvSlotIconZoom = {
 	mg_romeo870 = 1.30,
 	weapon_zs_hammer = 0.8,
 	weapon_zs_wrench = 0.90,
+	weapon_zs_aloe = 0.88,
 	mg_357 = 1.15,
 	mg_makarov = 1.4,
 	mg_me_t9cane = 1.4,
@@ -264,6 +270,11 @@ RelapseUI.InvSlotIconShift = {
 	mg_mike4 = { -4, 1 },
 }
 
+-- Degrees. Guns stay 45 (muzzle up-left). Upright marks skip the tilt.
+RelapseUI.InvSlotIconTilt = {
+	weapon_zs_aloe = 0,
+}
+
 function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
 	if not mat or mat:IsError() then return end
 	col = col or RelapseUI.Col.Text
@@ -272,7 +283,7 @@ function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
 	if tw < 1 then tw = 1 end
 	if th < 1 then th = 1 end
 	local maxs = math.max(1, w - pad * 2)
-	local tilt = 45
+	local tilt = (class and RelapseUI.InvSlotIconTilt[class]) or 45
 	local ac, as = math.abs(math.cos(math.rad(tilt))), math.abs(math.sin(math.rad(tilt)))
 	local scale = math.min(maxs / math.max(1, tw * ac + th * as), maxs / math.max(1, th * ac + tw * as))
 	scale = scale * ((class and RelapseUI.InvSlotIconZoom[class]) or 1)
@@ -297,10 +308,13 @@ function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
 	local x4, y4 = xf(-hw, hh)
 	surface.SetMaterial(mat)
 	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
-	local v1 = { x = x1, y = y1, u = 1, v = 0 }
-	local v2 = { x = x2, y = y2, u = 0, v = 0 }
-	local v3 = { x = x3, y = y3, u = 0, v = 1 }
-	local v4 = { x = x4, y = y4, u = 1, v = 1 }
+	-- Guns: flip U so the muzzle sits up-left after the 45° tilt. Upright icons keep texture as-is.
+	local flip = tilt ~= 0
+	local u0, u1 = flip and 1 or 0, flip and 0 or 1
+	local v1 = { x = x1, y = y1, u = u0, v = 0 }
+	local v2 = { x = x2, y = y2, u = u1, v = 0 }
+	local v3 = { x = x3, y = y3, u = u1, v = 1 }
+	local v4 = { x = x4, y = y4, u = u0, v = 1 }
 	surface.DrawPoly({ v1, v2, v3 })
 	surface.DrawPoly({ v1, v3, v4 })
 end
@@ -318,7 +332,18 @@ function RelapseUI.DrawInvSlotIndex(w, h, n, col)
 end
 
 function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
-	if not IsValid(mdlframe) or not tab or (tab.Category ~= ITEMCAT_GUNS and tab.Category ~= ITEMCAT_MELEE) then
+	if not IsValid(mdlframe) or not tab then
+		return false
+	end
+
+	local cat = tab.Category
+	local class = tab.SWEP
+	local allow = cat == ITEMCAT_GUNS or cat == ITEMCAT_MELEE
+	if not allow then
+		local wep = class and weapons.GetStored(class)
+		allow = wep and isstring(wep.RelapsePreviewIcon) and wep.RelapsePreviewIcon ~= ""
+	end
+	if not allow then
 		return false
 	end
 
@@ -326,7 +351,14 @@ function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
 	if not path then return false end
 
 	local img = RelapseUI.MakeSilhouetteIcon(mdlframe, path)
-	RelapseUI.FitIcon(img, mdlframe:GetWide(), mdlframe:GetTall() + RelapseUI.Grid5(4))
+	local ref = class and RelapseUI.CardIconFitH[class]
+	if isstring(ref) then
+		local mat = Material(ref)
+		local fitH = (mat and not mat:IsError() and mat:Height()) or 64
+		RelapseUI.FitIcon(img, mdlframe:GetWide(), fitH)
+	else
+		RelapseUI.FitIcon(img, mdlframe:GetWide(), mdlframe:GetTall() + RelapseUI.Grid5(4))
+	end
 	if missing_skill then
 		img:SetAlpha(50)
 	end
@@ -382,9 +414,12 @@ function RelapseUI.WepName(tbl)
 	return tbl.PrintName or tbl.Name or ""
 end
 
-function RelapseUI.WepDesc(tbl)
+function RelapseUI.WepDesc(tbl, shop)
 	if not tbl then return "" end
 	local key = tbl.TranslationDescription
+	if shop and tbl.TranslationDescriptionShop then
+		key = tbl.TranslationDescriptionShop
+	end
 	if key then
 		return RelapseUI.T(key, tbl.Description or "")
 	end
@@ -627,14 +662,15 @@ end
 function RelapseUI.ShopPreviewModel(sweptable)
 	if not sweptable then return nil end
 
-	local parts = RelapseUI.ShopPreviewParts(sweptable)
-	if parts then
-		return parts[1]
-	end
-
+	-- Pot + leaves: explicit WM is the pot. Guns omit RelapsePreviewModel and use parts[1].
 	local explicit = sweptable.RelapsePreviewModel
 	if isstring(explicit) and explicit ~= "" then
 		return explicit
+	end
+
+	local parts = RelapseUI.ShopPreviewParts(sweptable)
+	if parts then
+		return parts[1]
 	end
 
 	-- Never the first-person viewmodel: arms + empty MW stub, not a gun.
@@ -682,6 +718,16 @@ function RelapseUI.ShopPreviewOffset(sweptable)
 	return isvector(off) and off or nil
 end
 
+function RelapseUI.ShopPreviewPartLocal(sweptable)
+	if not sweptable then return nil, nil end
+	local pos = sweptable.RelapsePreviewPartLocalPos
+	local ang = sweptable.RelapsePreviewPartLocalAng
+	if not isvector(pos) and not isangle(ang) then
+		return nil, nil
+	end
+	return isvector(pos) and pos or vector_origin, isangle(ang) and ang or angle_zero
+end
+
 function RelapseUI.ShopPreviewLift(sweptable)
 	local etalon = RelapseUI.PreviewEtalon.Lift
 	if not sweptable then return etalon end
@@ -713,6 +759,23 @@ function RelapseUI.ShopPreviewCamScale(sweptable)
 		return scale
 	end
 	return etalon
+end
+
+function RelapseUI.ShopPreviewDistMax(sweptable)
+	if not sweptable then return 96 end
+	local n = sweptable.RelapsePreviewDistMax
+	if isnumber(n) and n > 0 then
+		return n
+	end
+
+	local gm = GAMEMODE or GM
+	local class = sweptable.ClassName or sweptable.Class or sweptable.SWEP
+	local def = gm and class and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	n = def and def.PreviewDistMax
+	if isnumber(n) and n > 0 then
+		return n
+	end
+	return 96
 end
 
 function RelapseUI.ShopPreviewBoneMerge(sweptable)
@@ -889,7 +952,27 @@ function RelapseUI.DrawShopPreviewGun(pnl, ent)
 
 	local pos = ent:GetPos()
 	local ang = ent:GetAngles()
+	local partPos = pnl.RelapsePreviewPartLocalPos
+	local partAng = pnl.RelapsePreviewPartLocalAng
+	local attach = isvector(partPos)
 	withPreviewClipZ(pnl, ent, function()
+		if attach then
+			ent:DrawModel()
+			if istable(extras) then
+				local lp = partPos
+				local la = isangle(partAng) and partAng or angle_zero
+				for i = 1, #extras do
+					local part = extras[i]
+					if IsValid(part) then
+						local p, a = LocalToWorld(lp, la, pos, ang)
+						part:SetPos(p)
+						part:SetAngles(a)
+						part:DrawModel()
+					end
+				end
+			end
+			return
+		end
 		local drew = false
 		if istable(extras) then
 			for i = 1, #extras do
@@ -1096,7 +1179,20 @@ function RelapseUI.OrbitShopPreview(pnl, ent)
 
 	if not pnl.RelapsePreviewFramed then
 		local mins, maxs
-		if pnl.RelapsePreviewBoneMerge then
+		if isvector(pnl.RelapsePreviewPartLocalPos) then
+			mins, maxs = meshAABB(ent:GetModel())
+			local lp = pnl.RelapsePreviewPartLocalPos
+			local la = isangle(pnl.RelapsePreviewPartLocalAng) and pnl.RelapsePreviewPartLocalAng or angle_zero
+			local paths = pnl.RelapsePreviewPaths
+			if mins and istable(paths) then
+				for i = 1, #paths do
+					local a, b = meshAABB(paths[i], lp, la)
+					if a then
+						mins, maxs = growBounds(mins, maxs, a, b)
+					end
+				end
+			end
+		elseif pnl.RelapsePreviewBoneMerge then
 			mins, maxs = assembledPreviewBounds(pnl, ent)
 		end
 		if not mins then
@@ -1121,7 +1217,8 @@ function RelapseUI.OrbitShopPreview(pnl, ent)
 		if not isnumber(scale) or scale <= 0 then
 			scale = etalon.CamScale
 		end
-		local dist = math.Clamp(span * etalon.SpanMul * scale, 8, 96)
+		local distMax = pnl.RelapsePreviewDistMax or 96
+		local dist = math.Clamp(span * etalon.SpanMul * scale, 8, distMax)
 		local off = pnl.RelapsePreviewOffset
 		if isvector(off) then
 			center = center + off
@@ -1432,8 +1529,12 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 	pnl.RelapsePreviewOffset = RelapseUI.ShopPreviewOffset(sweptable)
 	pnl.RelapsePreviewLift = RelapseUI.ShopPreviewLift(sweptable)
 	pnl.RelapsePreviewCamScale = RelapseUI.ShopPreviewCamScale(sweptable)
+	pnl.RelapsePreviewDistMax = RelapseUI.ShopPreviewDistMax(sweptable)
 	pnl.RelapsePreviewHullBounds = RelapseUI.ShopPreviewHullBounds(sweptable)
 	pnl.RelapsePreviewClipZ = RelapseUI.ShopPreviewClipZ(sweptable)
+	local partPos, partAng = RelapseUI.ShopPreviewPartLocal(sweptable)
+	pnl.RelapsePreviewPartLocalPos = partPos
+	pnl.RelapsePreviewPartLocalAng = partAng
 	pnl:SetModel(mdl)
 	pnl:SetAnimated(false)
 	if IsValid(pnl.Entity) then

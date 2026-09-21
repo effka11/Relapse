@@ -965,13 +965,25 @@ function GRID:GridWine(a)
 	return Color(c.r, c.g, c.b, a)
 end
 
+-- Additive Fog outshines Wine. Same hue, lower value so owned light sits with бордо.
+function GRID:GridLit(a, bright)
+	local c = RelapseUI.Col.Text
+	local k = bright and 0.70 or 0.52
+	return Color(
+		math.floor(c.r * k + 0.5),
+		math.floor(c.g * k + 0.5),
+		math.floor(c.b * k + 0.5),
+		a
+	)
+end
+
 function GRID:GridNodeInk(n)
 	local remortHub = n and n.tree == nil and self:CanHubRelapse()
 	local rest
 	if remortHub then
 		rest = self:GridWine(230)
 	elseif self:NodeOwned(n) then
-		rest = RelapseUI.Col.Text
+		rest = self:GridLit(200)
 	else
 		rest = self:GridWine(175)
 	end
@@ -980,7 +992,7 @@ function GRID:GridNodeInk(n)
 		return rest
 	end
 	t = t * t * (3 - 2 * t)
-	local lit = RelapseUI.Col.Text
+	local lit = self:GridLit(220, true)
 	return Color(
 		Lerp(t, rest.r, lit.r),
 		Lerp(t, rest.g, lit.g),
@@ -992,15 +1004,14 @@ end
 function GRID:GridEdgeInk(e)
 	local a, b = e[1], e[2]
 	if self:NodeOwned(a) and self:NodeOwned(b) then
-		local c = RelapseUI.Col.Text
-		return Color(c.r, c.g, c.b, 210)
+		return self:GridLit(130)
 	end
 	return self:GridWine(110)
 end
 
 local function DrawGridBeam(pa, pb, col, u0, u1)
-	render.DrawBeam(pa, pb, 3, u0, u1, Color(col.r, col.g, col.b, math.min(col.a or 255, 220)))
-	render.DrawBeam(pa, pb, 7, u0, u1, Color(col.r, col.g, col.b, math.min((col.a or 255) * 0.4, 90)))
+	render.DrawBeam(pa, pb, 3, u0, u1, Color(col.r, col.g, col.b, math.min(col.a or 255, 160)))
+	render.DrawBeam(pa, pb, 7, u0, u1, Color(col.r, col.g, col.b, math.min((col.a or 255) * 0.32, 55)))
 end
 
 function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx, vy, vw, vh)
@@ -1013,7 +1024,7 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 	render.SetMaterial(matGridBeam)
 	local remort = self:CanHubRelapse()
 	local wine = remort and self:GridWine(110)
-	local lit = remort and RelapseUI.Col.Text
+	local lit = remort and self:GridLit(145, true)
 	local spokeN = 8
 	local function spokeCol(t)
 		local u = math.Clamp((t - 0.25) / 0.5, 0, 1)
@@ -1022,7 +1033,7 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 			Lerp(u, wine.r, lit.r),
 			Lerp(u, wine.g, lit.g),
 			Lerp(u, wine.b, lit.b),
-			Lerp(u, wine.a, 210)
+			Lerp(u, wine.a, 145)
 		)
 	end
 	for _, e in ipairs(layout.edges) do
@@ -1036,7 +1047,7 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 				for i = 0, spokeN do
 					local t = i / spokeN
 					local col = spokeCol(t)
-					local a = pass == 1 and math.min(col.a, 220) or math.min(col.a * 0.4, 90)
+					local a = pass == 1 and math.min(col.a, 160) or math.min(col.a * 0.32, 55)
 					render.AddBeam(
 						Vector(pa.x + dx * t, pa.y + dy * t, pa.z + dz * t),
 						width, t, Color(col.r, col.g, col.b, a)

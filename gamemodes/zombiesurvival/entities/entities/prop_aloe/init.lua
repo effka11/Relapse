@@ -49,7 +49,12 @@ function ENT:BeginGrow(remaining, grown)
 		return
 	end
 	if not dur then
-		dur = (GAMEMODE and GAMEMODE.AloeGrowTime) or 180
+		local owner = self.GetObjectOwner and self:GetObjectOwner()
+		if GAMEMODE and GAMEMODE.GetAloeGrowTime then
+			dur = GAMEMODE:GetAloeGrowTime(owner)
+		else
+			dur = 180
+		end
 	end
 
 	self:ApplyGrown(false)
@@ -79,9 +84,10 @@ function ENT:Harvest(pl)
 	end
 
 	local maxadd = (GAMEMODE and GAMEMODE.AloeUseMaxHealth) or 3
+	local heal = (GAMEMODE and GAMEMODE.AloeUseHeal) or 4
 	pl.AloeMaxHealthAdd = (pl.AloeMaxHealthAdd or 0) + maxadd
 	pl:SetMaxHealth((pl:GetMaxHealth() or 100) + maxadd)
-	pl:SetHealth(math.min(pl:GetMaxHealth(), pl:Health() + maxadd))
+	pl:SetHealth(math.min(pl:GetMaxHealth(), pl:Health() + maxadd + heal))
 
 	self:BeginGrow()
 	self:EmitSound("items/medshot4.wav", 70, 100)
@@ -175,7 +181,7 @@ local function AloeAuraThink()
 	end
 
 	local now = CurTime()
-	local interval = gm.AloeRegenInterval or 5
+	local interval = gm.AloeRegenInterval or 10
 	local heal = gm.AloeRegenHeal or 1
 
 	for _, pl in ipairs(team.GetPlayers(TEAM_HUMAN)) do
@@ -196,7 +202,11 @@ local function AloeAuraThink()
 			continue
 		end
 
-		local gap = math.max(0.05, interval / n)
+		local speed = 1
+		if gm.GetUpgradePercentMul then
+			speed = gm:GetUpgradePercentMul(pl, "AloeRegen")
+		end
+		local gap = math.max(0.05, interval / n / math.max(speed, 0.01))
 		local nxt = pl.AloeRegenNext
 		if not nxt or nxt > now + gap then
 			pl.AloeRegenNext = now + gap

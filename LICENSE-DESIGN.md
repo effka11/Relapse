@@ -79,7 +79,8 @@ narrative) — is **not** under CC BY-SA 4.0.
 
 Copyright © 2026 Egor Ozerskikh (Егор Озерских) / Flora Studio. All rights reserved.
 
-The canon notice is [`documents/lore.md`](documents/lore.md). Embedding that prose in Lua or UI
+The canon notice is [`documents/lore.md`](documents/lore.md). The setting prose is
+[`documents/lore-setting.md`](documents/lore-setting.md). Embedding that prose in Lua or UI
 does not license the narrative under JBGM.
 
 Use outside Relapse needs a written license from the copyright holder (e.ozerskikh@gmail.com).

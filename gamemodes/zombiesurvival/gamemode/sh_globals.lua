@@ -205,11 +205,20 @@ GM.BarricadeGhostSpeed = 17
 GM.HumanBloodArmor = 15
 GM.AloeGrowTime = 180
 GM.AloeUseMaxHealth = 3
+GM.AloeUseHeal = 4
 -- ~3.7 m around the pot: a cade pocket, not a hallway.
 GM.AloeAuraRadius = 192
-GM.AloeRegenInterval = 5
+GM.AloeRegenInterval = 10
 GM.AloeRegenHeal = 1
 GM.AloePoisonResist = 0.02
+
+function GM:GetAloeGrowTime(pl)
+	local t = self.AloeGrowTime or 180
+	if IsValid(pl) and self.GetCycleGridStatAdd then
+		t = t + self:GetCycleGridStatAdd(pl, "AloeGrow")
+	end
+	return math.max(1, t)
+end
 
 function GM:CountAloeAura(pl)
 	if not IsValid(pl) then
@@ -237,7 +246,12 @@ function GM:GetAloePoisonTakenMul(pl)
 		return 1
 	end
 
-	return math.max(0, 1 - n * (self.AloePoisonResist or 0.02))
+	local plants = n * (self.AloePoisonResist or 0.02)
+	local skill = 0
+	if self.GetUpgradePercent then
+		skill = self:GetUpgradePercent(pl, "AloePoison")
+	end
+	return math.max(0, 1 - plants - skill)
 end
 -- Camera palsy (CreateMove). Vanilla: HP frac 0.25, HP rate 7, frightened 14.
 -- Fear meter (zombies in 768u, bosses fill it) did not shake aim; it does now.

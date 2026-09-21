@@ -425,7 +425,7 @@ GM.CycleGridCatalog = {
 	},
 	agility_4 = {
 		tree = "agility",
-		slot = 7,
+		slot = 12,
 		nameKey = "grid_skill_agility_4",
 		descKey = "grid_skill_agility_4_desc",
 		U = 20,
@@ -435,7 +435,7 @@ GM.CycleGridCatalog = {
 	},
 	agility_5 = {
 		tree = "agility",
-		slot = 10,
+		slot = 14,
 		nameKey = "grid_skill_agility_5",
 		descKey = "grid_skill_agility_5_desc",
 		U = 20,
@@ -649,6 +649,25 @@ GM.CycleGridCatalog = {
 		descKey = "grid_skill_medicine_4_desc",
 		U = 20,
 		UnlockShop = "aloe"
+	},
+	medicine_12 = {
+		tree = "medicine",
+		slot = 12,
+		nameKey = "grid_skill_medicine_12",
+		descKey = "grid_skill_medicine_12_desc",
+		U = 20,
+		need = "medicine_4",
+		AloeRegen = 0.11,
+		AloePoison = 0.01
+	},
+	medicine_13 = {
+		tree = "medicine",
+		slot = 13,
+		nameKey = "grid_skill_medicine_13",
+		descKey = "grid_skill_medicine_13_desc",
+		U = 20,
+		need = "medicine_4",
+		AloeGrow = -60
 	},
 	melee_1 = {
 		tree = "melee",

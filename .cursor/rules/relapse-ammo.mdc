@@ -19,15 +19,15 @@ alwaysApply: true
 Ammo = "357"
 
 -- ✅ одна гильза
-["762x39"] = { Dollars = 0.36, ShopCount = 20, Icon = "ammo_rifle", ... }
+["762x39"] = { Dollars = 0.36, Icon = "ammo_rifle", ... }
 Ammo = "762x39" -- СКС и АК делят
-["556x45"] = { Dollars = 0.32, ShopCount = 20, Icon = "ammo_rifle", ... }
+["556x45"] = { Dollars = 0.32, Icon = "ammo_rifle", ... }
 Ammo = "556x45" -- FiNN, не 762x39 АК
-["762x54r"] = { Dollars = 0.40, ShopCount = 20, Icon = "ammo_rifle", ... }
+["762x54r"] = { Dollars = 0.40, Icon = "ammo_rifle", ... }
 Ammo = "762x54r" -- ПКМ, не 762x51 SCAR
 ```
 
-`Dollars` — bulk FMJ/surplus USD/шт, не матч. Якорь: 9×18 = `$0.30` = старый ящик 14 за 9 очков. Иконка пока чужая категория (`ammo_pistol` у 9×18 и .45). Конверсии аттачей тип не меняют.
+`Dollars` — bulk FMJ/surplus USD/шт, не матч. Якорь: 9×18 = `$0.30` = старый ящик 14 за 9 очков. Шоп всегда **15**; `ShopCount = round(15 / цена_патрона)`, не руками. Иконка пока чужая категория (`ammo_pistol` у 9×18 и .45). Конверсии аттачей тип не меняют.
 
 Тот же патрон на новом стволе — тот же id, без новой строки.
 

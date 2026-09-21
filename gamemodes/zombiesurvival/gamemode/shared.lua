@@ -6,8 +6,7 @@ GM.Website	=	"http://www.noxiousnet.com"
 -- Named Relapse authors under Flora Studio. Add a { name, roleKey } row
 -- when someone else ships Relapse work. roleKey is optional.
 GM.RelapseStudioPeople = {
-	{ "effka", "credits_role_relapse_author" },
-	{ "Flora Studio (Егор Озерских)", "credits_role_relapse_lore" },
+	{ "эffka", "credits_role_relapse_author" },
 }
 
 GM.RelapseCreditSections = {
@@ -242,6 +241,9 @@ function GM:AssignItemProperties()
 				end
 				if sweptab.TranslationDescription then
 					tab.TranslationDescription = sweptab.TranslationDescription
+				end
+				if sweptab.TranslationDescriptionShop then
+					tab.TranslationDescriptionShop = sweptab.TranslationDescriptionShop
 				end
 				if not tab.Tier then
 					tab.Tier = sweptab.Tier

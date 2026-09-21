@@ -1,7 +1,8 @@
 SWEP.PrintName = "Фикус К-4"
 SWEP.TranslationName = "wep_aloe"
 SWEP.TranslationDescription = "wep_aloe_desc"
-SWEP.Description = "The fourth culture by the best botanists still alive — a plant against wounds, disease, and toxins: through an unusual photosynthesis it turns Mycelida spores into healing compounds. This prototype was the first that succeeded. Russian troops found it in an abandoned SB RAS laboratory. The botanists themselves were never found."
+SWEP.TranslationDescriptionShop = "wep_aloe_desc_shop"
+SWEP.Description = "The fourth culture by the best botanists still alive — a plant against wounds, disease, and toxins: through mixotrophic photosynthesis it turns Mycelida spores into healing compounds. This prototype was the first that succeeded. Russian troops found it in an abandoned SB RAS laboratory. The botanists themselves were never found."
 
 SWEP.ViewModel = "models/weapons/v_pistol.mdl"
 SWEP.WorldModel = Model("models/srp/prop_pbucket.mdl")
@@ -24,9 +25,17 @@ SWEP.FullWalkSpeed = SPEED_SLOWEST
 SWEP.NoDeploySpeedChange = true
 
 SWEP.RelapsePreviewModel = "models/srp/prop_pbucket.mdl"
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_aloe.png"
-SWEP.RelapsePreviewLift = 1.2
-SWEP.RelapsePreviewOffset = Vector(0, 0, -2)
+SWEP.RelapsePreviewParts = {
+	"models/srp/prop_cocaleaves.mdl",
+}
+SWEP.RelapsePreviewPartLocalPos = Vector(0, 0, 8)
+SWEP.RelapsePreviewPartLocalAng = Angle(0, 180, 0)
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_aloe_k4.png"
+SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
+SWEP.RelapsePreviewLocalAng = Angle(0, 0, 0)
+SWEP.RelapsePreviewLift = 0.4
+SWEP.RelapsePreviewCamScale = 1.5
+SWEP.RelapsePreviewDistMax = 118
 
 function SWEP:Initialize()
 	self:SetWeaponHoldType("slam")

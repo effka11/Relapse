@@ -2,6 +2,35 @@ local PANEL = {}
 
 -- Scratch buffer for HealthCol. Colours come from sh_relapse_theme.lua.
 local colHealth = Color(0, 0, 0, 255)
+local colAloeIcon = Color(0, 0, 0, 255)
+local matAloeFicus
+
+local function AloeIconCol(src, alpha)
+	colAloeIcon.r = src.r
+	colAloeIcon.g = src.g
+	colAloeIcon.b = src.b
+	colAloeIcon.a = math.floor((src.a or 255) * alpha + 0.5)
+	return colAloeIcon
+end
+
+local function AloeFicusMat()
+	if not matAloeFicus then
+		matAloeFicus = Material("zombiesurvival/hud_ficus.png", "smooth noclamp")
+	end
+	return matAloeFicus
+end
+
+local function DrawAloeIcon(mat, cx, cy, s, col)
+	if not mat or mat:IsError() then
+		return
+	end
+	s = math.max(1, math.floor(s + 0.5))
+	local x = math.floor(cx - s * 0.5 + 0.5)
+	local y = math.floor(cy - s * 0.5 + 0.5)
+	surface.SetMaterial(mat)
+	surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
+	surface.DrawTexturedRect(x, y, s, s)
+end
 
 function PANEL:Init()
 	self:SetMouseInputEnabled(false)
@@ -66,6 +95,7 @@ function PANEL:Paint(w, h)
 	surface.DisableClipping(true)
 
 	RelapseUI.PaintHudHairBar(x, y - barh, barw, barh, self.LerpFrac, hpcol, phantomfrac, c.Phantom, 4)
+	local barRight = x + barw
 
 	local stam = 1
 	local spending = false
@@ -87,7 +117,25 @@ function PANEL:Paint(w, h)
 
 	y = y - barh - RelapseUI.sPx(15)
 
-	RelapseUI.HudText(tostring(math.Round(self.LerpHP)), "Relapse64", x, y, hpcol, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
+	local hpText = tostring(math.Round(self.LerpHP))
+	RelapseUI.HudText(hpText, "Relapse64", x, y, hpcol, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 4)
+
+	local wantAloe = 0
+	if lp:Team() == TEAM_HUMAN and lp:Alive() and GAMEMODE.CountAloeAura then
+		if GAMEMODE:CountAloeAura(lp) > 0 then
+			wantAloe = 1
+		end
+	end
+	self.AloeIconAlpha = Lerp(FrameTime() * 8, self.AloeIconAlpha or 0, wantAloe)
+	if self.AloeIconAlpha > 0.02 then
+		surface.SetFont("Relapse64")
+		local _, hpH = surface.GetTextSize(hpText)
+		local midY = RelapseUI.Snap(y - hpH * 0.5) + RelapseUI.Grid5()
+		local iconS = RelapseUI.sPx(45)
+		local iconX = barRight - RelapseUI.sPx(45)
+		local a = self.AloeIconAlpha
+		DrawAloeIcon(AloeFicusMat(), iconX, midY, iconS, AloeIconCol(c.Text, a))
+	end
 
 	if self._ShowArmor then
 		local armor = lp:GetBloodArmor()

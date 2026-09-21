@@ -219,18 +219,15 @@ function ENT:Draw()
 end
 
 local AURA_SEGS = 72
-local AURA_RING = 2.2
-local angAuraFloor = Angle(-90, 0, 0)
-local colAuraFill = Color(186, 186, 186, 0)
-local colAuraEdge = Color(255, 255, 255, 0)
+local AURA_RING = 4
+local colAuraFill = {186, 186, 186}
+local colAuraEdge = {255, 255, 255}
 local auraFillPoly = {}
-local auraTri = {{x = 0, y = 0}, {}, {}}
-local auraRingQuad = {{}, {}, {}, {}}
 local auraFade = 0
 
 for i = 0, AURA_SEGS do
 	local a = (i / AURA_SEGS) * math.pi * 2
-	auraFillPoly[i + 1] = {x = 0, y = 0, c = math.cos(a), s = math.sin(a)}
+	auraFillPoly[i + 1] = {c = math.cos(a), s = math.sin(a)}
 end
 
 local function AuraWanted()
@@ -243,46 +240,71 @@ local function AuraWanted()
 	return MySelf:KeyDown(IN_WALK)
 end
 
+local function AuraVert(x, y, z, r, g, b, a)
+	mesh.Color(r, g, b, a)
+	mesh.Position(Vector(x, y, z))
+	mesh.TexCoord(0, 0, 0)
+	mesh.AdvanceVertex()
+end
+
+local function AuraTri(r, g, b, a, ax, ay, bx, by, cx, cy, z)
+	AuraVert(ax, ay, z, r, g, b, a)
+	AuraVert(bx, by, z, r, g, b, a)
+	AuraVert(cx, cy, z, r, g, b, a)
+	AuraVert(ax, ay, z, r, g, b, a)
+	AuraVert(cx, cy, z, r, g, b, a)
+	AuraVert(bx, by, z, r, g, b, a)
+end
+
 local function DrawAloeRadius(origin, radius, alpha)
 	if alpha <= 0.01 or radius <= 1 then
 		return
 	end
 
-	local pos = Vector(origin.x, origin.y, origin.z + 1.2)
-	colAuraFill.a = math.floor(34 * alpha + 0.5)
-	colAuraEdge.a = math.floor(220 * alpha + 0.5)
-
-	local fog = render.GetFogMode()
-	render.FogMode(0)
-	render.CullMode(MATERIAL_CULLMODE_NONE)
-	cam.Start3D2D(pos, angAuraFloor, 1)
-	draw.NoTexture()
-
-	surface.SetDrawColor(colAuraFill.r, colAuraFill.g, colAuraFill.b, colAuraFill.a)
-	for i = 1, AURA_SEGS do
-		local a = auraFillPoly[i]
-		local b = auraFillPoly[i + 1]
-		auraTri[2].x, auraTri[2].y = a.c * radius, a.s * radius
-		auraTri[3].x, auraTri[3].y = b.c * radius, b.s * radius
-		surface.DrawPoly(auraTri)
+	local z = origin.z + 1.6
+	local ox, oy = origin.x, origin.y
+	local fa = math.floor(24 * alpha + 0.5)
+	local ea = math.floor(100 * alpha + 0.5)
+	if fa < 1 and ea < 1 then
+		return
 	end
 
-	local inner = math.max(0, radius - AURA_RING)
-	surface.SetDrawColor(colAuraEdge.r, colAuraEdge.g, colAuraEdge.b, colAuraEdge.a)
-	for i = 1, AURA_SEGS do
-		local a = auraFillPoly[i]
-		local b = auraFillPoly[i + 1]
-		local q1, q2, q3, q4 = auraRingQuad[1], auraRingQuad[2], auraRingQuad[3], auraRingQuad[4]
-		q1.x, q1.y = a.c * inner, a.s * inner
-		q2.x, q2.y = a.c * radius, a.s * radius
-		q3.x, q3.y = b.c * radius, b.s * radius
-		q4.x, q4.y = b.c * inner, b.s * inner
-		surface.DrawPoly(auraRingQuad)
+	render.SetColorMaterial()
+	render.OverrideDepthEnable(true, false)
+
+	if fa > 0 then
+		mesh.Begin(MATERIAL_TRIANGLES, AURA_SEGS * 2)
+		for i = 1, AURA_SEGS do
+			local a = auraFillPoly[i]
+			local b = auraFillPoly[i + 1]
+			AuraTri(
+				colAuraFill[1], colAuraFill[2], colAuraFill[3], fa,
+				ox, oy,
+				ox + a.c * radius, oy + a.s * radius,
+				ox + b.c * radius, oy + b.s * radius,
+				z
+			)
+		end
+		mesh.End()
 	end
 
-	cam.End3D2D()
-	render.CullMode(MATERIAL_CULLMODE_CCW)
-	render.FogMode(fog)
+	if ea > 0 then
+		local inner = math.max(0, radius - AURA_RING)
+		mesh.Begin(MATERIAL_TRIANGLES, AURA_SEGS * 4)
+		for i = 1, AURA_SEGS do
+			local a = auraFillPoly[i]
+			local b = auraFillPoly[i + 1]
+			local i1x, i1y = ox + a.c * inner, oy + a.s * inner
+			local o1x, o1y = ox + a.c * radius, oy + a.s * radius
+			local o2x, o2y = ox + b.c * radius, oy + b.s * radius
+			local i2x, i2y = ox + b.c * inner, oy + b.s * inner
+			AuraTri(colAuraEdge[1], colAuraEdge[2], colAuraEdge[3], ea, i1x, i1y, o1x, o1y, o2x, o2y, z)
+			AuraTri(colAuraEdge[1], colAuraEdge[2], colAuraEdge[3], ea, i1x, i1y, o2x, o2y, i2x, i2y, z)
+		end
+		mesh.End()
+	end
+
+	render.OverrideDepthEnable(false, false)
 end
 
 hook.Add("PostDrawTranslucentRenderables", "Relapse.AloeAuraRing", function(depth, sky)
