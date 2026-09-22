@@ -31,18 +31,27 @@ local function LuaNum(n, digits)
 	return s
 end
 
+local function LuaKey(class)
+	if string.match(class or "", "^[%a_][%w_]*$") then
+		return class
+	end
+	return string.format("[%q]", class)
+end
+
 local function EnsureDelta(class)
 	if not class then return end
 	local store = DeltaStore()
 	local d = store[class]
 	if not d then
-		d = { zoom = 0, ang = 0, x = 0, y = 0 }
+		d = { zoom = 0, ang = 0, x = 0, y = 0, gap = 0, count = 0 }
 		store[class] = d
 	else
 		d.zoom = d.zoom or 0
 		d.ang = d.ang or 0
 		d.x = d.x or 0
 		d.y = d.y or 0
+		d.gap = d.gap or 0
+		d.count = d.count or 0
 	end
 	return d
 end
@@ -92,17 +101,21 @@ function RelapseUI.IconsDevCollect()
 		if not class or class == "" then
 			continue
 		end
-		if not (d and ((tonumber(d.zoom) or 0) ~= 0 or (tonumber(d.ang) or 0) ~= 0 or (tonumber(d.x) or 0) ~= 0 or (tonumber(d.y) or 0) ~= 0)) then
+		if not (d and ((tonumber(d.zoom) or 0) ~= 0 or (tonumber(d.ang) or 0) ~= 0 or (tonumber(d.x) or 0) ~= 0 or (tonumber(d.y) or 0) ~= 0 or (tonumber(d.gap) or 0) ~= 0 or (tonumber(d.count) or 0) ~= 0)) then
 			continue
 		end
 		local z, a, px, py = LiveValues(class)
+		local gap = RelapseUI.AmmoIconGapValue and RelapseUI.AmmoIconGapValue(class, IsInv()) or nil
+		local count = RelapseUI.AmmoIconCountValue and RelapseUI.AmmoIconCountValue(class, IsInv()) or nil
 		rows[#rows + 1] = {
 			class = class,
 			name = RelapseUI.IconsDevItemName(class),
 			zoom = math.Round(z, 2),
 			ang = math.Round(a, 1),
 			x = math.Round(px, 0),
-			y = math.Round(py, 0)
+			y = math.Round(py, 0),
+			gap = gap,
+			count = count
 		}
 	end
 	table.sort(rows, function(x, y)
@@ -128,7 +141,7 @@ function RelapseUI.IconsDevDumpText()
 	lines[#lines + 1] = zoomKey .. " = {"
 	for _, r in ipairs(rows) do
 		if math.abs(r.zoom - 1) > 0.001 then
-			lines[#lines + 1] = string.format("\t%s = %s, -- %s", r.class, LuaNum(r.zoom, 2), r.name)
+			lines[#lines + 1] = string.format("\t%s = %s, -- %s", LuaKey(r.class), LuaNum(r.zoom, 2), r.name)
 		end
 	end
 	lines[#lines + 1] = "}"
@@ -137,7 +150,7 @@ function RelapseUI.IconsDevDumpText()
 	for _, r in ipairs(rows) do
 		local dumpAng = (IsInv() and math.abs(r.ang - 45) >= 0.05) or (not IsInv() and math.abs(r.ang) > 0.05)
 		if dumpAng then
-			lines[#lines + 1] = string.format("\t%s = %s, -- %s", r.class, LuaNum(r.ang, 1), r.name)
+			lines[#lines + 1] = string.format("\t%s = %s, -- %s", LuaKey(r.class), LuaNum(r.ang, 1), r.name)
 		end
 	end
 	lines[#lines + 1] = "}"
@@ -145,7 +158,25 @@ function RelapseUI.IconsDevDumpText()
 	lines[#lines + 1] = posKey .. " = {"
 	for _, r in ipairs(rows) do
 		if math.abs(r.x) >= 1 or math.abs(r.y) >= 1 then
-			lines[#lines + 1] = string.format("\t%s = { %s, %s }, -- %s", r.class, LuaNum(r.x, 0), LuaNum(r.y, 0), r.name)
+			lines[#lines + 1] = string.format("\t%s = { %s, %s }, -- %s", LuaKey(r.class), LuaNum(r.x, 0), LuaNum(r.y, 0), r.name)
+		end
+	end
+	lines[#lines + 1] = "}"
+	lines[#lines + 1] = ""
+	lines[#lines + 1] = "RelapseUI.AmmoIconGap = {"
+	for _, r in ipairs(rows) do
+		local base = RelapseUI.AmmoIconGapDefault or 18
+		if r.gap and math.abs(r.gap - base) >= 0.5 then
+			lines[#lines + 1] = string.format("\t%s = %s, -- %s", LuaKey(r.class), LuaNum(r.gap, 0), r.name)
+		end
+	end
+	lines[#lines + 1] = "}"
+	lines[#lines + 1] = ""
+	lines[#lines + 1] = "RelapseUI.AmmoIconCount = {"
+	for _, r in ipairs(rows) do
+		local base = RelapseUI.AmmoIconCountDefault or 3
+		if r.count and math.abs(r.count - base) >= 0.5 then
+			lines[#lines + 1] = string.format("\t%s = %s, -- %s", LuaKey(r.class), LuaNum(r.count, 0), r.name)
 		end
 	end
 	lines[#lines + 1] = "}"
@@ -269,6 +300,35 @@ local function SyncSliders(panel)
 	SetSliderSilent(panel.AngSlider, d and d.ang or 0)
 	SetSliderSilent(panel.XSlider, d and d.x or 0)
 	SetSliderSilent(panel.YSlider, d and d.y or 0)
+	local ammo = class and RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[class]
+	if IsValid(panel.GapLab) then
+		panel.GapLab:SetVisible(ammo and true or false)
+		panel.GapLab:SetTall(ammo and RelapseUI.sPx(18) or 0)
+	end
+	if IsValid(panel.GapSlider) then
+		panel.GapSlider:SetVisible(ammo and true or false)
+		panel.GapSlider:SetTall(ammo and RelapseUI.Grid15(3) or 0)
+		panel.GapSlider:DockMargin(0, 0, 0, ammo and RelapseUI.Grid15() or 0)
+		panel.GapSlider:SetEnabled(ammo and true or false)
+		local base = (class and RelapseUI.AmmoIconGap and RelapseUI.AmmoIconGap[class]) or RelapseUI.AmmoIconGapDefault or 18
+		SetSliderSilent(panel.GapSlider, base + (d and d.gap or 0))
+		local host = panel.GapSlider:GetParent()
+		if IsValid(host) then
+			host:InvalidateLayout(true)
+		end
+	end
+	if IsValid(panel.CountLab) then
+		panel.CountLab:SetVisible(ammo and true or false)
+		panel.CountLab:SetTall(ammo and RelapseUI.sPx(18) or 0)
+	end
+	if IsValid(panel.CountSlider) then
+		panel.CountSlider:SetVisible(ammo and true or false)
+		panel.CountSlider:SetTall(ammo and RelapseUI.Grid15(3) or 0)
+		panel.CountSlider:DockMargin(0, 0, 0, ammo and RelapseUI.Grid15() or 0)
+		panel.CountSlider:SetEnabled(ammo and true or false)
+		local base = (class and RelapseUI.AmmoIconCount and RelapseUI.AmmoIconCount[class]) or RelapseUI.AmmoIconCountDefault or 3
+		SetSliderSilent(panel.CountSlider, base + (d and d.count or 0))
+	end
 	if IsValid(panel.Title) then
 		if class then
 			panel.Title:SetText(RelapseUI.IconsDevItemName(class))
@@ -399,7 +459,7 @@ local function EnsurePanel(host)
 	local pad = RelapseUI.Grid15()
 	local headerh = RelapseUI.Grid15(4)
 	panel = vgui.Create("DFrame", IsValid(host) and host or nil)
-	panel:SetSize(RelapseUI.Grid15(24), RelapseUI.Grid15(44))
+	panel:SetSize(RelapseUI.Grid15(24), RelapseUI.Grid15(58))
 	panel:SetDeleteOnClose(false)
 	panel:SetKeyboardInputEnabled(false)
 	panel:SetTitle("")
@@ -546,6 +606,44 @@ local function EnsurePanel(host)
 		RefreshDumpPanel(panel)
 	end
 	panel.YSlider = ySlider
+
+	local gapLab = EasyLabel(body, "Отступ", "Relapse15", RelapseUI.Col.Muted)
+	gapLab:Dock(TOP)
+	gapLab:SetVisible(false)
+	gapLab:SetTall(0)
+	panel.GapLab = gapLab
+	local gapSlider = MakeSlider(body, 0, 64, 0)
+	gapSlider:SetTall(0)
+	gapSlider:Dock(TOP)
+	gapSlider:SetVisible(false)
+	gapSlider.OnValueChanged = function(me, val)
+		if me._RelapseSilent then return end
+		local class = RelapseUI.IconsDevClass
+		if not class then return end
+		local base = (RelapseUI.AmmoIconGap and RelapseUI.AmmoIconGap[class]) or RelapseUI.AmmoIconGapDefault or 18
+		EnsureDelta(class).gap = (tonumber(val) or base) - base
+		RefreshDumpPanel(panel)
+	end
+	panel.GapSlider = gapSlider
+
+	local countLab = EasyLabel(body, "Количество", "Relapse15", RelapseUI.Col.Muted)
+	countLab:Dock(TOP)
+	countLab:SetVisible(false)
+	countLab:SetTall(0)
+	panel.CountLab = countLab
+	local countSlider = MakeSlider(body, 1, 7, 0)
+	countSlider:SetTall(0)
+	countSlider:Dock(TOP)
+	countSlider:SetVisible(false)
+	countSlider.OnValueChanged = function(me, val)
+		if me._RelapseSilent then return end
+		local class = RelapseUI.IconsDevClass
+		if not class then return end
+		local base = (RelapseUI.AmmoIconCount and RelapseUI.AmmoIconCount[class]) or RelapseUI.AmmoIconCountDefault or 3
+		EnsureDelta(class).count = (tonumber(val) or base) - base
+		RefreshDumpPanel(panel)
+	end
+	panel.CountSlider = countSlider
 
 	local btns = vgui.Create("DPanel", body)
 	btns:SetTall(RelapseUI.Grid15(3))

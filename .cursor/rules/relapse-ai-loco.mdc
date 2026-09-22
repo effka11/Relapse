@@ -1,0 +1,62 @@
+---
+description: Relapse AI locomotion — layers, where to tune, what a brain may touch, and how a new decision enters the log.
+globs: gamemodes/zombiesurvival/gamemode/relapse_ai/**/*.lua
+alwaysApply: false
+---
+
+# Relapse ИИ: ходьба
+
+Файл `relapse_ai/server/30_locomotion.lua`. Одна работа: цель → кнопки. Мозг (`60_brain_zombie.lua`) ставит цель, `Nav` отдаёт путь, ходьба его идёт. Слои не смешивать: правка в одном не должна лезть в другой.
+
+`Think` — список вызовов: `ChooseMode`, `RequestPath`, `ClaimPathDoor`, `ClaimExhausted`, `TryUseDoor`, `HopOffProp`, `WatchStuck`. Новое условие в `Think` — нарушение слоя. Условие пишется в функцию хозяина, в `Think` добавляется только её вызов. Промпт «зомби тупят» чинится по `why` кадра: хозяин — таблица в `relapse-ai-rec`. Один `why` — одна функция. В том же изменении не трогать другой слой, числа в `Loco.Defaults`, `BRIDGE_HULL` / `LINK_HULL` и кулдауны мозга.
+
+| Слой | Что | Где |
+|---|---|---|
+| курсор | ближняя точка ломаной в окне вокруг прошлой; при равных (10) — дальняя по пути | `PathTarget`, `ClosestOnPath` |
+| взгляд | самая дальняя точка впереди, которую видит корпус (углы не режем) | `UpdateLookDist`, `HullClear` |
+| скольжение | wish проецируется вдоль стены, в которую упирается корпус; лобовой удар держит сторону `SlideHold`; в воздухе не скользим | `Slide`, `ProbeLedge` |
+| спецы | DROP идёт с кромки, CLIMB/GAP прыгают с точки запуска, LADDER — автомат | `SpecialAction`, `HopAt` |
+| преграды | ломаемое на пути: E в незапертую дверь, потом когти; забитый проп — когти сразу, прочее ждёт обход `DetourWait`; дверь с `path:GetDoor()` — преграда с 80 от конца пути. Свой остров, стоим у конца недошедшего пути: щуп к цели длиной `ExhaustedAccept + 16` (80), ломаемое ближе `ExhaustedAccept` (64). Чужой остров этот щуп не делает | `GetObstacle`, `ProbeObstacle`, `ProbeExhausted`, `TryUseDoor` |
+| застревание | нет 2D-прогресса `StuckTime` → `Escalate` 1–4; уровень 3 — налог на рёбра кожи сквозь точку (`Mesh.TaxEdgesThrough`), клетки только если рёбер нет | `Escalate` |
+
+Новое число — поле в `Loco.Defaults` с комментарием, не свежий литерал в теле. Уже в теле и пока там: окна спецов `40 / 24 / 12`, допуск подъёма `StepHeight + 2` и `JumpHeight + 12` в `SpecialAction`; 80 от конца пути в `ClaimPathDoor` (дверь) и в `IsHopeless` (чужой остров). Лестница — `Ladder = {Phase, Ent, Up, Foot, Landing, Shaft, Index}`, фазы `approach → mount → climb → leave`, вход `BeginLadder`, выход только `EndLadder` / `AbortLadder`. Внеплановый hold (сидим на лестнице без автомата) — `ladder:abort:unplanned`, отпускаем E.
+
+## Что мозгу можно
+
+`SetGoal(pos|ent, tol, ignoreEnt)`, `Stop`, `SetHold`, `Duck`, `TouchObstacle`, `ClearObstacle`; читать `IsGoalReached`, `IsHopeless`, `GetObstacle`, `GetLookPoint`, `StuckLevel`, `Ladder`; писать `SpeedFrac`, `ClearPath`, сбрасывать `StuckEpisodes` / `FailedPaths` / `Exhausted` при смене намерения. Остальное — внутреннее.
+
+## Новая заметка
+
+Заметка (`Note`) — это контракт лога. Добавил слово: шапка `30_locomotion.lua` → `BugReason` в `94_recorder.lua` (если это баг) → правило `relapse-ai-rec`. В одном изменении.
+
+```lua
+-- ❌ решение без следа, число в теле, прыжок как сообщение
+if dist < 37 then pl:SetVelocity(Vector(0, 0, 200)) end
+self:Jump("stuck2") -- две заметки на одно решение
+
+-- ✅ порог в Defaults, одна заметка на решение, кнопка через Jump
+Loco.Defaults.RailHop = 37
+if dist < self.P.RailHop then self:Jump("rail") end
+self:Jump(); self:Note("stuck2")
+```
+
+## Двери и пропы
+
+Дверь: `Health()` всегда 0, здоровье в `ent.Heal`; забитый проп — `GetBarricadeHealth`; уязвимый картовый проп — `PropHealth` (`ObstacleHealth`, тот же источник у рекордера). Проходимость — `Loco.DoorOpenable` (E) и `Loco.DoorBreakable` (когти); `door:locked` только когда ни то, ни другое. Бан двери (`Mesh.BanDoor`, 45 с) даётся только в `GiveUpObstacle`. Закрытая створка, на которой поиск отрезал путь, едет с путём (`path:GetDoor()`): пока она там и не сломана, `IsHopeless` — false, `Exhausted` не считается. Незабитый проп с `reach = 1` на пути не ломают (`prop:past`); забитый ломают с первого касания; незабитый на пути к цели (`ClearPath`) и world-breakable сначала ждут обход `DetourWait`.
+
+## Путь
+
+`OnPathResult(path, reached, goal)`: `reached` строго true/false, конец недошедшего пути хранится в `LastPathEnd`, `Exhausted` ставится только стоя у него. `IslandCut` ставится здесь же, когда путь есть, `reached` ложь и `GoalOnOtherIsland`. Длинный подход идут. `IsHopeless` на нём — ближе 80 к концу и на пути нет двери (`path:GetDoor()`): дверь на таком пути — план, не обрыв. Незабитый проп при `IslandCut` не ломают (`LooseWorthBreaking`). Лестница — ребро графа (`LinkLadders` в `93_mesh_path.lua`); если путь через шахту не строится, чинить краску, не придумывать маунт в ходьбе. Штрафы: `Nav.Penalty.{Stuck, Prop, Barricade, Unbreakable}` на клетки; `Mesh.TaxEdgesThrough` на рёбра; снятие — `Mesh.UnblockAround`.
+
+Граф врёт там, где нет краски: мост через пропуск (`BridgeGaps`) проверяется корпусом `BRIDGE_HULL` 15, соседние звенья — узким `LINK_HULL` 8 под обещание краски 12 у центров. Несколько ботов встали в одной точке с `body = world` при `reach = 1` — чинить ребро (ширина хорды), не добавлять уровень в `Escalate`.
+
+```lua
+-- ❌ дверь на пути только если клетка за ней ближе к цели
+if other.pos:DistToSqr(goal) < last:DistToSqr(goal) then path:SetDoor(ent) end
+
+-- ✅ поиск сам говорит, какое ребро отрезал
+local ids, edges, found, cutDoor, cutFar = AStar(startC.i, goalC.i, cap)
+if cutDoor then path:SetDoor(Entity(cutDoor)) end
+```
+
+Не трогать без просьбы: `92_mesh_build.lua` (перестройка кожи), `relapse_ladder.lua` (сидение игрока), `50_combat.lua` (`InReach`, `GetStandoff`). Проверка: `changelevel`, не `restart`; смотреть `data/relapse_ai/rec/*.txt` (JSONL, одна строка — событие) по правилу `relapse-ai-rec`.

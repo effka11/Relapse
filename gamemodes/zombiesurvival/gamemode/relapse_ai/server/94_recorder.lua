@@ -2,7 +2,8 @@
 --
 -- Two files in data/relapse_ai/rec/, never deleted here:
 --   <map>_bug_<time>_<n>_<reason>_<nick>.txt  written on stuck / path fail /
---     ladder abort / give-up / startsolid / lua error. A 12s ring is always on.
+--     ladder abort / give-up / hopeless / startsolid / lua error, and only
+--     while a U recording is open. The bug line itself is a full bot frame.
 --   <map>_rec_<time>_<n>.txt  only after relapse_ai_rec, and only while U is held
 --     down as a recording. Chunks are 12s; the next chunk is a new file.
 --
@@ -486,6 +487,13 @@ local function DoorLeaf(ent)
 	local info = {leaf = names[st] or tostring(st or "?")}
 	local ban = AI.Mesh and AI.Mesh.DoorBan and AI.Mesh.DoorBan[ent:EntIndex()]
 	if ban and ban > CurTime() then info.ban = rnd(ban - CurTime()) end
+	-- Doors keep their pool in ent.Heal (nil = untouched); Health() is always 0.
+	if ent.Heal then
+		info.hp = rnd(ent.Heal)
+		info.hpmax = rnd(ent.TotalHeal or ent.Heal)
+	end
+	if ent.IsDoorLocked and ent:IsDoorLocked() then info.locked = 1 end
+	if AI.Loco and AI.Loco.DoorBreakable and not AI.Loco.DoorBreakable(ent) then info.wall = 1 end
 	return info
 end
 
@@ -508,6 +516,19 @@ local function PackEnt(ent)
 	local hp = ent:Health()
 	if hp and hp > 0 then info.hp = hp end
 	if ent.IsNailed and ent:IsNailed() then info.nail = 1 end
+	-- Barricade pool (nails, deployables): Health() is 0 there. Same source as
+	-- locomotion's ObstacleHealth, so a flat hp across a break means no dent.
+	if ent.IsBarricadeProp and ent.GetBarricadeHealth and ent:IsBarricadeProp() then
+		local bh = ent:GetBarricadeHealth()
+		if bh and bh > 0 then
+			info.hp = rnd(bh)
+			local mx = ent.GetMaxBarricadeHealth and ent:GetMaxBarricadeHealth()
+			if mx and mx > 0 then info.hpmax = rnd(mx) end
+		end
+	elseif ent.PropHealth then
+		info.hp = rnd(ent.PropHealth)
+		if ent.TotalHealth then info.hpmax = rnd(ent.TotalHealth) end
+	end
 	if cls == "prop_obj_sigil" and ent.GetSigilHealth then
 		info.hp = rnd(ent:GetSigilHealth())
 		info.corrupt = ent.GetSigilCorrupted and ent:GetSigilCorrupted() and 1 or 0
@@ -530,8 +551,7 @@ local function PackEnt(ent)
 	end
 	local leaf = DoorLeaf(ent)
 	if leaf then
-		info.leaf = leaf.leaf
-		if leaf.ban then info.ban = leaf.ban end
+		for k, v in pairs(leaf) do info[k] = v end
 	end
 	return info
 end
@@ -564,17 +584,42 @@ local function CollectEnts(origins, radius, cap)
 	return out
 end
 
+-- Live path prices: Source nav areas (id), Relapse mesh cells (cell + p) and
+-- taxed mesh edges (a, b). A bot that keeps walking into a priced spot means
+-- the price is on the wrong thing.
 local function BlockedList()
-	local areas = AI.Nav and AI.Nav.BlockedAreas
-	if not areas then return nil end
 	local out = {}
-	for id, entry in pairs(areas) do
-		if #out >= 32 then break end
-		out[#out + 1] = {
-			id = id,
-			pen = entry.Penalty,
-			left = rnd((entry.Expiry or 0) - CurTime()),
-		}
+	local now = CurTime()
+	local areas = AI.Nav and AI.Nav.BlockedAreas
+	if areas then
+		for id, entry in pairs(areas) do
+			if #out >= 32 then break end
+			out[#out + 1] = {
+				id = id,
+				pen = entry.Penalty,
+				left = rnd((entry.Expiry or 0) - now),
+			}
+		end
+	end
+	local Mesh = AI.Mesh
+	if Mesh and Mesh.Blocked and Mesh.Cells then
+		for i, entry in pairs(Mesh.Blocked) do
+			if #out >= 64 then break end
+			if entry.Expiry > now then
+				local c = Mesh.Cells[i]
+				if c then
+					out[#out + 1] = {cell = i, p = vec(c.pos), pen = entry.Penalty, left = rnd(entry.Expiry - now)}
+				end
+			end
+		end
+	end
+	if Mesh and Mesh.EdgeTaxList then
+		local ok, list = pcall(Mesh.EdgeTaxList, 32)
+		if ok and list then
+			for _, t in ipairs(list) do
+				out[#out + 1] = {edge = 1, a = vec(t.a), b = vec(t.b), pen = t.pen, left = rnd(t.left)}
+			end
+		end
 	end
 	if #out == 0 then return nil end
 	return out
@@ -864,8 +909,7 @@ local function ObstacleShort(loco)
 	if hp and hp > 0 then info.hp = hp end
 	local leaf = DoorLeaf(ent)
 	if leaf then
-		info.leaf = leaf.leaf
-		if leaf.ban then info.ban = leaf.ban end
+		for k, v in pairs(leaf) do info[k] = v end
 	end
 	return info
 end
@@ -897,15 +941,15 @@ local function IntentName(data)
 	return ""
 end
 
+-- Which notes are bugs (file name suffix). The note vocabulary is the
+-- locomotion contract, see the header of 30_locomotion.lua.
 local function BugReason(why)
 	if not why or why == "" or why == "stuck:crowd" then return nil end
 	if string.find(why, "stuck", 1, true) then return "stuck" end
 	if why == "path:fail" then return "path" end
-	if string.find(why, "abort", 1, true) or string.find(why, "drop:brush", 1, true) then
-		return "ladder"
-	end
+	if string.sub(why, 1, 13) == "ladder:abort:" then return "ladder" end
 	if why == "break:noway" then return "break" end
-	if string.sub(why, 1, 7) == "giveup:" then return "giveup" end
+	if string.sub(why, 1, 7) == "giveup:" or why == "door:locked" then return "giveup" end
 	return nil
 end
 
@@ -916,6 +960,7 @@ end
 
 local function ScheduleBug(bot, reason, opts)
 	opts = opts or {}
+	if not Rec.Recording then return end
 	local pl = bot and bot.Player
 	if not IsValid(pl) then return end
 	if not opts.force and QuietState(bot) then return end
@@ -1014,20 +1059,23 @@ local function BotFrame(bot, ev, full)
 			info.pathgoal = vec(loco.PathGoal)
 		end
 		info.path = PathBrief(loco)
-		if AI.Nav and AI.Nav.HasLadder and AI.Nav.HasLadder(loco.ViaLadder) then
-			info.via = AI.Nav.LadderID(loco.ViaLadder)
-			info.viaup = loco.ViaUp and 1 or 0
-		end
 		if loco.Ladder then
 			local L = loco.Ladder
 			info.ladder = L.Phase
 			if AI.Nav and AI.Nav.LadderID then info.lad = AI.Nav.LadderID(L.Ent) end
 			info.ladup = L.Up and 1 or 0
 		end
+		-- NoteFocus is the door or prop this note is about, when that ent
+		-- was never stored as the obstacle (an opening we walked past).
+		local focus = loco.NoteFocus
 		if full and IsValid(loco.Obstacle) then
 			local packed = PackEnt(loco.Obstacle)
 			packed.ev = nil
 			packed.loose = loco.ObstacleLoose and 1 or nil
+			info.obs = packed
+		elseif full and IsValid(focus) then
+			local packed = PackEnt(focus)
+			packed.ev = nil
 			info.obs = packed
 		else
 			info.obs = ObstacleShort(loco)
@@ -1058,7 +1106,9 @@ local function BotFrame(bot, ev, full)
 			info.tgt = tgt:IsPlayer() and tgt:Nick() or tgt:GetClass()
 			info.tid = tgt:EntIndex()
 		end
-		info.reach = combat.InReach and 1 or 0
+		-- Melee range. Path arrival is path.reach; the same name on this line
+		-- used to be this flag, and a reader took it for the path.
+		info.melee = combat.InReach and 1 or 0
 		info.td = rnd(combat.Dist or 0)
 		info.rch = rnd(combat.Reach or 0)
 		if combat.IsSwinging and combat:IsSwinging() then info.swing = 1 end
@@ -1207,19 +1257,25 @@ local function FlushPending(now)
 			pending[pl] = nil
 			cooldown[pl] = now + 10
 			local ok, err = pcall(function()
+				local frame
 				if IsValid(pl) and p.bot and IsValid(p.bot.Player) then
-					local frame = BotFrame(p.bot, "snap", true)
-					if frame then Push(frame) end
+					frame = BotFrame(p.bot, "bug", true)
 					PushScene(pl:GetPos())
 				else
 					PushScene()
 				end
-				Push({
-					ev = "bug",
-					why = p.reason,
-					first = p.firstReason,
-					name = p.name,
-				})
+				if frame then
+					frame.why = p.reason
+					frame.first = p.firstReason
+					Push(frame)
+				else
+					Push({
+						ev = "bug",
+						why = p.reason,
+						first = p.firstReason,
+						name = p.name,
+					})
+				end
 			end)
 			if not ok then Rec.Warn(err) end
 			local wrote, werr = pcall(WriteBug, p)
@@ -1303,6 +1359,8 @@ end
 
 function Rec.Stop()
 	if not Rec.Recording then return end
+	-- A bug in the last two seconds of the take still gets its file.
+	FlushPending(math.huge)
 	FinishChunk("stop")
 	Rec.Recording = false
 	Rec.Path = nil
@@ -1466,6 +1524,33 @@ function Rec.OnPath(loco, path, reached, goal)
 			end
 		end
 	end
+	-- The same arrival logged with every segment list buried the notes.
+	-- Same reach, door, end, goal island and goal cell within 2s is
+	-- dropped. A new goal on that same arrival keeps the line without
+	-- the polyline.
+	local bot = loco.Bot
+	if bot then
+		local w = Watch(bot)
+		local function bucket(p, cell)
+			if not p then return "-" end
+			return string.format("%d_%d_%d", rnd(p[1] / cell) * cell, rnd(p[2] / cell) * cell, rnd(p[3] / cell) * cell)
+		end
+		local fat = string.format("%s|%s|%s|%s", tostring(info.reach or 0), tostring(info.door or 0), bucket(info.endp, 16), tostring(info.gcomp or 0))
+		local fullSig = fat .. "|" .. bucket(info.goal, 64)
+		local now = CurTime()
+		if w.pathFull == fullSig and now - (w.pathAt or 0) < 2 then
+			return
+		end
+		if w.pathFat == fat then
+			info.segs = nil
+			info.segn = nil
+			info.trunc = nil
+			info.again = 1
+		end
+		w.pathFat = fat
+		w.pathFull = fullSig
+		w.pathAt = now
+	end
 	Push(info)
 end
 
@@ -1474,6 +1559,7 @@ function Rec.OnHopeless(bot, intent)
 		if not bot or not IsValid(bot.Player) then return end
 		local frame = BotFrame(bot, "hopeless", true)
 		if frame then
+			frame.why = "hopeless"
 			frame.abandoned = intent
 			Push(frame)
 		end
@@ -1536,7 +1622,7 @@ function Rec.AfterThink(bot)
 		mode = mode,
 		hold = hold == 1 and 1 or nil,
 		pend = pend == 1 and 1 or nil,
-		reach = reach,
+		melee = reach,
 		tgt = tgt ~= "" and tgt or nil,
 		goal = gk ~= "" and gk or nil,
 		ladder = phase ~= "" and phase or nil,
@@ -1677,19 +1763,4 @@ concommand.Add("relapse_ai_rec", function(pl)
 	Reply(pl, "[Relapse AI] запись включена. Сверху таймер. U — старт и стоп, кусок до 12 с, дальше новый файл. Пока таймер на экране, U не открывает командный чат. Файлы: data/relapse_ai/rec/")
 end)
 
-if AI.Loco then
-	local Loco = AI.Loco
-	local prevNote = Loco.Note
-	function Loco:Note(reason)
-		if prevNote then prevNote(self, reason) end
-		local ok, err = pcall(Rec.OnNote, self, reason)
-		if not ok then Rec.Warn(err) end
-	end
-
-	local prevPath = Loco.OnPathResult
-	function Loco:OnPathResult(path, reached, goal)
-		if prevPath then prevPath(self, path, reached, goal) end
-		local ok, err = pcall(Rec.OnPath, self, path, reached, goal)
-		if not ok then Rec.Warn(err) end
-	end
-end
+-- Loco:Note and Loco:OnPathResult call Rec.OnNote / Rec.OnPath directly (30_locomotion.lua).

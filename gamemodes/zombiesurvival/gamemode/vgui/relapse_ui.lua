@@ -261,6 +261,18 @@ RelapseUI.CardIconZoom = {
 	mg_falima = 1.82,
 	mg_alpha50 = 1.96,
 	weapon_zs_aloe = 1.88,
+	["3030win"] = 0.78,
+	["357mag"] = 0.63,
+	["45acp"] = 0.71,
+	["50bmg"] = 0.96,
+	["12ga"] = 0.69,
+	["556x45"] = 0.96,
+	["762x39"] = 0.89,
+	["762x51"] = 0.95,
+	["762x54r"] = 0.93,
+	["9x18"] = 0.64,
+	["9x19"] = 0.64,
+	["9x39"] = 0.65,
 }
 
 RelapseUI.CardIconAng = {
@@ -287,6 +299,18 @@ RelapseUI.CardIconPos = {
 	mg_falima = { 2, 1 },
 	mg_alpha50 = { -2, 0 },
 	weapon_zs_aloe = { 0, -5 },
+	["3030win"] = { 0, 1 },
+	["357mag"] = { 0, 4 },
+	["45acp"] = { 0, 9 },
+	["50bmg"] = { 0, -7 },
+	["12ga"] = { 0, 5 },
+	["556x45"] = { 0, -8 },
+	["762x39"] = { 0, -4 },
+	["762x51"] = { 0, -6 },
+	["762x54r"] = { 0, -6 },
+	["9x18"] = { 0, 6 },
+	["9x19"] = { 0, 4 },
+	["9x39"] = { 0, 5 },
 }
 
 -- PNG silhouettes with alpha AA. Same pass as the T1 shop guns.
@@ -379,6 +403,103 @@ function RelapseUI.ClearCardSilhouette(card)
 	card.RelapseIconAlpha = nil
 end
 
+-- One upright cartridge, drawn AmmoIconCount times (default 3). w/h are pixels inside the 256 icon.
+RelapseUI.AmmoIconGapDefault = 18
+RelapseUI.AmmoIconCountDefault = 3
+RelapseUI.AmmoIconGap = {
+	["3030win"] = 28,
+	["357mag"] = 27,
+	["45acp"] = 19,
+	["50bmg"] = 24,
+	["12ga"] = 26,
+	["556x45"] = 24,
+	["762x39"] = 22,
+	["762x51"] = 23,
+	["762x54r"] = 27,
+	["9x18"] = 27,
+	["9x19"] = 30,
+	["9x39"] = 28,
+}
+RelapseUI.AmmoIconCount = {
+	["3030win"] = 1,
+	["357mag"] = 2,
+	["45acp"] = 2,
+	["50bmg"] = 1,
+	["12ga"] = 2,
+	["9x18"] = 2,
+}
+RelapseUI.AmmoIconRound = {
+	["9x18"] = { w = 68, h = 183, path = "zombiesurvival/killicons/ammo_9x18_round.png" },
+	["9x19"] = { w = 60, h = 220, path = "zombiesurvival/killicons/ammo_9x19_round.png" },
+	["45acp"] = { w = 68, h = 154, path = "zombiesurvival/killicons/ammo_45acp_round.png" },
+	["357mag"] = { w = 66, h = 220, path = "zombiesurvival/killicons/ammo_357mag_round.png" },
+	["3030win"] = { w = 48, h = 220, path = "zombiesurvival/killicons/ammo_3030_round.png" },
+	["12ga"] = { w = 68, h = 201, path = "zombiesurvival/killicons/ammo_12ga_round.png" },
+	["9x39"] = { w = 67, h = 220, path = "zombiesurvival/killicons/ammo_9x39_round.png" },
+	["556x45"] = { w = 33, h = 220, path = "zombiesurvival/killicons/ammo_556x45_round.png" },
+	["762x39"] = { w = 48, h = 220, path = "zombiesurvival/killicons/ammo_762x39_round.png" },
+	["762x51"] = { w = 36, h = 220, path = "zombiesurvival/killicons/ammo_762x51_round.png" },
+	["762x54r"] = { w = 41, h = 220, path = "zombiesurvival/killicons/ammo_762x54r_round.png" },
+	["50bmg"] = { w = 36, h = 220, path = "zombiesurvival/killicons/ammo_50bmg_round.png" },
+}
+
+function RelapseUI.AmmoRoundMat(class)
+	local def = RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[class]
+	if not def then return end
+	if not def.mat or def.mat:IsError() then
+		def.mat = Material(def.path, "smooth")
+	end
+	if not def.mat or def.mat:IsError() then return end
+	return def.mat
+end
+
+function RelapseUI.AmmoIconGapValue(class, inv)
+	local g = RelapseUI.AmmoIconGapDefault or 18
+	if class and RelapseUI.AmmoIconGap and RelapseUI.AmmoIconGap[class] ~= nil then
+		g = RelapseUI.AmmoIconGap[class]
+	end
+	local store = inv and RelapseUI.IconsDevInvDelta or RelapseUI.IconsDevDelta
+	local d = store and class and store[class]
+	return math.max(0, g + (d and d.gap or 0))
+end
+
+function RelapseUI.AmmoIconCountValue(class, inv)
+	local n = RelapseUI.AmmoIconCountDefault or 3
+	if class and RelapseUI.AmmoIconCount and RelapseUI.AmmoIconCount[class] ~= nil then
+		n = RelapseUI.AmmoIconCount[class]
+	end
+	local store = inv and RelapseUI.IconsDevInvDelta or RelapseUI.IconsDevDelta
+	local d = store and class and store[class]
+	n = math.floor((n + (d and d.count or 0)) + 0.5)
+	return math.Clamp(n, 1, 7)
+end
+
+function RelapseUI.DrawAmmoTrio(class, cx, cy, boxW, boxH, zoom, angDeg, col, inv, alpha)
+	local def = RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[class]
+	if not def then return false end
+	local mat = RelapseUI.AmmoRoundMat(class)
+	if not mat then return false end
+	zoom = zoom or 1
+	boxW = boxW or 256
+	boxH = boxH or boxW
+	local zx = (boxW / 256) * zoom
+	local zy = (boxH / 256) * zoom
+	local gap = RelapseUI.AmmoIconGapValue(class, inv) * zx
+	local rw, rh = def.w * zx, def.h * zy
+	local n = RelapseUI.AmmoIconCountValue(class, inv)
+	local groupW = rw * n + gap * math.max(0, n - 1)
+	local rad = math.rad(angDeg or 0)
+	local c, s = math.cos(rad), math.sin(rad)
+	col = col or RelapseUI.Col.Text
+	surface.SetMaterial(mat)
+	surface.SetDrawColor(col.r, col.g, col.b, alpha or col.a or 255)
+	for i = 0, n - 1 do
+		local lx = -groupW * 0.5 + rw * 0.5 + i * (rw + gap)
+		surface.DrawTexturedRectRotated(cx + lx * c, cy + lx * s, rw, rh, angDeg or 0)
+	end
+	return true
+end
+
 function RelapseUI.PaintCardSilhouette(card, w, h)
 	local class = card and card.RelapseIconClass
 	local mat = card and card.RelapseIconMat
@@ -396,6 +517,9 @@ function RelapseUI.PaintCardSilhouette(card, w, h)
 	local cy = (card.RelapseIconCY or (h * 0.5)) + oy
 	local col = RelapseUI.Col.Text
 	local a = (card.RelapseIconAlpha or 255) * (card:GetAlpha() / 255)
+	if RelapseUI.DrawAmmoTrio(class, cx, cy, fw, fh, zoom, ang, col, false, a) then
+		return
+	end
 	surface.SetMaterial(mat)
 	surface.SetDrawColor(col.r, col.g, col.b, a)
 	surface.DrawTexturedRectRotated(cx, cy, dw, dh, ang)
@@ -513,6 +637,14 @@ function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
 	if not mat or mat:IsError() then return end
 	col = col or RelapseUI.Col.Text
 	local pad = RelapseUI.Grid5()
+	local maxs = math.max(1, w - pad * 2)
+	local tilt = RelapseUI.InvSlotIconTiltValue(class)
+	local sx, sy = RelapseUI.InvSlotIconShiftValue(class)
+	local cx = w * 0.5 + RelapseUI.sPx(sx)
+	local cy = h * 0.5 + RelapseUI.sPx(sy)
+	if RelapseUI.DrawAmmoTrio(class, cx, cy, maxs, maxs, RelapseUI.InvSlotIconZoomValue(class), tilt, col, true, col.a or 255) then
+		return
+	end
 	local tw, th = mat:Width(), mat:Height()
 	if tw < 1 then tw = 1 end
 	if th < 1 then th = 1 end

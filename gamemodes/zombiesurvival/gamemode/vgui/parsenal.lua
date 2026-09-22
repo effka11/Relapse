@@ -861,6 +861,9 @@ function GM:CreateItemViewerGenericElems(viewer)
 		local ang = RelapseUI.CardIconAngValue(class)
 		local ox, oy = RelapseUI.CardIconPosValue(class)
 		local col = RelapseUI.Col.Text
+		if RelapseUI.DrawAmmoTrio(class, w * 0.5 + ox, h * 0.5 + oy, fw, fh, zoom, ang, col, false, col.a or 255) then
+			return true
+		end
 		surface.SetMaterial(mat)
 		surface.SetDrawColor(col.r, col.g, col.b, col.a or 255)
 		surface.DrawTexturedRectRotated(w * 0.5 + ox, h * 0.5 + oy, fw * zoom, fh * zoom, ang)

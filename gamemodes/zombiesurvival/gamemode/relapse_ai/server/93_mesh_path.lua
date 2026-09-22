@@ -8,7 +8,13 @@
 -- height, and a lifted hull along it meets no wall. Ramps and stair runs pass;
 -- a crate face does not (that pair becomes a hop). A prop_door in that hull is
 -- not a walk: the edge stays, and A* crosses it only while the leaf is open.
+-- A straight same-floor hole of a few cells (paint skipped a strip) is the
+-- same walk when that chord is clear for a whole body (no paint, no clearance
+-- promise there).
 -- Drops are found from the higher cell and are one-way: A* never climbs a cliff.
+-- A closed door cuts the returned path on its near side and rides along as
+-- path:GetDoor(), whichever way it leads. A spot a body could not pass taxes
+-- the edges through it (Mesh.TaxEdgesThrough), not the cells around it.
 
 local AI = RelapseAI
 local Mesh = AI.Mesh
@@ -666,6 +672,21 @@ end
 
 -- Pair (a, b) seen once (j > i). Walk both ways; else a hop up and the drop
 -- back; else a plain one-way drop from the higher cell.
+local function AddWalkPair(i, j, a, b, dist, crouch)
+	local cost = crouch and dist * 1.6 or dist
+	local door = DoorOnChord(a.pos.x, a.pos.y, a.pos.z, b.pos.x, b.pos.y, b.pos.z)
+	if door then
+		local extra = {door = door:EntIndex()}
+		if crouch then extra.crouch = true end
+		AddDirected(i, j, cost, "door", SEG_GROUND, extra)
+		AddDirected(j, i, cost, "door", SEG_GROUND, extra)
+	else
+		local extra = crouch and {crouch = true} or nil
+		AddDirected(i, j, cost, "walk", SEG_GROUND, extra)
+		AddDirected(j, i, cost, "walk", SEG_GROUND, extra)
+	end
+end
+
 local function LinkPair(i, j, a, b, cell, dropZ)
 	local dx, dy, dz = b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z
 	local flat = math.sqrt(dx * dx + dy * dy)
@@ -677,19 +698,8 @@ local function LinkPair(i, j, a, b, cell, dropZ)
 	if near and adz <= JUMP_Z then
 		local ok, crouch = WalkOK(a, b)
 		if ok then
-			local cost = crouch and dist * 1.6 or dist
-			local door = DoorOnChord(a.pos.x, a.pos.y, a.pos.z, b.pos.x, b.pos.y, b.pos.z)
-			if door then
-				-- Closed leaf: A* will not cross. Open or broken: this is a walk.
-				local extra = {door = door:EntIndex()}
-				if crouch then extra.crouch = true end
-				AddDirected(i, j, cost, "door", SEG_GROUND, extra)
-				AddDirected(j, i, cost, "door", SEG_GROUND, extra)
-			else
-				local extra = crouch and {crouch = true} or nil
-				AddDirected(i, j, cost, "walk", SEG_GROUND, extra)
-				AddDirected(j, i, cost, "walk", SEG_GROUND, extra)
-			end
+			-- Closed leaf: A* will not cross. Open or broken: this is a walk.
+			AddWalkPair(i, j, a, b, dist, crouch)
 			return
 		end
 	end
@@ -716,6 +726,72 @@ local function LinkPair(i, j, a, b, cell, dropZ)
 	if ok then
 		AddDirected(hj, li, dist + adz * 0.5 + 30 + (hop and 60 or 0), "drop", SEG_DROP, hop and {hop = true} or nil)
 	end
+end
+
+-- Paint skipped a straight strip. Neighbours stop at one cell, so a five-cell
+-- hole stays two islands even when a player walks it. Only the open axis, and
+-- only when the chord itself is a walk.
+local GAP_CELLS = 5
+-- No paint under a bridge means no clearance promise there. The narrow link
+-- box slipped through a 20u slit beside a doorway and every bot walked into
+-- that wall; the chord has to fit a body (32u player, 2u to spare).
+local BRIDGE_HULL = 15
+
+local function BridgeOK(a, b)
+	linkTr.mins.x, linkTr.mins.y = -BRIDGE_HULL, -BRIDGE_HULL
+	linkTr.maxs.x, linkTr.maxs.y = BRIDGE_HULL, BRIDGE_HULL
+	local ok, crouch = WalkOK(a, b)
+	linkTr.mins.x, linkTr.mins.y = -LINK_HULL, -LINK_HULL
+	linkTr.maxs.x, linkTr.maxs.y = LINK_HULL, LINK_HULL
+	return ok, crouch
+end
+
+local function BridgeGaps()
+	local cells = Mesh.Cells
+	local cell = CellSize()
+	local n = #cells
+	local added = 0
+	local function nearestAhead(a, ox, oy)
+		local best, bestAlong
+		for k = 2, GAP_CELLS do
+			local bucket = GridGet(a.gx + ox * k, a.gy + oy * k)
+			if bucket then
+				for bi = 1, #bucket do
+					local j = bucket[bi]
+					local b = cells[j]
+					if b and math.abs(b.pos.z - a.pos.z) <= STEP_Z then
+						local dx, dy = b.pos.x - a.pos.x, b.pos.y - a.pos.y
+						local along = ox ~= 0 and dx * ox or dy * oy
+						local aside = ox ~= 0 and math.abs(dy) or math.abs(dx)
+						if along > cell * 1.6 and along <= cell * (GAP_CELLS + 0.6) and aside <= cell * 0.6 then
+							if not best or along < bestAlong then
+								best, bestAlong = j, along
+							end
+						end
+					end
+				end
+				if best then return best end
+			end
+		end
+		return nil
+	end
+	for i = 1, n do
+		local a = cells[i]
+		for dir = 1, 2 do
+			local ox, oy = dir == 1 and 1 or 0, dir == 2 and 1 or 0
+			local j = nearestAhead(a, ox, oy)
+			if j then
+				local b = cells[j]
+				local ok, crouch = BridgeOK(a, b)
+				if ok then
+					local dx, dy, dz = b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z
+					AddWalkPair(i, j, a, b, math.sqrt(dx * dx + dy * dy + dz * dz), crouch)
+					added = added + 1
+				end
+			end
+		end
+	end
+	return added
 end
 
 local function LinkCell(i, dropZ)
@@ -831,6 +907,8 @@ function Mesh.LinkStep()
 	end
 	if job.i > n then
 		local elapsed = SysTime() - job.t0
+		Mesh.LinkLadders()
+		local gaps = BridgeGaps()
 		local walks, jumps, drops, crouches, doors = 0, 0, 0, 0, 0
 		for k = 1, n do
 			local c = Mesh.Cells[k]
@@ -859,12 +937,11 @@ function Mesh.LinkStep()
 				c.tax = 0
 			end
 		end
-		Mesh.LinkLadders()
 		local comps, biggest = Mesh.ComputeComponents()
 		Mesh.Linking = nil
 		Mesh.Linked = true
-		AI.Log("mesh linked %d cells: %d walk (%d crouch), %d door, %d jump, %d drop, %d ladders; %d components (largest %d) in %.1fs",
-			n, walks, crouches, doors, jumps, drops, Mesh.LadderCount or 0, comps, biggest, elapsed)
+		AI.Log("mesh linked %d cells: %d walk (%d crouch), %d door, %d jump, %d drop, %d ladders, %d gaps; %d components (largest %d) in %.1fs",
+			n, walks, crouches, doors, jumps, drops, Mesh.LadderCount or 0, gaps, comps, biggest, elapsed)
 		return
 	end
 	if CurTime() >= job.ping then
@@ -1022,6 +1099,33 @@ function Mesh.MarkBlockedAround(origin, radius, duration, penalty)
 	return n
 end
 
+-- The thing that earned the penalty is gone (broken, pushed): lift it here.
+function Mesh.UnblockAround(origin, radius)
+	if not origin or not Mesh.Grid then return 0 end
+	local size = CellSize()
+	local rad = math.Clamp(radius or 64, 32, 160)
+	local rad2 = rad * rad
+	local gx, gy = math.floor(origin.x / size), math.floor(origin.y / size)
+	local reach = math.ceil(rad / size) + 1
+	local n = 0
+	for dx = -reach, reach do
+		for dy = -reach, reach do
+			local bucket = GridGet(gx + dx, gy + dy)
+			if bucket then
+				for i = 1, #bucket do
+					local c = Mesh.Cells[bucket[i]]
+					local ddx, ddy = c.pos.x - origin.x, c.pos.y - origin.y
+					if Mesh.Blocked[c.i] and ddx * ddx + ddy * ddy <= rad2 and math.abs(c.pos.z - origin.z) <= 72 then
+						Mesh.Blocked[c.i] = nil
+						n = n + 1
+					end
+				end
+			end
+		end
+	end
+	return n
+end
+
 function Mesh.BlockedSince(pos, minPenalty)
 	local c = Mesh.Nearest(pos, 80)
 	if not c then return nil end
@@ -1038,6 +1142,96 @@ local function BlockPenalty(i)
 		return entry.Penalty
 	end
 	return 0
+end
+
+-- Price on an edge, not a cell. A body that cannot pass a point on a chord
+-- (the graph promised a walk the world refuses) taxes every edge through that
+-- point: a long bridge over skipped paint has no cell there to price, and a
+-- cell price at either end would hit the honest edges into the same room.
+Mesh.EdgeTax = Mesh.EdgeTax or {} -- [edge] = {Expiry, Penalty, Since, a, j}
+
+local function EdgeTax(e)
+	local entry = Mesh.EdgeTax[e]
+	if entry and entry.Expiry > CurTime() then
+		return entry.Penalty
+	end
+	return 0
+end
+
+-- Squared 2D distance from (px, py) to the segment a-b.
+local function SegDist2(px, py, ax, ay, bx, by)
+	local ex, ey = bx - ax, by - ay
+	local len2 = ex * ex + ey * ey
+	local t = 0
+	if len2 > 0.001 then
+		t = ((px - ax) * ex + (py - ay) * ey) / len2
+		if t < 0 then t = 0 elseif t > 1 then t = 1 end
+	end
+	local dx, dy = px - (ax + ex * t), py - (ay + ey * t)
+	return dx * dx + dy * dy
+end
+
+-- Every walk/door edge on this floor whose chord passes within `radius` of pos.
+-- Returns how many were taxed (0: nothing runs through here, price the cell).
+function Mesh.TaxEdgesThrough(pos, radius, duration, penalty)
+	if not pos or not Mesh.Grid then return 0 end
+	local cells = Mesh.Cells
+	local size = CellSize()
+	local reach = GAP_CELLS + 1
+	local gx, gy = math.floor(pos.x / size), math.floor(pos.y / size)
+	local r2 = radius * radius
+	local expiry = CurTime() + (duration or 30)
+	penalty = penalty or (Nav and Nav.Penalty and Nav.Penalty.Stuck) or 500
+	local n = 0
+	for dx = -reach, reach do
+		for dy = -reach, reach do
+			local bucket = GridGet(gx + dx, gy + dy)
+			if bucket then
+				for k = 1, #bucket do
+					local i = bucket[k]
+					local a = cells[i]
+					if a.nbs and math.abs(a.pos.z - pos.z) <= 72 then
+						for m = 1, #a.nbs do
+							local e = a.nbs[m]
+							if e.kind == "walk" or e.kind == "door" then
+								local b = cells[e.j]
+								if b and SegDist2(pos.x, pos.y, a.pos.x, a.pos.y, b.pos.x, b.pos.y) <= r2 then
+									local entry = Mesh.EdgeTax[e]
+									if entry then
+										if expiry > entry.Expiry then entry.Expiry = expiry end
+										if penalty > entry.Penalty then entry.Penalty = penalty end
+									else
+										Mesh.EdgeTax[e] = {Expiry = expiry, Penalty = penalty, Since = CurTime(), a = i, j = e.j}
+									end
+									n = n + 1
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return n
+end
+
+-- Live edge taxes for the recorder: {a = pos, b = pos, pen, left}.
+function Mesh.EdgeTaxList(limit)
+	local out = {}
+	local now = CurTime()
+	local cells = Mesh.Cells
+	for e, entry in pairs(Mesh.EdgeTax) do
+		if entry.Expiry <= now then
+			Mesh.EdgeTax[e] = nil
+		else
+			local a, b = cells[entry.a], cells[entry.j]
+			if a and b then
+				out[#out + 1] = {a = a.pos, b = b.pos, pen = entry.Penalty, left = entry.Expiry - now}
+				if limit and #out >= limit then break end
+			end
+		end
+	end
+	return out
 end
 
 ---------------------------------------------------------------------------
@@ -1187,6 +1381,8 @@ function Mesh.LiftDoorBlock(ent)
 	end
 end
 
+-- Returns ids, edges, cut, doorId, farCell: the leaf that cut the path and the
+-- cell on its far side, so FindPath can hand that door to locomotion.
 local function CutClosedDoor(ids, edges)
 	local cells = Mesh.Cells
 	for n = 1, #edges do
@@ -1203,7 +1399,7 @@ local function CutClosedDoor(ids, edges)
 				for i = 1, n - 1 do
 					cutEdges[i] = edges[i]
 				end
-				return cutIds, cutEdges, true
+				return cutIds, cutEdges, true, e.door, ids[n + 1]
 			end
 		end
 	end
@@ -1249,9 +1445,9 @@ local function AStar(startI, goalI, expandCap)
 		if not closed[i] then
 			if i == goalI then
 				local ids, edges = Unwind(i, came, cameEdge)
-				local cut
-				ids, edges, cut = CutClosedDoor(ids, edges)
-				return ids, edges, not cut
+				local cut, door, far
+				ids, edges, cut, door, far = CutClosedDoor(ids, edges)
+				return ids, edges, not cut, door, far
 			end
 			closed[i] = true
 			expanded = expanded + 1
@@ -1286,7 +1482,7 @@ local function AStar(startI, goalI, expandCap)
 					end
 					if j then
 						local extra = payDoor and DOOR_CROSS or 0
-						local ng = gi + e.cost + extra + BlockPenalty(j) + (cells[j].tax or 0)
+						local ng = gi + e.cost + extra + BlockPenalty(j) + EdgeTax(e) + (cells[j].tax or 0)
 						if not g[j] or ng < g[j] then
 							g[j] = ng
 							came[j] = i
@@ -1302,8 +1498,9 @@ local function AStar(startI, goalI, expandCap)
 		return {startI}, {}, false
 	end
 	local ids, edges = Unwind(bestI, came, cameEdge)
-	ids, edges = CutClosedDoor(ids, edges)
-	return ids, edges, false
+	local _, door, far
+	ids, edges, _, door, far = CutClosedDoor(ids, edges)
+	return ids, edges, false, door, far
 end
 
 -- Neighbour links are traced with a narrow hull. A straight run of centres can
@@ -1534,6 +1731,19 @@ local function BuildPath(from, goal, ids, edges)
 	if onFloor then
 		pts[#pts + 1] = {pos = Vector(goal.x, goal.y, goal.z)}
 	end
+	-- The start snaps to the nearest centre, which can sit behind us: the first
+	-- leg doubles back, the cursor sits on it, and the steer point is at our
+	-- heels. When the second centre is a plain walk and the chord to it is
+	-- clear for a body, the first one is not a waypoint.
+	if #pts >= 3 then
+		local a, b, c = pts[1].pos, pts[2].pos, pts[3].pos
+		local e2 = pts[3].enter
+		if e2 and e2.kind == "walk" and not e2.crouch
+			and (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0
+			and math.abs(c.z - a.z) <= STEP_Z and SpanClear(a, c, false) then
+			table.remove(pts, 2)
+		end
+	end
 	for i = 1, #pts do
 		local wp = pts[i]
 		local nxt = pts[i + 1]
@@ -1577,14 +1787,6 @@ local function BuildPath(from, goal, ids, edges)
 	return path
 end
 
-local function PathUsesLadder(path)
-	local segs = path:GetAllSegments()
-	for i = 1, #segs do
-		if segs[i].ladder ~= nil then return true end
-	end
-	return false
-end
-
 -- Snap start and goal to cells, A*, build. Returns path, reached, startC.
 -- A path that does not reach ends at the closest approach (reached = false).
 function Mesh.FindPath(from, goal)
@@ -1615,7 +1817,7 @@ function Mesh.FindPath(from, goal)
 	elseif math.abs(startC.pos.z - goalC.pos.z) > 48 then
 		cap = MAX_EXPAND_CROSS
 	end
-	local ids, edges, found = AStar(startC.i, goalC.i, cap)
+	local ids, edges, found, cutDoor, cutFar = AStar(startC.i, goalC.i, cap)
 	local path = BuildPath(from, goal, ids, edges)
 	local lastI = ids[#ids]
 	local lastCell = Mesh.Cells[lastI]
@@ -1623,29 +1825,40 @@ function Mesh.FindPath(from, goal)
 	local reached = found and math.abs(goal.z - last.z) < 48
 		and (goal.x - last.x) * (goal.x - last.x) + (goal.y - last.y) * (goal.y - last.y) <= 180 * 180
 	-- Closed door on the way to the goal: stop in front of the leaf and remember
-	-- it, so locomotion walks up and breaks it instead of treating the far
-	-- corridor as open ground.
-	if path and not reached and lastCell.nbs then
-		local lastD = last:DistToSqr(goal)
-		local bestJ, bestD
-		local nbs = lastCell.nbs
-		for n = 1, #nbs do
-			local e = nbs[n]
-			-- A banned leaf stays a wall. Walking up to break it again is the loop
-			-- after giveup. Only a closed door we have not failed yet is an approach.
-			if e.kind == "door" and e.door and not Mesh.DoorBanned(e.door) and not Mesh.DoorPassable(e.door) then
-				local other = Mesh.Cells[e.j]
-				if other and not DoorwayOpen(e.door, last.x, last.y, last.z, other.pos.x, other.pos.y, other.pos.z) then
-					local d = other.pos:DistToSqr(goal)
-					if d < lastD and (not bestD or d < bestD) then
-						bestJ, bestD = e.j, d
+	-- it, so locomotion walks up and opens or breaks it instead of treating the
+	-- far corridor as open ground. The search itself says which leaf cut the
+	-- path; that is the door whatever direction it leads (a spawn room's only
+	-- exit may point away from the goal). Only when nothing was cut do we look
+	-- at the leaves next to the closest approach, and then only one that brings
+	-- us nearer.
+	if path and not reached then
+		local farI = cutDoor and cutFar or nil
+		if not farI and lastCell.nbs then
+			local lastD = last:DistToSqr(goal)
+			local bestD
+			local nbs = lastCell.nbs
+			for n = 1, #nbs do
+				local e = nbs[n]
+				-- A banned leaf stays a wall. Walking up to break it again is the loop
+				-- after giveup. Only a closed door we have not failed yet is an approach.
+				if e.kind == "door" and e.door and not Mesh.DoorBanned(e.door) and not Mesh.DoorPassable(e.door) then
+					local other = Mesh.Cells[e.j]
+					if other and not DoorwayOpen(e.door, last.x, last.y, last.z, other.pos.x, other.pos.y, other.pos.z) then
+						local d = other.pos:DistToSqr(goal)
+						if d < lastD and (not bestD or d < bestD) then
+							farI, bestD = e.j, d
+						end
 					end
 				end
 			end
 		end
-		if bestJ then
-			local other = Mesh.Cells[bestJ]
+		local other = farI and Mesh.Cells[farI]
+		if other then
 			local ent, hit = DoorOnChord(last.x, last.y, last.z, other.pos.x, other.pos.y, other.pos.z)
+			if not ent and cutDoor then
+				local byId = Entity(cutDoor)
+				if IsValid(byId) then ent = byId end
+			end
 			if ent then
 				path:SetDoor(ent)
 				if hit then
@@ -1703,47 +1916,9 @@ function Mesh.ComputeNow(bot, goal, opts)
 		stamp()
 		return false
 	end
-	if reached or not loco then
-		return accept(path, reached, goal)
-	end
-
-	-- Did not reach and the goal is on another floor: a BSP shaft the graph does
-	-- not carry (no cells at an end, CreateNavLadder refused) may still get us
-	-- there. Linked shafts were already open to A*; asking for them again would
-	-- only send the bot to a mount it cannot use.
-	local hunt = loco.Goal
-	local toHunt = hunt and goal:DistToSqr(hunt) < 80 * 80
-	-- This request was already the mount. The graph still cannot get there, so
-	-- the partial path ends on the wall in front of the shaft. Drop it and
-	-- walk the hunt's closest cell instead.
-	if not toHunt and Nav and Nav.HasLadder(loco.ViaLadder) then
-		loco.ViaLadder = nil
-		loco.ViaUp = nil
-		loco.NeedLadder = false
-		if hunt then
-			local p2, r2 = Mesh.FindPath(from, hunt)
-			if p2 then
-				return accept(p2, r2 == true, hunt)
-			end
-		end
-	end
-	if toHunt and math.abs(goal.z - from.z) > 40 and Nav and Nav.FindLadderForGoal
-	and not (path and PathUsesLadder(path)) then
-		local ladder, up = Nav.FindLadderForGoal(from, goal)
-		if Nav.HasLadder(ladder) and not Mesh.IsLadderLinked(ladder) and loco.LadderMountPos then
-			local mount = loco:LadderMountPos(ladder, up)
-			local snap = Mesh.Snap(mount, 160)
-			local mpath, mreached = Mesh.FindPath(from, snap)
-			if mpath and mreached then
-				loco.ViaLadder = ladder
-				loco.ViaUp = up
-				loco.NeedLadder = true
-				return accept(mpath, true, snap)
-			end
-		end
-	end
-
-	return accept(path, false, goal)
+	-- Shafts are graph edges (LinkLadders). A shaft the graph does not carry is
+	-- a paint problem to fix in the mesh, not a detour to improvise here.
+	return accept(path, reached == true, goal)
 end
 
 ---------------------------------------------------------------------------
