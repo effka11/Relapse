@@ -10,7 +10,11 @@ concommand.Add("zs_quickbuyammo", function()
 	local ammo = GAMEMODE.CachedResupplyAmmoType
 	local sig = GAMEMODE.GetAmmoPurchaseSignature and GAMEMODE:GetAmmoPurchaseSignature(ammo)
 	if sig then
-		RunConsoleCommand("zs_pointsshopbuy", "ps_"..sig)
+		if GAMEMODE.RunPointsShopBuy then
+			GAMEMODE:RunPointsShopBuy("ps_" .. sig)
+		else
+			RunConsoleCommand("zs_pointsshopbuy", "ps_"..sig)
+		end
 	end
 end)
 

@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_sksierra", "zombiesurvival/killicons/weapon_zs_sks_side.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_sks_side.png")
+    killicon.Add("mg_sksierra", "zombiesurvival/killicons/weapon_zs_sks_side4.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_sks_side4.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_sks_side.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_sks_side4.png"
 -- WM draws the receiver. Barrel, mag, and stock bone-merge onto WM bones
 -- (tag_barrel_attach, tag_mag_attach, tag_stock_attach). j_gun is parent -1 — do not use it.
 -- Default gun is the first att in each slot. Iron sight has no mdl.

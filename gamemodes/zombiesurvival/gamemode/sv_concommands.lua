@@ -5,7 +5,7 @@ end
 
 concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 	if not (sender:IsValid() and sender:IsConnected() and sender:IsValidLivingHuman()) or #arguments == 0 then return end
-	local usescrap = arguments[2]
+	local usescrap = arguments[2] == "scrap"
 
 	local midwave = GAMEMODE:GetWave() < GAMEMODE:GetNumberOfWaves() / 2 or GAMEMODE:GetWave() == GAMEMODE:GetNumberOfWaves() / 2 and GAMEMODE:GetWaveActive() and CurTime() < GAMEMODE:GetWaveEnd() - (GAMEMODE:GetWaveEnd() - GAMEMODE:GetWaveStart()) / 2
 	if sender:IsSkillActive(SKILL_D_LATEBUYER) and not usescrap and midwave then
@@ -32,7 +32,13 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 	if usescrap and not (itemcat == ITEMCAT_TRINKETS or itemcat == ITEMCAT_AMMO) and not itemtab.CanMakeFromScrap then return end
 
 	local points = usescrap and sender:GetAmmoCount("scrap") or sender:GetPoints()
+	local packPts
 	local cost = itemtab.Price
+	if itemtab.AmmoPack then
+		local raw = usescrap and arguments[3] or arguments[2]
+		packPts = GAMEMODE:ClampAmmoPackPoints(raw)
+		cost = packPts
+	end
 
 	if GAMEMODE:IsClassicMode() and itemtab.NoClassicMode then
 		GAMEMODE:ConCommandErrorMessage(sender, translate.ClientFormat(sender, "cant_use_x_in_classic", itemtab.Name))
@@ -74,7 +80,10 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 		return
 	end
 
-	if itemtab.Callback then
+	if itemtab.AmmoPack then
+		local count = GAMEMODE:GetAmmoPackCountForPoints(itemtab.AmmoPack, packPts)
+		sender:GiveAmmo(count, itemtab.AmmoPack, true)
+	elseif itemtab.Callback then
 		itemtab.Callback(sender)
 	elseif itemtab.SWEP then
 		if GAMEMODE.ZSInventoryItemData[itemtab.SWEP] then
@@ -331,32 +340,61 @@ concommand.Add("worthcheckout", function(sender, command, arguments)
 		return
 	end
 
+	local packPts = GAMEMODE:ClampAmmoPackPoints(nil)
+	local packById = {}
+	local ids = {}
+	for _, id in ipairs(arguments) do
+		local s = tostring(id)
+		local pid, pn = string.match(s, "^packid:(.+):(%d+)$")
+		if pid then
+			local pts = GAMEMODE:ClampAmmoPackPoints(pn)
+			packById[pid] = pts
+			packById[tonumber(pid) or pid] = pts
+		else
+			local n = string.match(s, "^pack:(%d+)$")
+			if n then
+				packPts = GAMEMODE:ClampAmmoPackPoints(n)
+			else
+				ids[#ids + 1] = tonumber(id) or id
+			end
+		end
+	end
+
+	local function ammoPts(id)
+		return packById[id] or packById[tostring(id)] or packPts
+	end
+
 	local cost = 0
 	local hasalready = {}
 
-	for _, id in pairs(arguments) do
-		id = tonumber(id) or id
-
+	for _, id in ipairs(ids) do
 		local tab = FindStartingItem(id)
 		if tab and not hasalready[id] and not (GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(sender, tab)) then
-			cost = cost + (GAMEMODE.GetWorthShopCost and GAMEMODE:GetWorthShopCost(sender, tab) or tab.Price)
+			if tab.AmmoPackScale then
+				cost = cost + ammoPts(id)
+			else
+				cost = cost + (GAMEMODE.GetWorthShopCost and GAMEMODE:GetWorthShopCost(sender, tab) or tab.Price)
+			end
 			hasalready[id] = true
 		end
 	end
 
-	if cost > GAMEMODE.StartingWorth + (sender.ExtraStartingWorth or 0) then return end
+	local left = GAMEMODE:GetRemainingStartingWorth(sender)
+	if cost > left then return end
 
 	hasalready = {}
 
-	for _, id in pairs(arguments) do
-		id = tonumber(id) or id
-
+	for _, id in ipairs(ids) do
 		local tab = FindStartingItem(id)
 		if tab and not hasalready[id] then
 			if GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(sender, tab) then
 				sender:PrintMessage(HUD_PRINTTALK, translate.ClientFormat(sender, "x_requires_a_skill_you_dont_have", tab.Name))
 			elseif tab.NoClassicMode and GAMEMODE:IsClassicMode() then
 				sender:PrintMessage(HUD_PRINTTALK, translate.ClientFormat(sender, "cant_use_x_in_classic_mode", tab.Name))
+			elseif tab.AmmoPackScale then
+				local count = GAMEMODE:GetAmmoPackCountForPoints(tab.AmmoPack, ammoPts(id))
+				sender:GiveAmmo(count, tab.AmmoPack, true)
+				hasalready[id] = true
 			elseif tab.Callback then
 				tab.Callback(sender)
 				hasalready[id] = true
@@ -375,7 +413,8 @@ concommand.Add("worthcheckout", function(sender, command, arguments)
 	end
 
 	if table.Count(hasalready) > 0 then
-		GAMEMODE.CheckedOut[sender:UniqueID()] = true
+		sender.RemainingStartingWorth = left - cost
+		GAMEMODE:SyncRemainingStartingWorth(sender)
 	end
 
 	gamemode.Call("RemoveDuplicateAmmo", sender)
@@ -398,19 +437,38 @@ concommand.Add("zsdropweapon", function(sender, command, arguments)
 	if not (sender:IsValid() and sender:Alive() and sender:Team() == TEAM_HUMAN) or CurTime() < (sender.NextWeaponDrop or 0) or GAMEMODE.ZombieEscape then return end
 	sender.NextWeaponDrop = CurTime() + 0.15
 
-	local invitem
-	if #arguments > 0 then
-		invitem = arguments[1]
-	end
-	if invitem and not sender:HasInventoryItem(invitem) then return end
+	local arg = arguments[1]
+	if arg == "" then arg = nil end
 
-	if invitem or (currentwep and currentwep:IsValid()) then
-		local ent = invitem and sender:DropInventoryItemByType(invitem) or sender:DropWeaponByType(currentwep:GetClass())
-		if ent and ent:IsValid() then
-			local shootpos = sender:GetShootPos()
-			local aimvec = sender:GetAimVector()
-			ent:SetPos(util.TraceHull({start = shootpos, endpos = shootpos + aimvec * 32, mask = MASK_SOLID, filter = sender, mins = Vector(-2, -2, -2), maxs = Vector(2, 2, 2)}).HitPos)
-			ent:SetAngles(sender:GetAngles())
+	local ent
+	if arg then
+		if sender:HasInventoryItem(arg) then
+			ent = sender:DropInventoryItemByType(arg)
+		elseif sender:HasWeapon(arg) then
+			ent = sender:DropWeaponByType(arg)
+		else
+			return
+		end
+	elseif currentwep and currentwep:IsValid() then
+		ent = sender:DropWeaponByType(currentwep:GetClass())
+	end
+
+	if ent and ent:IsValid() then
+		local shootpos = sender:GetShootPos()
+		local aimvec = sender:GetAimVector()
+		local hitpos = util.TraceHull({start = shootpos, endpos = shootpos + aimvec * 32, mask = MASK_SOLID, filter = sender, mins = Vector(-2, -2, -2), maxs = Vector(2, 2, 2)}).HitPos
+		if ent.ApplyDroppedLie then
+			ent:ApplyDroppedLie(sender:EyeAngles().y)
+		else
+			ent:SetAngles(Angle(0, sender:EyeAngles().y, 0))
+		end
+		-- Pancake is ~7 tall and centered; origin on the floor buries it.
+		ent:SetPos(hitpos + Vector(0, 0, 6))
+		local phys = ent:GetPhysicsObject()
+		if phys:IsValid() then
+			phys:SetPos(ent:GetPos())
+			phys:Wake()
+			phys:SetVelocityInstantaneous(sender:GetVelocity() * 0.85)
 		end
 	end
 end)

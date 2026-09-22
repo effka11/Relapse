@@ -278,6 +278,37 @@ cvars.AddChangeCallback("zs_windowtransparency", function(cvar, oldvalue, newval
 	GAMEMODE.WindowTransparency = tonumber(newvalue) == 1
 end)
 
+CreateClientConVar("zs_ammopackpoints", "15", true, false)
+CreateClientConVar("zs_ammopackremember", "1", true, false)
+CreateClientConVar("zs_ammopackremembermode", "window", true, false)
+cvars.AddChangeCallback("zs_ammopackpoints", function()
+	if RelapseUI and RelapseUI.SyncAmmoPackSliders then
+		RelapseUI.SyncAmmoPackSliders()
+	end
+	if GAMEMODE.RefreshAmmoPackShopUI then
+		GAMEMODE:RefreshAmmoPackShopUI()
+	end
+end)
+cvars.AddChangeCallback("zs_ammopackremember", function()
+	if GAMEMODE.GetAmmoPackRememberMode and GAMEMODE:GetAmmoPackRememberMode() == "off" then
+		GAMEMODE.AmmoPackPointsSession = nil
+	end
+	if RelapseUI and RelapseUI.SyncAmmoPackSliders then
+		RelapseUI.SyncAmmoPackSliders()
+	end
+	if GAMEMODE.RefreshAmmoPackShopUI then
+		GAMEMODE:RefreshAmmoPackShopUI()
+	end
+end)
+cvars.AddChangeCallback("zs_ammopackremembermode", function()
+	if RelapseUI and RelapseUI.SyncAmmoPackSliders then
+		RelapseUI.SyncAmmoPackSliders()
+	end
+	if GAMEMODE.RefreshAmmoPackShopUI then
+		GAMEMODE:RefreshAmmoPackShopUI()
+	end
+end)
+
 GM.FontEffects = CreateClientConVar("zs_fonteffects", "0", true, false):GetBool()
 cvars.AddChangeCallback("zs_fonteffects", function(cvar, oldvalue, newvalue)
 	GAMEMODE.FontEffects = tonumber(newvalue) == 1

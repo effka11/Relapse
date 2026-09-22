@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_p320", "zombiesurvival/killicons/weapon_zs_m19_side.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_m19_side.png")
+    killicon.Add("mg_p320", "zombiesurvival/killicons/weapon_zs_m19_side2.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_m19_side2.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_m19_side.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_m19_side2.png"
 -- World receiver is the parent (same as 1911). Slide and mag bone-merge onto it.
 -- WM barrel is along +Z at identity; roll 90 puts it along Y for a side view.
 SWEP.RelapsePreviewBoneMerge = true

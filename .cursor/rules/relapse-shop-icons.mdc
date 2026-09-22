@@ -1,12 +1,14 @@
 ---
-description: Relapse shop gun icons — Makarov-style PNG silhouettes, never VTF/CAC
+description: Relapse shop/inventory gun icons — generate, AA PNG, insert, tune. Never VTF/CAC.
 globs: gamemodes/zombiesurvival/**/*.lua,addons/zzz_relapse_mw_sykov/**/*.lua,gamemodes/zombiesurvival/content/materials/zombiesurvival/killicons/**
 alwaysApply: false
 ---
 
 # Relapse иконки шопа
 
-Эталон файла — `weapon_zs_makarov.png`. Направление — MP5 / 1911. Карточка: `RelapseUI.MakeSilhouetteIcon` (белый `SetImageColor` на альфе).
+Эталон файла — **T1 с AA**: `weapon_zs_makarov3.png` / `weapon_zs_uzi_side8.png`. Направление — MP5 / 1911. Карточка: `PaintCardSilhouette`. Хотбар 1–9 / инвентарь: `DrawInvSlotIcon`. Не `PlaceWorldModelInHands`. 3D вьюер — правило превью.
+
+Не вставлять, пока юзер не сказал «ок». Не ретайрить уже повешенное. 1 px «выступы» не срезать пачкой — это AA или деталь силуэта.
 
 ## Файл
 
@@ -15,31 +17,86 @@ alwaysApply: false
 | Где | `gamemodes/zombiesurvival/content/materials/zombiesurvival/killicons/` |
 | Формат | PNG 256×256 RGBA, **без** `.vmt` / `.vtf` |
 | Цвет | RGB 255,255,255; форма **только в альфе** |
-| Край | альфа 0 или 255, без SSAA / Gaussian |
+| Край | мягкая альфа (LANCZOS), как killicon молотка на карточке. **Не** 0/255 hard |
 | В Lua | путь **с** `.png` |
+| Высота | силуэт ~102 px, pad y ~77 (центр на 256) |
 
-Профиль сбоку. Дуло **вправо**, приклад / рукоять влево. CAC Viper часто влево — после конверта отзеркалить. Дырка скобы курка — ок. Высота силуэта как у Макарова (~102 px, pad y ~77).
+Профиль сбоку. Дуло **вправо**, приклад / рукоять влево. CAC Viper часто влево — после конверта отзеркалить. Дырка скобы курка — ок.
 
 ```lua
--- ❌ CAC / entity spawnicon (дыры или голубой квадрат)
-killicon.Add("mg_m1911", "VGUI/entities/mg_m1911", color_white)
+-- ❌ CAC / spawnicon (дыры или голубой квадрат)
 PreviewIcon = "vgui/spawnicons/icon_cac_weapon_pi_mike_1911"
 
--- ❌ VTF рядом с PNG — карточка становится циан-прямоугольником
+-- ❌ VTF рядом с PNG — циан-прямоугольник
 -- weapon_zs_foo.png + weapon_zs_foo.vmt
 
--- ✅ как Макаров
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov.png"
+-- ❌ перезапись того же basename — Source не отдаст новый PNG
+-- weapon_zs_mp5_side6.png снова
+
+-- ✅ новое имя, тот же путь в четырёх местах
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side7.png"
 ```
 
-Тот же путь в `killicon.Add`, `WepSelectIcon`, `SWEP.RelapsePreviewIcon` и `GM.RelapseWeapons.<class>.PreviewIcon`.
+Тот же путь: `killicon.Add`, `WepSelectIcon`, `SWEP.RelapsePreviewIcon`, `GM.RelapseWeapons.<class>.PreviewIcon`. Overlay `relapse_mw_sykov_zs.lua` (`ApplyOne`) перебивает воркшопный CAC на CLIENT.
 
-## Откуда карточка берёт путь
+`RelapseUI.CardIconPath` не падает на `vgui/entities` и `spawnicons`.
 
-`RelapseUI.CardIconPath`: PreviewIcon на предмете / SWEP / `RelapseWeapons`. Не падать на `vgui/entities` и `spawnicons`. Воркшопный SWEP перебивает killicon — `relapse_mw_sykov_zs.lua` (`ApplyOne`) заново ставит PNG на CLIENT.
+## Генерация
 
-## Кэш Source
+Пока юзер не сказал вставлять — только картинки, не killicons и не Lua.
 
-`restart` карты **не** перечитывает PNG. Имя без расширения одно на PNG и VTF: после плохого `weapon_zs_m1911.vtf` файл `weapon_zs_m1911.png` всё равно тянет старый материал.
+Инструмент: `GenerateImage`, квадрат `1:1`. Белый `#FFFFFF` силуэт на чёрном `#000000`. Без тени, обводки, текста, карточки шопа. Край сглаженный (MSAA 1 px), не лего.
 
-Смена картинки = **новое basename** + правка Lua. Проверка: выйти в меню и зайти на карту, не `restart`.
+Референсы в `reference_image_paths`:
+
+1. Скрин карточек этого тира (какой ствол с какой полки).
+2. Текущий killicon, **склеенный на чёрное** (белый PNG с альфой в ридере — белый квадрат).
+3. T1 AA-эталон: пистолет → `makarov3` / `colt1911_3`; ПП → `uzi_side8`; длинный → `model680_3` / `sks_side4`.
+
+В промпте назвать **конкретный ствол** и чем он не является. Нейросеть путает соседей:
+
+| Ствол | Не путать с |
+|---|---|
+| СКС | АК (банан, цельный приклад) |
+| UMP-45 | MP5 (треугольник vs телескоп) |
+| M19 | 1911 (курка нет) / Макаров |
+| MK2 | 680 (рычаг vs помпа), СКС (нет коробки) |
+| Uzi | MP5 (магазин в пистолетной рукояти) |
+| АС «Вал» | АК (тонкий ствол). У «Вала» толстый интегральный глушитель и скелетный приклад |
+| FiNN | АК / ПКМ. Прямой короб, не банан и не лента |
+| JAK-12 | Origin (складной приклад) и АК (банан). Цельный приклад, прямой короб |
+| SCAR-H | АК (банан) и FAL (длинный тонкий ствол). Складной приклад, прямой магазин |
+| ПКМ | FiNN (скелет) и АК (банан). Деревянный приклад, короб под ленту |
+| FAL | SCAR (короче) и АК. Длинный тонкий ствол, прямой магазин |
+| AX-50 | FAL и охотничий болт с оптикой. Приклад — скелет: две тонкие тяги и толстый затыльник, не треугольник SCAR. Длинный ствол. Без прицела и без сошек |
+
+После генерации сверить силуэт со скрином. Кривой — перерисовать, не конвертить.
+
+## Конверт
+
+Когда юзер сказал вставлять. Luma → альфа, crop (floor 12, pad 4), вписать в **240×102**, LANCZOS, **не** порог после ресайза, холст 256, центр, RGB белый.
+
+Новое basename: `side6` → `side7`, `makarov` → `makarov3`. Старый PNG можно оставить.
+
+Класс в `RelapseUI.CardIconSmooth` — подпись iconsdev «Иконка сглажена».
+
+## Полка
+
+Абсолютный размер — **T1 после подгонки**, не CoD и не «вписать в карточку впритык». Знак, не фото. T2+ к той же массе.
+
+| | Зум шопа | Заметка |
+|---|---:|---|
+| Пистолет / Uzi | ~1.21–1.27 | короткий |
+| Длинный (680, СКС, MK2) | ~1.71–1.79 | PNG квадрат с пустым Y |
+
+Шоп: `CardIconZoom` / `CardIconPos` / `CardIconAng` (угол почти всегда 0). Клип — **карточка**, не внутренняя рамка.
+
+Инвентарь / HUD 1–9: зеркало, потом наклон. Дефолт **45°** (дуло вверх-влево). Маркеры стоя (`weapon_zs_aloe = 0`). Не мешать 0° у пистолетов и 45° у винтовок. `InvSlotIconZoom` / `InvSlotIconShift` (extra-grid) / `InvSlotIconTilt`.
+
+Живая подгонка: `relapse_iconsdev`. Ползунки — дельты. **Копировать** → lua таблица. **Сброс** — только дельты выбранного. Пока команда включена, Q открывает инвентарь нажатием. Вставить числа в `relapse_ui.lua` только по таблице юзера. Не переписывать чужие стволы в той же таблице.
+
+Не поднимать зум «потому что ствол дороже». Не трогать 1 px контура.
+
+## Кэш
+
+`restart` PNG не перечитывает. Смена картинки = новое basename + Lua. Проверка: меню → карта, не `restart`. Иконка в карточке, killicon, хотбар 1–9.

@@ -6,7 +6,7 @@ UI обрезан. Cvar'ы и колбэки в `cl_options.lua` живые — 
 
 ## Сейчас на экране
 
-Вкладка **Игра**: шаг поворота пропа (`zs_proprotationsnap`, combo 0 / 15 / 30 / 45).
+Вкладка **Игра**: шаг поворота пропа (`zs_proprotationsnap`, combo 0 / 15 / 30 / 45). Заголовок Магазин: база пачки патронов (`zs_ammopackpoints`, слайдер 5–45 шаг 5, по умолчанию 15), сохранять выбор из шопа (`zs_ammopackremember`, по умолчанию вкл.), рамка (`zs_ammopackremembermode`: window / game / always).
 
 Строка: `LANGUAGE.options_prop_snap`. RU: «Шаг поворота пропа», не «пропана».
 

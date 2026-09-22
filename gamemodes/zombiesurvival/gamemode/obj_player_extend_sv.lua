@@ -821,21 +821,27 @@ function meta:DropWeaponByType(class)
 	if wep and wep:IsValid() and not wep.Undroppable then
 		local ent = ents.Create("prop_weapon")
 		if ent:IsValid() then
-			ent:SetWeaponType(class)
+			-- Spawn first. PhysicsInit on an MW world model before/during Spawn
+			-- voids the entity. Apply model + box after it exists.
 			ent:Spawn()
+			ent:SetWeaponType(class)
 
 			if wep.AmmoIfHas then
 				local ammocount = wep:GetPrimaryAmmoCount()
-				local desiredrop = math.min(ammocount, wep.Primary.ClipSize) - wep:Clip1()
+				local clip1 = wep:Clip1() or 0
+				local desiredrop = math.min(ammocount, wep.Primary.ClipSize) - clip1
 				if desiredrop > 0 then
 					wep:TakeCombinedPrimaryAmmo(desiredrop)
 					wep:SetClip1(desiredrop)
 				end
 			end
-			ent:SetClip1(wep:Clip1())
-			ent:SetClip2(wep:Clip2())
+			local ok1, clip1 = pcall(function() return wep:Clip1() end)
+			local ok2, clip2 = pcall(function() return wep:Clip2() end)
+			ent:SetClip1((ok1 and clip1) or 0)
+			ent:SetClip2((ok2 and clip2) or 0)
 			ent.DroppedTime = CurTime()
 
+			wep.RelapseConvertedToLoot = true
 			self:StripWeapon(class)
 			self:UpdateAltSelectedWeapon()
 
@@ -852,11 +858,15 @@ function meta:DropAllWeapons()
 		if wep:IsValid() then
 			local ent = self:DropWeaponByType(wep:GetClass())
 			if ent and ent:IsValid() then
-				ent:SetPos(vPos + Vector(math.Rand(-16, 16), math.Rand(-16, 16), math.Rand(2, zmax)))
-				ent:SetAngles(VectorRand():Angle())
+				if ent.ApplyDroppedLie then
+					ent:ApplyDroppedLie(math.Rand(0, 360))
+				else
+					ent:SetAngles(VectorRand():Angle())
+				end
+				ent:SetPos(vPos + Vector(math.Rand(-16, 16), math.Rand(-16, 16), math.Rand(8, zmax)))
 				local phys = ent:GetPhysicsObject()
 				if phys:IsValid() then
-					phys:AddAngleVelocity(Vector(math.Rand(-720, 720), math.Rand(-720, 720), math.Rand(-720, 720)))
+					phys:SetPos(ent:GetPos())
 					phys:ApplyForceCenter(phys:GetMass() * (math.Rand(32, 328) * VectorRand():GetNormalized() + vVel))
 				end
 			end

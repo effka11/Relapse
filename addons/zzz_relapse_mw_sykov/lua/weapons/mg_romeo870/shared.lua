@@ -12,11 +12,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_romeo870", "zombiesurvival/killicons/weapon_zs_model680.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_model680.png")
+    killicon.Add("mg_romeo870", "zombiesurvival/killicons/weapon_zs_model680_3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_model680_3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_model680.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_model680_3.png"
 -- WM is a bone rig: VVD has every bodygroup, default DrawModel is empty, no j_gun.
 -- Default gun is the first att in each slot. Stock is a receiver bodygroup, not an att.
 -- Barrel/pump live near j_gun (~1 hu), so one origin like Makarov — not bone merge onto WM.

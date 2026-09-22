@@ -7,11 +7,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_makarov", "zombiesurvival/killicons/weapon_zs_makarov.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_makarov.png")
+    killicon.Add("mg_makarov", "zombiesurvival/killicons/weapon_zs_makarov3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_makarov3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_makarov3.png"
 -- MW stub WM/VM has no gun mesh. Default slide + mag + grip is the actual PM.
 SWEP.RelapsePreviewParts = {
 	"models/viper/mw/attachments/attachment_vm_pi_mike_barrel.mdl",

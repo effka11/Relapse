@@ -515,6 +515,9 @@ function GM:FadeRelapseGameInv(open)
 				end
 			end
 		end
+		if RelapseUI.IconsDevRaise then
+			RelapseUI.IconsDevRaise()
+		end
 		return
 	end
 
@@ -635,6 +638,9 @@ function GM:SelectRelapseGameInv(slot, opts)
 		frame.SelInv = entry.id
 	else
 		frame.SelInv = nil
+	end
+	if not opts.silent and RelapseUI.IconsDevSelect and entry.id then
+		RelapseUI.IconsDevSelect(entry.id, "inv")
 	end
 	if entry.t == "wep" and not opts.silent and self.RelapseSelectWeapon and IsValid(MySelf) then
 		local cur = MySelf:GetActiveWeapon()
@@ -845,6 +851,9 @@ function GM:OpenInventory()
 		net.Start("relapse_inv_sync")
 		net.SendToServer()
 		self:RefreshRelapseGameInv({ preferHeld = true })
+		if RelapseUI.IconsDevBindInv then
+			RelapseUI.IconsDevBindInv(self.InventoryMenu)
+		end
 		return
 	end
 
@@ -899,4 +908,7 @@ function GM:OpenInventory()
 	frame:SetKeyboardInputEnabled(false)
 	self:PlaceRelapseInvChrome()
 	self:RefreshRelapseGameInv({ preferHeld = true })
+	if RelapseUI.IconsDevBindInv then
+		RelapseUI.IconsDevBindInv(frame)
+	end
 end

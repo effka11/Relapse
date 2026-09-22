@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_falima", "zombiesurvival/killicons/weapon_zs_fal_side.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_fal_side.png")
+    killicon.Add("mg_falima", "zombiesurvival/killicons/weapon_zs_fal_side2.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_fal_side2.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_fal_side.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_fal_side2.png"
 -- Default receiver is a real mdl (not SCAR's empty att_receiver). Forend too.
 -- Barrel/mag/stock/forend bone-merge onto tag_*_attach. WM variant 0 — do not copy MP5 [0]=1.
 -- DrawModel after SetupBones is +Z: hull + LocalAng 90 like AK/SCAR/M4.

@@ -252,6 +252,7 @@ local function ReportError(bot, err)
 	if (errorLog[key] or 0) <= now then
 		errorLog[key] = now + 5
 		AI.Warn("brain '%s' error (%s): %s", key, IsValid(bot.Player) and bot.Player:Nick() or "?", tostring(err))
+		if AI.Rec then AI.Rec.OnLuaError(bot, err) end
 	end
 end
 
@@ -281,6 +282,10 @@ hook.Add("StartCommand", "RelapseAI", function(pl, cmd)
 		ReportError(bot, result)
 	end
 	cmd:SetButtons(buttons)
+	if AI.Rec then
+		local okRec, errRec = pcall(AI.Rec.OnCmd, pl, cmd)
+		if not okRec then AI.Rec.Warn(errRec) end
+	end
 end)
 
 hook.Add("Think", "RelapseAI.Manager", function()
@@ -313,6 +318,10 @@ hook.Add("Think", "RelapseAI.Manager", function()
 					ok, err = pcall(bot.Loco.Think, bot.Loco, dt)
 					if not ok then ReportError(bot, err) end
 					bot.ThinkMs = (SysTime() - t0) * 1000
+					if AI.Rec then
+						local ok2, err2 = pcall(AI.Rec.AfterThink, bot)
+						if not ok2 then AI.Rec.Warn(err2) end
+					end
 				end
 			elseif now - (pl.RelapseAIDeathThink or 0) > 0.5 then
 				-- The engine normally runs PlayerDeathThink for bots; make sure respawn logic ticks.

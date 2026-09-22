@@ -54,6 +54,9 @@ local function ApplyOne(class, def)
 	wep.WalkSpeed = SPEED_NORMAL or 95
 	wep.NoDeploySpeedChange = true
 
+	-- Hull box lives on prop_weapon (DroppedWeaponBox). A centered X-long cube
+	-- here made SCAR stand on end: mesh is +Z, physics rested on XY.
+
 	if R.Melee then
 		wep.IsMelee = true
 		wep.Melee = true
@@ -213,6 +216,78 @@ local function WrapMWCallback(wep)
 	end
 end
 
+-- Dropped MW SWEPs have no owner. Pack Think then calls GetInfoNum on NULL.
+local function WrapMWThink(wep)
+	if not istable(wep) or wep.RelapseThinkOwnerWrap then return end
+	if not isfunction(wep.Think) then return end
+	wep.RelapseThinkOwnerWrap = true
+	local old = wep.Think
+	wep.Think = function(self, ...)
+		if not IsValid(self:GetOwner()) then return end
+		return old(self, ...)
+	end
+end
+
+local function IsMWWeaponTable(wep, class)
+	class = class or (istable(wep) and wep.ClassName)
+	if isstring(class) and (class == "mg_base" or string.sub(class, 1, 3) == "mg_") then
+		return true
+	end
+	return isstring(class) and weapons.IsBasedOn and weapons.IsBasedOn(class, "mg_base")
+end
+
+-- Engine DropWeapon leaves an MW SWEP in the world (invisible, no physics).
+-- Relapse loot is prop_weapon; convert once if DropWeaponByType did not.
+-- Only MW: StripWeapon after placing a deployable (ficus) also fires OnDrop.
+local function WrapMWDrop(wep)
+	if not istable(wep) or wep.RelapseDropWrap then return end
+	if not IsMWWeaponTable(wep, wep.ClassName) then return end
+	wep.RelapseDropWrap = true
+	local old = wep.OnDrop
+	wep.OnDrop = function(self, ...)
+		if isfunction(old) then
+			old(self, ...)
+		end
+		if not SERVER or not IsValid(self) or self.RelapseConvertedToLoot then
+			return
+		end
+		if not IsMWWeaponTable(self, self:GetClass()) then
+			return
+		end
+		if IsValid(self:GetOwner()) then
+			return
+		end
+		self.RelapseConvertedToLoot = true
+		local class = self:GetClass()
+		local pos, ang = self:GetPos(), self:GetAngles()
+		local ok1, clip1 = pcall(function() return self:Clip1() end)
+		local ok2, clip2 = pcall(function() return self:Clip2() end)
+		timer.Simple(0, function()
+			if IsValid(self) then
+				self:Remove()
+			end
+			local ent = ents.Create("prop_weapon")
+			if not (ent and ent:IsValid()) then return end
+			ent:Spawn()
+			ent:SetWeaponType(class)
+			if ent.ApplyDroppedLie then
+				ent:ApplyDroppedLie(ang.y)
+			else
+				ent:SetAngles(ang)
+			end
+			ent:SetPos(pos + Vector(0, 0, 6))
+			ent:SetClip1((ok1 and clip1) or 0)
+			ent:SetClip2((ok2 and clip2) or 0)
+			ent.DroppedTime = CurTime()
+			local phys = ent:GetPhysicsObject()
+			if phys:IsValid() then
+				phys:SetPos(ent:GetPos())
+				phys:Wake()
+			end
+		end)
+	end
+end
+
 -- Empty clip fails engine SelectWeapon. MW Holster returns false until
 -- CanSwitch, which cancels 1-9 and leaves Deploy uncalled (no viewmodel).
 local function WrapMWSelect(wep)
@@ -312,6 +387,8 @@ end
 local function WrapMWHitgroups()
 	WrapMWCallback(weapons.GetStored("mg_base"))
 	WrapMWSelect(weapons.GetStored("mg_base"))
+	WrapMWThink(weapons.GetStored("mg_base"))
+	WrapMWDrop(weapons.GetStored("mg_base"))
 	WrapReloadAnim(weapons.GetStored("mg_base"))
 	WrapRecoilMul(weapons.GetStored("mg_base"))
 	local list = weapons.GetList()
@@ -320,10 +397,14 @@ local function WrapMWHitgroups()
 		local class = list[i].ClassName
 		if class then
 			local stored = weapons.GetStored(class)
-			WrapMWCallback(stored)
-			WrapMWSelect(stored)
-			WrapReloadAnim(stored)
-			WrapRecoilMul(stored)
+			if IsMWWeaponTable(stored, class) then
+				WrapMWCallback(stored)
+				WrapMWSelect(stored)
+				WrapMWThink(stored)
+				WrapMWDrop(stored)
+				WrapReloadAnim(stored)
+				WrapRecoilMul(stored)
+			end
 		end
 	end
 end

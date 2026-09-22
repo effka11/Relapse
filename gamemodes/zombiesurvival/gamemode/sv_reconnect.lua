@@ -194,7 +194,9 @@ function GM:BuildReconnectState(pl)
 		stowagecaches = pl.StowageCaches or 0,
 		latebuyermessage = pl.LateBuyerMessage,
 		diedduringwave0 = pl.DiedDuringWave0,
-		checkedout = self.CheckedOut[pl:UniqueID()]
+		checkedout = self.CheckedOut[pl:UniqueID()],
+		remainingstartingworth = pl.RemainingStartingWorth,
+		remainingstartingworthbase = pl.RemainingStartingWorthBase
 	}
 end
 
@@ -237,6 +239,11 @@ function GM:ApplyReconnectRoundStats(pl, state)
 
 	if state.checkedout then
 		self.CheckedOut[pl:UniqueID()] = true
+	end
+	if state.remainingstartingworth ~= nil then
+		pl.RemainingStartingWorth = state.remainingstartingworth
+		pl.RemainingStartingWorthBase = state.remainingstartingworthbase
+		self:SyncRemainingStartingWorth(pl)
 	end
 
 	if state.damagedealt then

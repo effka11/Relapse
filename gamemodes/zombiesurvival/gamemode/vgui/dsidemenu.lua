@@ -13,6 +13,7 @@ function PANEL:Init()
 end
 
 function PANEL:Think()
+	if RelapseUI.IconsDevOn then return end
 	local time = RealTime()
 	if self.StartChecking and time >= self.StartChecking then
 		if not GAMEMODE:IsMenuKeyDown() and not self._RelapseClosing then

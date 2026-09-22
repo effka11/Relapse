@@ -30,7 +30,12 @@ SWEP.RelapsePreviewParts = {
 }
 SWEP.RelapsePreviewPartLocalPos = Vector(0, 0, 8)
 SWEP.RelapsePreviewPartLocalAng = Angle(0, 180, 0)
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_aloe_k4.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_aloe_k5.png"
+
+if CLIENT then
+	killicon.Add("weapon_zs_aloe", "zombiesurvival/killicons/weapon_zs_aloe_k5.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_aloe_k5.png")
+end
 SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
 SWEP.RelapsePreviewLocalAng = Angle(0, 0, 0)
 SWEP.RelapsePreviewLift = 0.4

@@ -75,6 +75,7 @@ include("cl_relapse_wmpose.lua")
 include("cl_relapse_inventory.lua")
 include("cl_relapse_loadout.lua")
 include("cl_relapse_breath.lua")
+include("cl_relapse_iconsdev.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -930,7 +931,8 @@ function GM:RequestedDefaultCart()
 		for i, carttab in ipairs(self.SavedCarts) do
 			if carttab[1] and string.lower(carttab[1]) == defaultcart then
 				gamemode.Call("SuppressArsenalUpgrades", 1)
-				RunConsoleCommand("worthcheckout", unpack(carttab[2]))
+				local pack = self.GetClientAmmoPackPoints and self:GetClientAmmoPackPoints() or 15
+				RunConsoleCommand("worthcheckout", "pack:" .. pack, unpack(carttab[2]))
 
 				return
 			end
@@ -1333,6 +1335,7 @@ function GM:RestartRound()
 	self.TheLastHuman = nil
 	self.RoundEnded = nil
 	LASTHUMAN = nil
+	self.AmmoPackPointsSession = nil
 
 	if pEndBoard and pEndBoard:IsValid() then
 		pEndBoard:Remove()
@@ -1777,7 +1780,16 @@ function GM:_HUDPaintBackground()
 end
 
 local function DropWeapon()
-	RunConsoleCommand("zsdropweapon", GAMEMODE.InventoryMenu.SelInv)
+	local frame = GAMEMODE.InventoryMenu
+	if frame and frame.SelKind == "ammo" and frame.SelId then
+		RunConsoleCommand("zsdropammo", frame.SelId)
+		return
+	end
+	if frame and frame.SelKind == "wep" and frame.SelId then
+		RunConsoleCommand("zsdropweapon", frame.SelId)
+		return
+	end
+	RunConsoleCommand("zsdropweapon", frame and frame.SelInv or "")
 end
 
 local function AltSelItemUpd()
@@ -1834,6 +1846,9 @@ function GM:HumanMenu()
 		if self.FadeRelapseGameInv then
 			self:FadeRelapseGameInv(true)
 		end
+		if RelapseUI.IconsDevRaise then
+			RelapseUI.IconsDevRaise()
+		end
 		return
 	end
 
@@ -1855,6 +1870,9 @@ function GM:HumanMenu()
 	self:DoAltSelectedItemUpdate()
 	if self.FadeRelapseGameInv then
 		self:FadeRelapseGameInv(true)
+	end
+	if RelapseUI.IconsDevRaise then
+		RelapseUI.IconsDevRaise()
 	end
 end
 
@@ -2286,6 +2304,13 @@ function GM:OnMenuKeyPress()
 	if not IsValid(pl) then return end
 	local team = P_Team(pl)
 	if team == TEAM_HUMAN and pl:Alive() and not pl:IsHolding() then
+		if RelapseUI.IconsDevOn then
+			local inv = self.InventoryMenu
+			if IsValid(inv) and inv:IsVisible() and not inv._RelapseClosing and not self._RelapseGameInvClosing then
+				self:CloseRelapseGameInv()
+				return
+			end
+		end
 		gamemode.Call("HumanMenu")
 	elseif team == TEAM_ZOMBIE and not pl:Alive() then
 		gamemode.Call("ZombieSpawnMenu")
@@ -2293,6 +2318,7 @@ function GM:OnMenuKeyPress()
 end
 
 function GM:OnMenuKeyRelease()
+	if RelapseUI.IconsDevOn then return end
 	if self.CloseRelapseGameInv then
 		self:CloseRelapseGameInv()
 		return

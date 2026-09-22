@@ -1680,7 +1680,7 @@ function LayoutCharacter(frame)
 	end
 	if IsValid(frame.InvLayout) then
 		frame.InvLayout:SetPos(0, 0)
-		frame.InvLayout:SetWide(math.max(1, frame.InvScroll:GetWide() - RelapseUI.ScrollBarW()))
+		frame.InvLayout:SetWide(math.max(1, frame.InvScroll:GetWide() - RelapseUI.ScrollBarHitW()))
 	end
 	GAMEMODE:LayoutCharacterFooter(frame)
 end

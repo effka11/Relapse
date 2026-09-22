@@ -178,6 +178,10 @@ function meta:ApplySkills(override)
 			net.WriteUInt(self.ExtraStartingWorth, 16)
 		net.Send(self)
 	end
+
+	if SERVER and GAMEMODE.ApplyExtraStartingWorth then
+		GAMEMODE:ApplyExtraStartingWorth(self)
+	end
 end
 
 -- For trinkets, these apply after your skills, and they need to work differently so they can't be used to "update" your skills midgame.

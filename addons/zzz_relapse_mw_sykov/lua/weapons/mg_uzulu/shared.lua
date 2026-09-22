@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_uzulu", "zombiesurvival/killicons/weapon_zs_uzi_side6.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_uzi_side6.png")
+    killicon.Add("mg_uzulu", "zombiesurvival/killicons/weapon_zs_uzi_side8.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_uzi_side8.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_uzi_side6.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_uzi_side8.png"
 -- w_uzulu default DrawModel is empty. Variant 1 is the gun. After SetupBones the
 -- WM points +Z (yaw 90 stands it on end). Same framing as SKS: hull + LocalAng 90.
 -- Offset 0: orbit the GetRenderBounds center, do not guess hull XY.

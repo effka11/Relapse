@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_sbeta", "zombiesurvival/killicons/weapon_zs_mk2_side2.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_mk2_side2.png")
+    killicon.Add("mg_sbeta", "zombiesurvival/killicons/weapon_zs_mk2_side3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_mk2_side3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mk2_side2.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mk2_side3.png"
 -- WM draws the receiver and default stock (att_stock has no mdl). Barrel
 -- bone-merges onto tag_barrel_attach. Tube lives on the receiver — no mag att.
 -- Default optic is att_sight (irons), not the MK2 scope. WM variant 0 — do not

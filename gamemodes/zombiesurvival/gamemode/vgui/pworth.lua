@@ -18,24 +18,104 @@ hook.Add("SetWave", "CloseWorthOnWave1", function(wave)
 end)
 
 local ExtraStartingWorth = 0
+local RemainingStartingWorth
+local remainingworth = 0
+local WorthButtons = {}
+
 local function GetStartingWorth()
 	return GAMEMODE.StartingWorth + ExtraStartingWorth
 end
 
+local function GetSpendableWorth()
+	if RemainingStartingWorth ~= nil then
+		return RemainingStartingWorth
+	end
+	return GetStartingWorth()
+end
+
+local function WorthLinkedAmmo()
+	local linked = {}
+	if IsValid(MySelf) then
+		for _, wep in pairs(MySelf:GetWeapons()) do
+			if not IsValid(wep) then continue end
+			local ammo = GAMEMODE.GetWeaponAmmoType and GAMEMODE:GetWeaponAmmoType(wep)
+			if not ammo then
+				ammo = RelapseUI.ShopItemAmmoId({ SWEP = wep:GetClass() })
+			end
+			if ammo then
+				linked[string.lower(ammo)] = true
+			end
+		end
+	end
+	for _, btn in pairs(WorthButtons) do
+		if not (IsValid(btn) and btn.On) then continue end
+		local tab = FindStartingItem(btn.ID)
+		local ammo = RelapseUI.ShopItemAmmoId(tab)
+		if ammo then
+			linked[string.lower(ammo)] = true
+		end
+	end
+	return linked
+end
+
+function GM:RefreshWorthAmmoPackUI()
+	if not IsValid(pWorth) then return end
+	if pWorth._WorthCheckout or pWorth._RelapseClosing then return end
+
+	local left = GetSpendableWorth()
+	for _, btn in pairs(WorthButtons) do
+		if not IsValid(btn) then continue end
+
+		local tab = FindStartingItem(btn.ID)
+		if tab then
+			if tab.AmmoPackScale then
+				if not btn.RelapseAmmoPackPts then
+					btn.Price = GAMEMODE:GetClientAmmoPackPoints()
+				end
+				if IsValid(btn.PriceLabel) then
+					btn.PriceLabel:SetText(tostring(btn.Price))
+					btn.PriceLabel:SizeToContents()
+				end
+				RelapseUI.BindShopAmmoName(btn.NameLabel, tab, btn.RelapseAmmoPackPts)
+				btn:InvalidateLayout()
+			end
+			if btn.On then
+				left = left - (btn.Price or tab.Price)
+			end
+		end
+	end
+
+	remainingworth = left
+	RelapseUI.UpdateWorthLabel(pWorth.WorthLab, remainingworth, GetStartingWorth())
+	RelapseUI.SyncAmmoCardLinks(WorthButtons, WorthLinkedAmmo())
+end
+
 net.Receive("zs_extrastartingworth", function(len)
 	ExtraStartingWorth = net.ReadUInt(16)
+	if RemainingStartingWorth == nil and IsValid(pWorth) then
+		GAMEMODE:RefreshWorthAmmoPackUI()
+	end
+end)
+
+net.Receive("zs_remainingstartingworth", function(len)
+	RemainingStartingWorth = net.ReadInt(16)
+	if IsValid(pWorth) and not pWorth._WorthCheckout and not pWorth._RelapseClosing then
+		GAMEMODE:RefreshWorthAmmoPackUI()
+	end
 end)
 
 CreateClientConVar("zs_defaultcart", "", true, false)
-
-local remainingworth = 0
-local WorthButtons = {}
 
 local function Checkout(tobuy)
 	if tobuy and #tobuy > 0 then
 		gamemode.Call("SuppressArsenalUpgrades", 1)
 
-		RunConsoleCommand("worthcheckout", unpack(tobuy))
+		local pack = GAMEMODE.GetClientAmmoPackPoints and GAMEMODE:GetClientAmmoPackPoints() or 15
+		RemainingStartingWorth = remainingworth
+		if IsValid(pWorth) then
+			pWorth._WorthCheckout = true
+		end
+		RunConsoleCommand("worthcheckout", "pack:" .. pack, unpack(tobuy))
 
 		if pWorth and pWorth:IsValid() then
 			pWorth:Close()
@@ -50,6 +130,9 @@ local function CheckoutDoClick(self)
 	for _, btn in pairs(WorthButtons) do
 		if btn and btn.On and btn.ID then
 			table.insert(tobuy, btn.ID)
+			if btn.RelapseAmmoPackPts then
+				table.insert(tobuy, "packid:" .. tostring(btn.ID) .. ":" .. btn.RelapseAmmoPackPts)
+			end
 		end
 	end
 
@@ -81,6 +164,19 @@ local function WorthThink(self)
 	if not IsValid(MySelf) then return end
 	if MySelf:Team() ~= TEAM_HUMAN then
 		self:Close()
+		return
+	end
+	local classes = {}
+	for _, wep in pairs(MySelf:GetWeapons()) do
+		if IsValid(wep) then
+			classes[#classes + 1] = wep:GetClass()
+		end
+	end
+	table.sort(classes)
+	local key = table.concat(classes, ",")
+	if self._AmmoLinkKey ~= key then
+		self._AmmoLinkKey = key
+		RelapseUI.SyncAmmoCardLinks(WorthButtons, WorthLinkedAmmo())
 	end
 end
 
@@ -98,7 +194,10 @@ function MakepWorth()
 		pWorth = nil
 	end
 
-	remainingworth = GetStartingWorth()
+	remainingworth = GetSpendableWorth()
+	for k in pairs(WorthButtons) do
+		WorthButtons[k] = nil
+	end
 
 	local frame, L, topspace, bottomspace, propertysheet = RelapseUI.BuildShopFrame("shop_worth_title", {
 		shop = "worth"
@@ -116,7 +215,7 @@ function MakepWorth()
 
 		local hasItems = false
 		for _, tab in ipairs(GAMEMODE.Items) do
-			if tab.WorthShop and tab.Category == catid then
+			if tab.WorthShop and not tab.WorthHidden and tab.Category == catid then
 				hasItems = true
 				break
 			end
@@ -126,6 +225,7 @@ function MakepWorth()
 		local itemframe = vgui.Create("DScrollPanel", propertysheet)
 		itemframe.Paint = function() return true end
 		RelapseUI.StyleScroll(itemframe)
+		itemframe.RelapseAmmoTab = catid == ITEMCAT_AMMO
 		local trinkets = catid == ITEMCAT_TRINKETS
 
 		local list = RelapseUI.MakeShopGrid(itemframe, L, trinkets)
@@ -134,7 +234,7 @@ function MakepWorth()
 		sheet.Panel:SetPos(0, tabhei + tabGap)
 
 		for i, tab in ipairs(GAMEMODE.Items) do
-			if tab.Category == catid and tab.WorthShop then
+			if tab.Category == catid and tab.WorthShop and not tab.WorthHidden then
 				local button = vgui.Create("ZSWorthButton")
 				button:SetCardSize(cardW, trinkets and m.trinketH or m.cardH)
 				button:SetWorthID(i)
@@ -173,11 +273,33 @@ function MakepWorth()
 		tabs[i] = item.Tab
 	end
 
+	local packSlider = RelapseUI.CreateShopAmmoPackSlider(bottomspace, L)
+	frame.AmmoPackSlider = packSlider
+
+	local function syncSubTabs(tabpanel)
+		local pan = tabpanel and tabpanel.GetPanel and tabpanel:GetPanel()
+		local showAmmo = IsValid(pan) and pan.RelapseAmmoTab
+		if not showAmmo then
+			GAMEMODE:ClearAmmoPackTabSession()
+		end
+		packSlider:SetVisible(showAmmo)
+		if showAmmo then
+			RelapseUI.SyncAmmoPackSliders()
+			RelapseUI.PlaceShopAmmoPack(packSlider, L)
+			GAMEMODE:RefreshWorthAmmoPackUI()
+		end
+	end
+	frame.SyncShopSubTabs = syncSubTabs
+	frame.RelapseSheet = propertysheet
+
 	GAMEMODE:CreateItemInfoViewer(frame, propertysheet, topspace, bottomspace, MENU_WORTH)
-	GAMEMODE:ConfigureMenuTabs(tabs, tabhei)
+	GAMEMODE:ConfigureMenuTabs(tabs, tabhei, syncSubTabs)
+	GAMEMODE:BeginAmmoPackShopVisit()
+	syncSubTabs(propertysheet:GetActiveTab())
 
 	GAMEMODE:PrecacheKillicons()
 	RelapseUI.FinishShopFrame(frame, propertysheet)
+	RelapseUI.SyncAmmoCardLinks(WorthButtons, WorthLinkedAmmo())
 
 	return frame
 end
@@ -296,14 +418,18 @@ function PANEL:SetWorthID(id)
 	local inset = m.cardPad
 
 	if not tab then
+		RelapseUI.ClearCardSilhouette(self)
 		self.ModelFrame:SetVisible(false)
 		self.ItemCounter:SetVisible(false)
-		self.NameLabel:SetText("")
+		RelapseUI.BindShopAmmoName(self.NameLabel)
 		return
 	end
 
 	self.Signature = tab.Signature
-	self.Price = (GAMEMODE.GetWorthShopCost and IsValid(MySelf) and GAMEMODE:GetWorthShopCost(MySelf, tab)) or tab.Price
+	self.Price = GAMEMODE:GetPointShopAmmoPrice(tab)
+	if not tab.AmmoPackScale then
+		self.Price = (GAMEMODE.GetWorthShopCost and IsValid(MySelf) and GAMEMODE:GetWorthShopCost(MySelf, tab)) or tab.Price
+	end
 
 	local missing_skill = GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, tab)
 
@@ -311,6 +437,7 @@ function PANEL:SetWorthID(id)
 	self:SetCardSize(self.CardW or self:GetWide(), nottrinkets and m.cardH or m.trinketH)
 
 	if nottrinkets then
+		RelapseUI.ClearCardSilhouette(self)
 		PlaceKilliconFrame(self.ModelFrame, self:GetWide(), self.CardH)
 		self.ModelFrame:SetVisible(true)
 		for _, ch in ipairs(self.ModelFrame:GetChildren()) do
@@ -352,15 +479,14 @@ function PANEL:SetWorthID(id)
 		catlabel:SetPos(inset, self:GetTall() * 0.55 - catlabel:GetTall() * 0.5)
 	end
 
-	self.NameLabel:SetText(RelapseUI.WepName(tab))
-	self.NameLabel:SetTextColor(RelapseUI.Col.Text)
-	self.NameLabel:SizeToContents()
+	RelapseUI.BindShopAmmoName(self.NameLabel, tab)
 	self:InvalidateLayout()
 end
 
 function PANEL:Paint(w, h)
 	local unaffordable = not self.On and remainingworth < (self.Price or 0)
 	RelapseUI.PaintCard(self, w, h, self.On, self.Locked, unaffordable)
+	RelapseUI.PaintShopAmmoLink(self, w, h)
 	return true
 end
 
@@ -384,19 +510,26 @@ function PANEL:DoClick(silent, force)
 
 	if not tab then return end
 
+	if not silent and RelapseUI.IconsDevSelect then
+		RelapseUI.IconsDevSelect(tab, "shop")
+	end
+
 	if self.On then
 		self.On = nil
 		if not silent then
 			surface.PlaySound("buttons/button18.wav")
 		end
 		remainingworth = remainingworth + (self.Price or tab.Price)
+		RelapseUI.SetAmmoPackCardFrozen(self, false)
 	elseif GAMEMODE.ItemSkillLocked and GAMEMODE:ItemSkillLocked(MySelf, tab) then
 		surface.PlaySound("buttons/button8.wav")
 		return
 	else
+		RelapseUI.SetAmmoPackCardFrozen(self, true)
 		local price = self.Price or tab.Price
 		if remainingworth < price then
 			if not force then
+				RelapseUI.SetAmmoPackCardFrozen(self, false)
 				surface.PlaySound("buttons/button8.wav")
 				return
 			else
@@ -411,6 +544,7 @@ function PANEL:DoClick(silent, force)
 	end
 
 	RelapseUI.UpdateWorthLabel(pWorth.WorthLab, remainingworth, GetStartingWorth())
+	RelapseUI.SyncAmmoCardLinks(WorthButtons, WorthLinkedAmmo())
 
 	return goodcart
 end

@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_mike4", "zombiesurvival/killicons/weapon_zs_m4a1_side3.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_m4a1_side3.png")
+    killicon.Add("mg_mike4", "zombiesurvival/killicons/weapon_zs_m4a1_side4.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_m4a1_side4.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_m4a1_side3.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_m4a1_side4.png"
 -- Default receiver is a real mdl (not AK's empty att_receiver). Barrel/mag/stock
 -- bone-merge onto tag_*_attach. WM variant 0 — do not copy MP5 [0]=1.
 -- DrawModel after SetupBones is +Z: hull + LocalAng 90 like AK/SCAR.

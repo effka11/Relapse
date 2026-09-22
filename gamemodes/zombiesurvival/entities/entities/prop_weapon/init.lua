@@ -12,32 +12,69 @@ function ENT:Initialize()
 	self.Empty = self.Empty or false
 	self.Restrained = self.Restrained or false
 
-	local weptab = weapons.Get(self:GetWeaponType())
-	if weptab and not weptab.BoxPhysicsMax then
-		self:PhysicsInit(SOLID_VPHYSICS)
-	end
-	self:SetSolid(SOLID_VPHYSICS)
-	self:SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER)
+	local class = self:GetWeaponType()
+	local weptab = class ~= "" and weapons.Get(class) or nil
+	self:SetupPhysics(weptab, class)
 
 	self:SetUseType(SIMPLE_USE)
-
-	local phys = self:GetPhysicsObject()
-	if phys:IsValid() then
-		phys:SetMaterial("material")
-		phys:EnableMotion(not self.Restrained)
-		phys:SetMass(45)
-		phys:Wake()
-	end
 
 	self:ItemCreated()
 end
 
-function ENT:SetupPhysics(weptab)
-	if weptab.BoxPhysicsMax then
-		self:PhysicsInitBox(weptab.BoxPhysicsMin, weptab.BoxPhysicsMax)
-		self:SetCollisionBounds(weptab.BoxPhysicsMin, weptab.BoxPhysicsMax)
+function ENT:SetupPhysics(weptab, class)
+	class = class or (weptab and (weptab.ClassName or weptab.Class)) or self:GetWeaponType()
+	-- MW world models have no collision mesh. VPHYSICS on that mdl voids the loot.
+	-- PhysicsInitBox only sticks if movetype is already VPHYSICS, before the box.
+	local mw = self:IsMWWeaponType(class)
+	local useBox = mw or (weptab and weptab.BoxPhysicsMax)
+	if useBox then
+		local mins, maxs = self:DroppedWeaponBox(weptab, class)
+		self:SetMoveType(MOVETYPE_VPHYSICS)
+		self:SetSolid(SOLID_BBOX)
+		self:SetCollisionBounds(mins, maxs)
+		self:PhysicsInitBox(mins, maxs)
+		self:SetCollisionBounds(mins, maxs)
+	elseif weptab then
+		self:PhysicsInit(SOLID_VPHYSICS)
+	end
+
+	local phys = self:GetPhysicsObject()
+	if phys and phys:IsValid() then
+		self:SetMoveType(MOVETYPE_VPHYSICS)
 		self:SetSolid(SOLID_VPHYSICS)
 		self:SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER)
+
+		phys:SetMaterial("material")
+		phys:EnableMotion(not self.Restrained)
+		phys:EnableGravity(true)
+		phys:SetMass(45)
+		phys:Wake()
+	elseif useBox and not self.RelapsePhysRetry then
+		self.RelapsePhysRetry = true
+		local ent = self
+		timer.Simple(0, function()
+			if IsValid(ent) then
+				ent:SetupPhysics(weptab, class)
+			end
+		end)
+	end
+
+	-- SetWeaponType rebuilds physics after Initialize. PhysicsInit clears use.
+	self:SetUseType(SIMPLE_USE)
+	if self.CollisionRulesChanged then
+		self:CollisionRulesChanged()
+	end
+end
+
+function ENT:ApplyDroppedLie(yaw)
+	local ang = self:DropLieAngles(yaw)
+	self:SetAngles(ang)
+	local phys = self:GetPhysicsObject()
+	if phys:IsValid() then
+		phys:SetAngles(ang)
+		phys:EnableMotion(not self.Restrained)
+		phys:EnableGravity(true)
+		phys:Wake()
 	end
 end
 
@@ -84,6 +121,7 @@ function ENT:Use(activator, caller)
 end
 
 function ENT:GiveToActivator(activator, caller)
+	if self.Removing then return end
 	if  not activator:IsPlayer()
 		or not activator:Alive()
 		or activator:Team() ~= TEAM_HUMAN
@@ -206,3 +244,39 @@ function ENT:OnTakeDamage(dmginfo)
 		self:RemoveNextFrame()
 	end
 end
+
+-- Eye trace often hits the floor under the bone-merged mag. E still takes the gun
+-- when the crosshair is on the loot and nothing solid is in the way.
+hook.Add("KeyPress", "RelapsePropWeaponUse", function(pl, key)
+	if key ~= IN_USE then return end
+	if not IsValid(pl) or not pl:Alive() or pl:Team() ~= TEAM_HUMAN then return end
+	if pl.IsHolding and pl:IsHolding() then return end
+
+	local shoot = pl:GetShootPos()
+	local aim = pl:GetAimVector()
+	local best, bestDot
+	for _, ent in ipairs(ents.FindInSphere(shoot, 96)) do
+		if ent:GetClass() == "prop_weapon" and not ent.Removing and not ent.IgnoreUse and ent.GiveToActivator then
+			local center = ent:GetPos()
+			local delta = center - shoot
+			local len = delta:Length()
+			if len > 1 and len < 96 then
+				local dot = delta:Dot(aim) / len
+				if dot > 0.8 then
+					local tr = util.TraceLine({
+						start = shoot,
+						endpos = center,
+						mask = MASK_SOLID_BRUSHONLY,
+						filter = pl,
+					})
+					if not tr.Hit and (not bestDot or dot > bestDot) then
+						best, bestDot = ent, dot
+					end
+				end
+			end
+		end
+	end
+	if best then
+		best:GiveToActivator(pl, pl)
+	end
+end)

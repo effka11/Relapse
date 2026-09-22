@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_mpapa5", "zombiesurvival/killicons/weapon_zs_mp5_side6.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_mp5_side6.png")
+    killicon.Add("mg_mpapa5", "zombiesurvival/killicons/weapon_zs_mp5_side7.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_mp5_side7.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side6.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side7.png"
 -- Default WM bodygroup is empty. Variant 1 is the receiver only — not the whole
 -- gun like Uzi. Mag/stock/barrel bone-merge onto tag_*_attach (same as SKS).
 -- DrawModel after SetupBones is +Z: hull + LocalAng 90. Frame like Uzi, not SKS.

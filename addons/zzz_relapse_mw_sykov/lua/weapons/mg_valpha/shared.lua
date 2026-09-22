@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_valpha", "zombiesurvival/killicons/weapon_zs_asval_side.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_asval_side.png")
+    killicon.Add("mg_valpha", "zombiesurvival/killicons/weapon_zs_asval_side2.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_asval_side2.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_asval_side.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_asval_side2.png"
 -- WM receiver has one model (default 0). Do not copy MP5 [0]=1.
 -- Barrel, mag, and stock bone-merge onto tag_*_attach. DrawModel after SetupBones is +Z.
 SWEP.RelapsePreviewBoneMerge = true

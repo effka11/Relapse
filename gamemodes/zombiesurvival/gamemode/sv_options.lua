@@ -6,7 +6,7 @@ GM.StartLoadouts = {
 	{"uzi", "2ammo_9x19", "3ammo_9x19"},
 	{"m680", "2ammo_12ga", "3ammo_12ga"},
 	{"sks", "2ammo_762x39", "3ammo_762x39"},
-	{"crphmr", "12nails", "8nails"},
+	{"crphmr", "3ammo_gaussenergy", "2ammo_gaussenergy"},
 	{"arscrate", "makarov", "2ammo_9x18"},
 	{"resupplybox", "uzi", "2ammo_9x19"},
 	{"remantler", "cinderblock", "2ammo_9x18"}

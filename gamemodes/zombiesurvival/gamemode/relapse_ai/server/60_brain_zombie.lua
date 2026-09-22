@@ -47,6 +47,15 @@ local HUNT_MEMORY = 5 -- seconds to chase a lost target's last known position
 local SIGIL_REEVAL = 5
 local HOPELESS_SIGIL_COOLDOWN = 30
 local HOPELESS_HUMAN_COOLDOWN = 10
+-- Same human, still on an island we have no edge to. Walking back to the cliff
+-- every cooldown is the basement loop under an upstairs player.
+local HOPELESS_ISLAND_COOLDOWN = 45
+
+local function CellAt(pos)
+	local mesh = AI.Mesh
+	if not (pos and mesh and mesh.IsReady and mesh.IsReady() and mesh.Nearest) then return nil end
+	return mesh.Nearest(pos, 240)
+end
 
 local function GetProfile(classtab)
 	return Brain.Profiles[classtab.Name] or Brain.Profiles.Default
@@ -58,7 +67,7 @@ end
 
 function Brain.OnAttach(brain, bot)
 	bot.Combat = AI.Combat.Melee.New(bot)
-	bot.BB = {State = "attached", IgnoreHumans = {}, SigilGaveUp = {}}
+	bot.BB = {State = "attached", IgnoreHumans = {}, SigilGaveUp = {}, UnreachComp = {}}
 end
 
 function Brain.OnSpawn(brain, bot)
@@ -82,6 +91,7 @@ function Brain.OnSpawn(brain, bot)
 		State = "spawned",
 		IgnoreHumans = {},
 		SigilGaveUp = old.SigilGaveUp or {},
+		UnreachComp = {},
 		NextMoan = CurTime() + math.Rand(5, 20),
 	}
 	bot.Memory.Targets = {}
@@ -155,6 +165,7 @@ local function PickSigil(bot, bb, now)
 	bb.SigilReeval = now + SIGIL_REEVAL
 
 	local pos = bot.Player:GetPos()
+	local mine = CellAt(pos)
 	local best, bestScore
 	for _, sigil in ipairs(W.Sigils) do
 		if IsValid(sigil) and not sigil:GetSigilCorrupted() then
@@ -168,6 +179,15 @@ local function PickSigil(bot, bb, now)
 				else
 					bb.SigilGaveUp[sigil] = nil
 					gaveUp = nil
+				end
+			end
+			if not gaveUp then
+				-- Another island has no edge. Picking it walks everyone into the same cliff.
+				if mine and mine.comp then
+					local cell = CellAt(sigil:GetPos())
+					if cell and cell.comp and cell.comp ~= mine.comp then
+						gaveUp = true
+					end
 				end
 			end
 			if not gaveUp then
@@ -192,6 +212,18 @@ local function ScoreIntents(bot, bb, senses, now)
 		if c.Visible then
 			local ent = c.Ent
 			local ignore = bb.IgnoreHumans[ent]
+			local unreach = bb.UnreachComp and bb.UnreachComp[ent]
+			if unreach then
+				local cell = CellAt(ent:GetPos())
+				if not cell or cell.comp ~= unreach then
+					bb.UnreachComp[ent] = nil
+					bb.IgnoreHumans[ent] = nil
+					ignore = nil
+				elseif not ignore or ignore <= now then
+					bb.IgnoreHumans[ent] = now + HOPELESS_ISLAND_COOLDOWN
+					ignore = bb.IgnoreHumans[ent]
+				end
+			end
 			if ignore and ignore <= now then
 				bb.IgnoreHumans[ent] = nil
 				ignore = nil
@@ -239,7 +271,16 @@ end
 local function HandleHopeless(bot, bb, intent, data, now)
 	local loco = bot.Loco
 	if intent == "hunt" and IsValid(data) then
-		bb.IgnoreHumans[data] = now + HOPELESS_HUMAN_COOLDOWN
+		local mine = CellAt(bot.Player:GetPos())
+		local theirs = CellAt(data:GetPos())
+		if mine and theirs and mine.comp and theirs.comp and mine.comp ~= theirs.comp then
+			bb.UnreachComp = bb.UnreachComp or {}
+			bb.UnreachComp[data] = theirs.comp
+			bb.IgnoreHumans[data] = now + HOPELESS_ISLAND_COOLDOWN
+		else
+			if bb.UnreachComp then bb.UnreachComp[data] = nil end
+			bb.IgnoreHumans[data] = now + HOPELESS_HUMAN_COOLDOWN
+		end
 		bot.Memory.Targets[data] = nil
 	elseif intent == "sigil" and IsValid(data) then
 		bb.SigilGaveUp[data] = now + HOPELESS_SIGIL_COOLDOWN
@@ -379,21 +420,49 @@ local function DoWander(bot, bb, profile, now)
 	loco:SetHold(false)
 	bb.Target = nil
 
+	-- Stuck short of a wander cell: that cell is the wall under someone
+	-- upstairs. Drop it now instead of grinding the corner for the timer.
+	if bb.WanderPos and not loco:IsGoalReached() and (loco.StuckLevel or 0) >= 1 then
+		bb.WanderAvoid = Vector(bb.WanderPos)
+		bb.WanderAvoidUntil = now + 20
+		bb.WanderPos = nil
+	end
+
+	local function avoid(pos)
+		local bad = bb.WanderAvoid
+		if not pos or not bad or now >= (bb.WanderAvoidUntil or 0) then return false end
+		return bad:DistToSqr(pos) < 160 * 160
+	end
+
 	if not bb.WanderPos or now >= (bb.NextWander or 0) or (bb.WanderSet and loco:IsGoalReached()) then
 		bb.NextWander = now + math.Rand(8, 14)
 		bb.WanderPos = nil
 
 		local W = Percep.World
+		local mine = CellAt(pl:GetPos())
 		if AI.cv.horde_instinct:GetBool() and #W.Humans > 0 then
 			local human = W.Humans[math.random(#W.Humans)]
 			if IsValid(human) then
-				local rough = human:GetPos() + Vector(math.Rand(-256, 256), math.Rand(-256, 256), 0)
-				bb.WanderPos = Nav.SnapToMesh(rough, 500)
+				local humanCell = CellAt(human:GetPos())
+				-- Their cell on our island is the cliff under them. Snapping
+				-- there walks every basement bot into the same wall.
+				if mine and humanCell and mine.comp and humanCell.comp and mine.comp == humanCell.comp then
+					local rough = human:GetPos() + Vector(math.Rand(-256, 256), math.Rand(-256, 256), 0)
+					local snapped = Nav.SnapToMesh(rough, 500)
+					local cell = snapped and CellAt(snapped)
+					if snapped and not avoid(snapped) and (not cell or not cell.comp or cell.comp == mine.comp) then
+						bb.WanderPos = snapped
+					end
+				end
 			end
 		end
 
 		if not bb.WanderPos then
-			bb.WanderPos = Nav.RandomPointNear(pl:GetPos(), 700)
+			local pick = Nav.RandomPointNear(pl:GetPos(), 700)
+			if pick and avoid(pick) then
+				pick = Nav.RandomPointNear(pl:GetPos(), 700)
+			end
+			bb.WanderPos = pick
 		end
 		bb.WanderSet = false
 	end
@@ -472,6 +541,8 @@ function Brain.Think(brain, bot, dt)
 	local intent, data = ScoreIntents(bot, bb, senses, now)
 
 	if bot.Loco:IsHopeless() then
+		-- Snapshot before HandleHopeless clears the path and the goal.
+		if AI.Rec then AI.Rec.OnHopeless(bot, bb.Intent) end
 		HandleHopeless(bot, bb, bb.Intent, bb.IntentData, now)
 		intent, data = ScoreIntents(bot, bb, senses, now)
 	end

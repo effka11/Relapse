@@ -81,7 +81,16 @@ function RelapseUI.M()
 end
 
 function RelapseUI.ScrollBarW()
+	-- Layout gutter. Draw width is ScrollBarDrawW; shrinking this resizes shop windows.
 	return RelapseUI.sPx(10)
+end
+
+function RelapseUI.ScrollBarDrawW()
+	return RelapseUI.Grid5()
+end
+
+function RelapseUI.ScrollBarHitW()
+	return RelapseUI.Grid15(2)
 end
 
 function RelapseUI.ScrollGap()
@@ -227,10 +236,183 @@ function RelapseUI.FitIcon(img, maximgx, maximgy)
 	img:Center()
 end
 
--- Shop card: ficus matches remantler killicon height (that PNG is not upscaled).
-RelapseUI.CardIconFitH = {
-	weapon_zs_aloe = "zombiesurvival/killicons/weapon_zs_remantler2.png",
+-- Long guns sit in a 256 square with empty Y. FitIcon scales the square, so
+-- the rifle looks half as tall as a pistol. Zoom/ang in PaintCardSilhouette;
+-- clip is the card, not the inner frame.
+RelapseUI.CardIconZoom = {
+	mg_uzulu = 1.26,
+	mg_romeo870 = 1.79,
+	mg_m1911 = 1.21,
+	mg_makarov = 1.26,
+	mg_357 = 1.27,
+	mg_sksierra = 1.71,
+	mg_p320 = 1.29,
+	mg_sbeta = 1.86,
+	mg_mpapa5 = 1.4,
+	mg_smgolf45 = 1.41,
+	mg_mike4 = 1.68,
+	mg_oscar12 = 1.39,
+	mg_akilo47 = 1.71,
+	mg_sierrax = 1.56,
+	mg_aalpha12 = 1.45,
+	mg_valpha = 1.68,
+	mg_scharlie = 1.56,
+	mg_pkilo = 1.95,
+	mg_falima = 1.82,
+	mg_alpha50 = 1.96,
+	weapon_zs_aloe = 1.88,
 }
+
+RelapseUI.CardIconAng = {
+}
+
+-- Extra px on the card. +x right, +y down.
+RelapseUI.CardIconPos = {
+	mg_uzulu = { 0, -1 },
+	mg_romeo870 = { -4, 2 },
+	mg_m1911 = { 0, 1 },
+	mg_makarov = { 3, 3 },
+	mg_357 = { 1, 1 },
+	mg_sksierra = { -1, 1 },
+	mg_p320 = { -2, 1 },
+	mg_sbeta = { -6, 1 },
+	mg_mpapa5 = { -3, 2 },
+	mg_smgolf45 = { -4, 0 },
+	mg_mike4 = { 2, 1 },
+	mg_oscar12 = { -3, 0 },
+	mg_akilo47 = { 0, 2 },
+	mg_sierrax = { -1, 0 },
+	mg_aalpha12 = { -1, 2 },
+	mg_pkilo = { -1, 0 },
+	mg_falima = { 2, 1 },
+	mg_alpha50 = { -2, 0 },
+	weapon_zs_aloe = { 0, -5 },
+}
+
+-- PNG silhouettes with alpha AA. Same pass as the T1 shop guns.
+RelapseUI.CardIconSmooth = {
+	mg_makarov = true,
+	mg_m1911 = true,
+	mg_357 = true,
+	mg_uzulu = true,
+	mg_romeo870 = true,
+	mg_sksierra = true,
+	mg_akilo47 = true,
+	mg_mpapa5 = true,
+	mg_smgolf45 = true,
+	mg_p320 = true,
+	mg_sbeta = true,
+	mg_mike4 = true,
+	mg_oscar12 = true,
+	mg_valpha = true,
+	mg_sierrax = true,
+	mg_aalpha12 = true,
+	mg_scharlie = true,
+	mg_pkilo = true,
+	mg_falima = true,
+	mg_alpha50 = true,
+	weapon_zs_aloe = true,
+}
+
+do
+	local ammoIds = {
+		"9x18", "9x19", "45acp", "357mag", "3030", "12ga",
+		"9x39", "556x45", "762x39", "762x51", "762x54r", "50bmg",
+	}
+	for _, id in ipairs(ammoIds) do
+		RelapseUI.CardIconSmooth[id] = true
+		RelapseUI.CardIconSmooth["ammo_" .. id] = true
+		RelapseUI.CardIconSmooth["ps_ammo_" .. id] = true
+		RelapseUI.CardIconSmooth["2ammo_" .. id] = true
+		RelapseUI.CardIconSmooth["3ammo_" .. id] = true
+	end
+end
+
+function RelapseUI.CardIconZoomValue(class)
+	local z = (class and RelapseUI.CardIconZoom[class]) or 1
+	local d = class and RelapseUI.IconsDevDelta and RelapseUI.IconsDevDelta[class]
+	return math.max(0.05, z + (d and d.zoom or 0))
+end
+
+function RelapseUI.CardIconAngValue(class)
+	local a = (class and RelapseUI.CardIconAng[class]) or 0
+	local d = class and RelapseUI.IconsDevDelta and RelapseUI.IconsDevDelta[class]
+	return a + (d and d.ang or 0)
+end
+
+function RelapseUI.CardIconPosValue(class)
+	local p = class and RelapseUI.CardIconPos[class]
+	local x, y = 0, 0
+	if istable(p) then
+		x, y = p[1] or 0, p[2] or 0
+	end
+	local d = class and RelapseUI.IconsDevDelta and RelapseUI.IconsDevDelta[class]
+	return x + (d and d.x or 0), y + (d and d.y or 0)
+end
+
+function RelapseUI.FitIconDims(iw, ih, maxx, maxy)
+	iw, ih = tonumber(iw) or 1, tonumber(ih) or 1
+	if ih > maxy and ih > 0 then
+		iw = maxy / ih * iw
+		ih = maxy
+	end
+	if iw > maxx and iw > 0 then
+		local s = maxx / iw
+		iw, ih = maxx, ih * s
+	end
+	return iw, ih
+end
+
+function RelapseUI.ClearCardSilhouette(card)
+	if not IsValid(card) then return end
+	local img = card.m_Icon
+	if IsValid(img) and img.RelapseIconClass then
+		img:Remove()
+	end
+	card.m_Icon = nil
+	card.RelapseIconClass = nil
+	card.RelapseIconMat = nil
+	card.RelapseFitW = nil
+	card.RelapseFitH = nil
+	card.RelapseIconCX = nil
+	card.RelapseIconCY = nil
+	card.RelapseIconAlpha = nil
+end
+
+function RelapseUI.PaintCardSilhouette(card, w, h)
+	local class = card and card.RelapseIconClass
+	local mat = card and card.RelapseIconMat
+	if not class or not mat or mat:IsError() then
+		return
+	end
+
+	local fw = card.RelapseFitW or w
+	local fh = card.RelapseFitH or h
+	local zoom = RelapseUI.CardIconZoomValue(class)
+	local ang = RelapseUI.CardIconAngValue(class)
+	local ox, oy = RelapseUI.CardIconPosValue(class)
+	local dw, dh = fw * zoom, fh * zoom
+	local cx = (card.RelapseIconCX or (w * 0.5)) + ox
+	local cy = (card.RelapseIconCY or (h * 0.5)) + oy
+	local col = RelapseUI.Col.Text
+	local a = (card.RelapseIconAlpha or 255) * (card:GetAlpha() / 255)
+	surface.SetMaterial(mat)
+	surface.SetDrawColor(col.r, col.g, col.b, a)
+	surface.DrawTexturedRectRotated(cx, cy, dw, dh, ang)
+end
+
+function RelapseUI.LayoutCardSilhouette(card)
+	if not (IsValid(card) and card.RelapseIconClass) then
+		return
+	end
+	local frame = card.ModelFrame
+	if not IsValid(frame) then
+		return
+	end
+	local fx, fy = frame:GetPos()
+	card.RelapseIconCX = fx + frame:GetWide() * 0.5
+	card.RelapseIconCY = fy + frame:GetTall() * 0.5
+end
 
 function RelapseUI.MakeSilhouetteIcon(parent, path)
 	local img = vgui.Create("DImage", parent)
@@ -244,28 +426,36 @@ end
 
 -- Inventory / HUD 1-9: shop silhouettes face right. Mirror, then tilt muzzle up-left.
 RelapseUI.InvSlotIconZoom = {
-	mg_uzulu = 1.12,
-	mg_m1911 = 1.12,
-	mg_sksierra = 1.40,
-	mg_romeo870 = 1.30,
+	mg_uzulu = 1.24,
+	mg_romeo870 = 1.32,
+	mg_m1911 = 1.27,
+	mg_makarov = 1.32,
+	mg_357 = 1.32,
+	mg_sksierra = 1.33,
+	mg_p320 = 1.34,
+	mg_sbeta = 1.35,
+	mg_mpapa5 = 1.32,
+	mg_smgolf45 = 1.19,
 	weapon_zs_hammer = 0.8,
 	weapon_zs_wrench = 0.90,
 	weapon_zs_aloe = 0.88,
-	mg_357 = 1.15,
-	mg_makarov = 1.4,
 	mg_me_t9cane = 1.4,
 	mg_mike4 = 1.2,
 }
 -- Extra-grid px, +x is right, +y is down.
 RelapseUI.InvSlotIconShift = {
-	mg_uzulu = { -4, 1 },
+	mg_uzulu = { -4, 2 },
+	mg_romeo870 = { -2, 0 },
 	mg_m1911 = { -4, 1 },
-	mg_sksierra = { -3, 0 },
-	mg_romeo870 = { -3, 0 },
+	mg_makarov = { -4, 1 },
+	mg_357 = { -3, 1 },
+	mg_sksierra = { -2, 0 },
+	mg_p320 = { -4, 1 },
+	mg_sbeta = { -2, 0 },
+	mg_mpapa5 = { -2, 3 },
+	mg_smgolf45 = { -2, 1 },
 	mg_cinderblock = { -3, 0 },
 	weapon_zs_wrench = { -1, 0 },
-	mg_357 = { -2, 2 },
-	mg_makarov = { -4, 1 },
 	mg_me_t9cane = { -1, 2 },
 	mg_mike4 = { -4, 1 },
 }
@@ -273,7 +463,51 @@ RelapseUI.InvSlotIconShift = {
 -- Degrees. Guns stay 45 (muzzle up-left). Upright marks skip the tilt.
 RelapseUI.InvSlotIconTilt = {
 	weapon_zs_aloe = 0,
+	["9x18"] = 0,
+	["9x19"] = 0,
+	["45acp"] = 0,
+	["357mag"] = 0,
+	["3030win"] = 0,
+	["12ga"] = 0,
+	["9x39"] = 0,
+	["556x45"] = 0,
+	["762x39"] = 0,
+	["762x51"] = 0,
+	["762x54r"] = 0,
+	["50bmg"] = 0,
+	mg_uzulu = 47.8,
+	mg_357 = 43.6,
+	mg_sksierra = 46.4,
+	mg_sbeta = 42.2,
+	mg_mpapa5 = 43.6,
 }
+
+function RelapseUI.InvSlotIconZoomValue(class)
+	local z = (class and RelapseUI.InvSlotIconZoom[class]) or 1
+	local d = class and RelapseUI.IconsDevInvDelta and RelapseUI.IconsDevInvDelta[class]
+	return math.max(0.05, z + (d and d.zoom or 0))
+end
+
+function RelapseUI.InvSlotIconTiltValue(class)
+	local a = class and RelapseUI.InvSlotIconTilt[class]
+	if a == nil then
+		a = 45
+	end
+	local d = class and RelapseUI.IconsDevInvDelta and RelapseUI.IconsDevInvDelta[class]
+	return a + (d and d.ang or 0)
+end
+
+function RelapseUI.InvSlotIconShiftValue(class)
+	local p = class and RelapseUI.InvSlotIconShift[class]
+	local x, y = 0, 0
+	if istable(p) then
+		x, y = p[1] or 0, p[2] or 0
+	elseif isnumber(p) then
+		x = p
+	end
+	local d = class and RelapseUI.IconsDevInvDelta and RelapseUI.IconsDevInvDelta[class]
+	return x + (d and d.x or 0), y + (d and d.y or 0)
+end
 
 function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
 	if not mat or mat:IsError() then return end
@@ -283,18 +517,12 @@ function RelapseUI.DrawInvSlotIcon(mat, w, h, col, class)
 	if tw < 1 then tw = 1 end
 	if th < 1 then th = 1 end
 	local maxs = math.max(1, w - pad * 2)
-	local tilt = (class and RelapseUI.InvSlotIconTilt[class]) or 45
+	local tilt = RelapseUI.InvSlotIconTiltValue(class)
 	local ac, as = math.abs(math.cos(math.rad(tilt))), math.abs(math.sin(math.rad(tilt)))
 	local scale = math.min(maxs / math.max(1, tw * ac + th * as), maxs / math.max(1, th * ac + tw * as))
-	scale = scale * ((class and RelapseUI.InvSlotIconZoom[class]) or 1)
+	scale = scale * RelapseUI.InvSlotIconZoomValue(class)
 	local iw, ih = tw * scale, th * scale
-	local shift = (class and RelapseUI.InvSlotIconShift[class]) or 0
-	local sx, sy = 0, 0
-	if istable(shift) then
-		sx, sy = shift[1] or 0, shift[2] or 0
-	else
-		sx = shift
-	end
+	local sx, sy = RelapseUI.InvSlotIconShiftValue(class)
 	local cx, cy = w * 0.5 + RelapseUI.sPx(sx), h * 0.5 + RelapseUI.sPx(sy)
 	local hw, hh = iw * 0.5, ih * 0.5
 	local ang = math.rad(tilt)
@@ -338,32 +566,36 @@ function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
 
 	local cat = tab.Category
 	local class = tab.SWEP
+	local path
 	local allow = cat == ITEMCAT_GUNS or cat == ITEMCAT_MELEE
-	if not allow then
-		local wep = class and weapons.GetStored(class)
+	if not allow and class then
+		local wep = weapons.GetStored(class)
 		allow = wep and isstring(wep.RelapsePreviewIcon) and wep.RelapsePreviewIcon ~= ""
 	end
-	if not allow then
+	if allow then
+		path = RelapseUI.CardIconPath(tab)
+	elseif isstring(tab.AmmoPack) and tab.AmmoPack ~= "" then
+		class = tab.AmmoPack
+		path = RelapseUI.AmmoIconPath(class)
+		allow = isstring(path) and path ~= ""
+	end
+	if not allow or not path then
 		return false
 	end
 
-	local path = RelapseUI.CardIconPath(tab)
-	if not path then return false end
-
-	local img = RelapseUI.MakeSilhouetteIcon(mdlframe, path)
-	local ref = class and RelapseUI.CardIconFitH[class]
-	if isstring(ref) then
-		local mat = Material(ref)
-		local fitH = (mat and not mat:IsError() and mat:Height()) or 64
-		RelapseUI.FitIcon(img, mdlframe:GetWide(), fitH)
-	else
-		RelapseUI.FitIcon(img, mdlframe:GetWide(), mdlframe:GetTall() + RelapseUI.Grid5(4))
+	local mat = Material(path)
+	if not mat or mat:IsError() then
+		return false
 	end
-	if missing_skill then
-		img:SetAlpha(50)
-	end
+	local maxW, maxH = mdlframe:GetWide(), mdlframe:GetTall() + RelapseUI.Grid5(4)
+	local fw, fh = RelapseUI.FitIconDims(mat:Width(), mat:Height(), maxW, maxH)
 	if itempan then
-		itempan.m_Icon = img
+		itempan.RelapseIconClass = class
+		itempan.RelapseIconMat = mat
+		itempan.RelapseFitW = fw
+		itempan.RelapseFitH = fh
+		itempan.RelapseIconAlpha = missing_skill and 50 or 255
+		RelapseUI.LayoutCardSilhouette(itempan)
 	end
 	return true
 end
@@ -380,6 +612,10 @@ function RelapseUI.PlaceCardIcon(frame, cardw, cardh)
 	local x = math.floor(cardw * (2 / 3) - fw * 0.5 + 0.5)
 	x = math.Clamp(x, pad, math.max(pad, cardw - pad - fw))
 	frame:SetPos(x, top)
+	local card = frame:GetParent()
+	if IsValid(card) then
+		RelapseUI.LayoutCardSilhouette(card)
+	end
 end
 
 function RelapseUI.T(id, fallback)
@@ -401,17 +637,134 @@ end
 function RelapseUI.WepName(tbl)
 	if not tbl then return "" end
 	if tbl.AmmoPack then
-		local ammoName = RelapseUI.ShopAmmo(tbl.AmmoPack)
-		if tbl.AmmoCount then
-			return RelapseUI.TF("shop_ammo_pack_fmt", tbl.AmmoCount, ammoName)
-		end
-		return ammoName
+		return RelapseUI.ShopAmmo(tbl.AmmoPack)
 	end
 	local key = tbl.TranslationName
 	if key then
 		return RelapseUI.T(key, tbl.PrintName or tbl.Name or key)
 	end
 	return tbl.PrintName or tbl.Name or ""
+end
+
+function RelapseUI.AmmoPackCount(tbl, pts)
+	if not tbl or not tbl.AmmoPack then return end
+	if CLIENT and (tbl.PointShop or tbl.AmmoPackScale) and GAMEMODE and GAMEMODE.GetAmmoPackCountForPoints then
+		return GAMEMODE:GetAmmoPackCountForPoints(tbl.AmmoPack, pts or GAMEMODE:GetClientAmmoPackPoints())
+	end
+	return tbl.AmmoCount
+end
+
+function RelapseUI.SetAmmoPackCardFrozen(card, frozen)
+	if not IsValid(card) then return end
+	local tab = card.ShopTabl
+	if not tab and card.ID and FindStartingItem then
+		tab = FindStartingItem(card.ID)
+	end
+	if not (tab and tab.AmmoPack and (tab.PointShop or tab.AmmoPackScale)) then return end
+
+	if frozen then
+		if not card.RelapseAmmoPackPts and GAMEMODE and GAMEMODE.GetClientAmmoPackPoints then
+			card.RelapseAmmoPackPts = GAMEMODE:GetClientAmmoPackPoints()
+		end
+	else
+		card.RelapseAmmoPackPts = nil
+	end
+
+	local pts = card.RelapseAmmoPackPts
+	if not pts and GAMEMODE and GAMEMODE.GetClientAmmoPackPoints then
+		pts = GAMEMODE:GetClientAmmoPackPoints()
+	end
+	if tab.PointShop or tab.AmmoPackScale then
+		card.Price = pts
+	end
+	card.m_LastShopPrice = nil
+	card.m_LastShopName = nil
+	card.m_LastShopCount = nil
+	RelapseUI.BindShopAmmoName(card.NameLabel, tab, card.RelapseAmmoPackPts)
+	if IsValid(card.PriceLabel) and tab.AmmoPackScale then
+		card.PriceLabel:SetText(tostring(card.Price or pts or ""))
+		card.PriceLabel:SizeToContents()
+	end
+	card:InvalidateLayout()
+end
+
+function RelapseUI.ShopItemAmmoId(tab)
+	if not tab then return end
+	local class = tab.SWEP or tab.ClassName or tab.Class
+	if not isstring(class) or class == "" then return end
+	local gm = GAMEMODE
+	local swept = gm and gm.ZSInventoryItemData and gm.ZSInventoryItemData[class]
+	if not swept then
+		swept = weapons.Get(class)
+	end
+	if istable(swept) and gm and gm.GetWeaponAmmoType then
+		if gm.BindRelapseWeapon then
+			gm:BindRelapseWeapon(swept)
+		end
+		return gm:GetWeaponAmmoType(swept)
+	end
+	local def = gm and gm.RelapseWeapons and gm.RelapseWeapons[class]
+	if def and isstring(def.Ammo) and def.Ammo ~= "" then
+		return string.lower(def.Ammo)
+	end
+end
+
+function RelapseUI.SyncAmmoCardLinks(cards, linked)
+	linked = linked or {}
+	for _, card in pairs(cards) do
+		if not IsValid(card) then continue end
+		local tab = card.ShopTabl
+		if not tab and card.ID and FindStartingItem then
+			tab = FindStartingItem(card.ID)
+		end
+		local id = tab and tab.AmmoPack and string.lower(tab.AmmoPack)
+		card.RelapseAmmoLinked = id and linked[id] and true or false
+	end
+end
+
+local colAmmoNameHide = Color(0, 0, 0, 0)
+
+function RelapseUI.PaintShopAmmoName(me, w, h)
+	local name = me:GetText() or ""
+	if name == "" or w < 1 then return true end
+	local font = me:GetFont() or "Relapse20"
+	local y = h * 0.5
+	draw.SimpleText(name, font, 0, y, me.RelapseNameCol or RelapseUI.Col.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+	local count = me.RelapseAmmoCount
+	if not count then return true end
+	local gap = RelapseUI.Grid5(2)
+	surface.SetFont(font)
+	local x = surface.GetTextSize(name) + gap
+	local muted = RelapseUI.Col.Muted
+	local mark = "x"
+	local markFont = "Relapse15"
+	draw.SimpleText(mark, markFont, x, y, muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+	surface.SetFont(markFont)
+	x = x + surface.GetTextSize(mark) + gap
+	draw.SimpleText(tostring(count), font, x, y, muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+	return true
+end
+
+function RelapseUI.BindShopAmmoName(lab, tbl, pts)
+	if not IsValid(lab) then return end
+	lab:SetText(tbl and RelapseUI.WepName(tbl) or "")
+	lab.RelapseAmmoCount = RelapseUI.AmmoPackCount(tbl, pts)
+	if lab.RelapseAmmoCount then
+		lab.RelapseNameCol = RelapseUI.Col.Text
+		if not lab.RelapseAmmoNamePaint then
+			lab.RelapseAmmoNamePaint = true
+			lab.ApplySchemeSettings = function() end
+			lab.Paint = RelapseUI.PaintShopAmmoName
+		end
+		lab:SetTextColor(colAmmoNameHide)
+	else
+		if lab.RelapseAmmoNamePaint then
+			lab.RelapseAmmoNamePaint = nil
+			lab.Paint = nil
+		end
+		lab:SetTextColor(RelapseUI.Col.Text)
+	end
+	lab:SizeToContents()
 end
 
 function RelapseUI.WepDesc(tbl, shop)
@@ -456,7 +809,8 @@ end
 function RelapseUI.ShopAmmo(name)
 	name = string.lower(name or "")
 	local fallback = GAMEMODE and GAMEMODE.AmmoNames and GAMEMODE.AmmoNames[name]
-	return RelapseUI.T("shop_ammo_" .. name, fallback or name)
+	local s = RelapseUI.T("shop_ammo_" .. name, fallback or name)
+	return (string.gsub(s, "(%S)×(%d)", "%1 × %2"))
 end
 
 function RelapseUI.ShopStat(id, fallback)
@@ -1932,7 +2286,74 @@ function RelapseUI.PaintCard(self, w, h, selected, locked, unaffordable)
 		RelapseUI.RoundFill(RelapseUI.RadPx("Card"), 0, 0, w, h, c.Lock)
 	end
 
+	RelapseUI.PaintCardSilhouette(self, w, h)
+
 	return true
+end
+
+function RelapseUI.PaintShopAmmoLink(self, w, h)
+	if not self.RelapseAmmoLinked then return end
+	local tm = math.max(2, RelapseUI.sPx(2))
+	local te = 1
+	local y0 = h
+	local r = RelapseUI.RadPx("Card")
+	r = math.max(2, math.min(r, math.floor(w * 0.5), math.floor(h)))
+	local col = RelapseUI.Col.Text
+
+	local segs = math.max(6, math.min(12, r))
+	local pts = {}
+	local function add(x, y)
+		pts[#pts + 1] = {x = x, y = y}
+	end
+	-- Card corner, but only the bottom 45° — no vertical side.
+	local ang = math.rad(60)
+	local cy = y0 - r
+	for i = 0, segs do
+		local a = math.pi * 0.5 + ang * (1 - i / segs)
+		add(r + math.cos(a) * r, cy + math.sin(a) * r)
+	end
+	local span = w - r * 2
+	local mid = math.max(1, math.floor(span / RelapseUI.Grid5()))
+	for i = 1, mid do
+		add(r + span * (i / mid), y0)
+	end
+	local cxR = w - r
+	for i = 1, segs do
+		local a = math.pi * 0.5 - ang * (i / segs)
+		add(cxR + math.cos(a) * r, cy + math.sin(a) * r)
+	end
+
+	local n = #pts
+	if n < 2 then return end
+
+	local nx, ny, hw = {}, {}, {}
+	for i = 1, n do
+		local a = pts[math.max(1, i - 1)]
+		local b = pts[math.min(n, i + 1)]
+		local dx, dy = b.x - a.x, b.y - a.y
+		local len = math.sqrt(dx * dx + dy * dy)
+		if len < 1e-3 then
+			nx[i], ny[i] = 0, 1
+		else
+			nx[i], ny[i] = -dy / len, dx / len
+		end
+		local t = (i - 1) / (n - 1)
+		hw[i] = (te + (tm - te) * math.sin(math.pi * t)) * 0.5
+	end
+
+	-- DrawPoly wants clockwise. Inner = -normal, then outer.
+	DisableClipping(true)
+	for i = 1, n - 1 do
+		local p, q = pts[i], pts[i + 1]
+		RelapseUI.FillQuad(
+			p.x - nx[i] * hw[i], p.y - ny[i] * hw[i],
+			q.x - nx[i + 1] * hw[i + 1], q.y - ny[i + 1] * hw[i + 1],
+			q.x + nx[i + 1] * hw[i + 1], q.y + ny[i + 1] * hw[i + 1],
+			p.x + nx[i] * hw[i], p.y + ny[i] * hw[i],
+			col
+		)
+	end
+	DisableClipping(false)
 end
 
 function RelapseUI.PaintPrimaryButton(self, w, h)
@@ -2843,9 +3264,9 @@ function RelapseUI.StyleScroll(pnl)
 	local bar = pnl.GetVBar and pnl:GetVBar() or pnl.VBar
 	if not IsValid(bar) then return end
 
-	local wide = RelapseUI.ScrollBarW()
-	bar:SetWide(wide)
-	bar:DockMargin(RelapseUI.ScrollGap(), 0, 0, 0)
+	local hit = RelapseUI.ScrollBarHitW()
+	bar:SetWide(hit)
+	bar:DockMargin(RelapseUI.ScrollGap() + RelapseUI.ScrollBarW() - hit, 0, 0, 0)
 	if bar.SetHideButtons then
 		bar:SetHideButtons(true)
 	end
@@ -2855,7 +3276,9 @@ function RelapseUI.StyleScroll(pnl)
 	end
 	if IsValid(bar.btnGrip) then
 		bar.btnGrip.Paint = function(me, w, h)
-			RelapseUI.RoundFill(w * 0.5, 0, 0, w, h, RelapseUI.Col.Text)
+			local ink = RelapseUI.ScrollBarDrawW()
+			local x = math.max(0, w - ink)
+			RelapseUI.RoundFill(ink * 0.5, x, 0, ink, h, RelapseUI.CopyCol(RelapseUI.Col.Muted, 40))
 		end
 	end
 	if IsValid(bar.btnUp) then
@@ -3249,6 +3672,9 @@ function RelapseUI.ShowShopFrame(frame)
 	end
 	BindLetMove(host)
 	RelapseUI.FadeOpenMenu(frame)
+	if RelapseUI.IconsDevBindShop then
+		RelapseUI.IconsDevBindShop(frame)
+	end
 end
 
 function RelapseUI.OpenShop(kind)
@@ -3482,6 +3908,22 @@ function RelapseUI.MakeShopGrid(parent, L, trinkets)
 	list:SetCols(2)
 	list:SetColWide(L.cardW + L.cardGap)
 	list:SetRowHeight((trinkets and L.m.trinketH or L.m.cardH) + L.cardGap)
+	local prev = list.PerformLayout
+	list.PerformLayout = function(me)
+		if prev then
+			prev(me)
+		end
+		local n = 0
+		for _, pan in pairs(me.Items or {}) do
+			if IsValid(pan) and pan:IsVisible() then
+				n = n + 1
+			end
+		end
+		local rows = math.ceil(n / math.max(1, me:GetCols() or 2))
+		if rows > 0 then
+			me:SetTall(rows * me:GetRowHeight() - RelapseUI.M().cardGap)
+		end
+	end
 	return list
 end
 
@@ -3787,13 +4229,99 @@ function RelapseUI.PaintSliderTrack(self, w, h)
 	return true
 end
 
+function RelapseUI.PaintSteppedSliderTrack(self, w, h, min, max, step)
+	min = min or 0
+	max = max or 1
+	step = step or 1
+	if max <= min or step <= 0 then
+		RelapseUI.PaintSliderTrack(self, w, h)
+		return true
+	end
+
+	local knob = self.Knob
+	local inset = 0
+	if IsValid(knob) then
+		inset = knob:GetWide() * 0.5
+	end
+	local inner = math.max(1, w - inset * 2)
+	local ticks = math.floor((max - min) / step + 0.5)
+	if ticks < 1 then
+		RelapseUI.PaintSliderTrack(self, w, h)
+		return true
+	end
+	local tickH = math.max(6, RelapseUI.sPx(10))
+	local stroke = 2
+	local function tickX(i)
+		return math.floor(inset + inner * (i / ticks) - stroke * 0.5)
+	end
+	local cap = RelapseUI.sPx(15)
+	local x0 = tickX(0) - cap
+	local x1 = tickX(ticks) + stroke + cap
+	local y = math.floor((h - stroke) * 0.5)
+	-- Solid 2px reads brighter than gray type; drop alpha so it matches Muted captions.
+	local col = RelapseUI.Col.Muted
+	surface.SetDrawColor(col.r, col.g, col.b, 75)
+	DisableClipping(true)
+	surface.DrawRect(x0, y, math.max(1, x1 - x0), stroke)
+	DisableClipping(false)
+
+	local ty = math.floor(h * 0.5 - tickH * 0.5)
+	for i = 0, ticks do
+		surface.DrawRect(tickX(i), ty, stroke, tickH)
+	end
+	return true
+end
+
 function RelapseUI.PaintSliderKnob(self, w, h)
 	local c = RelapseUI.Col
 	local s = math.min(w, h)
 	local x = math.floor((w - s) * 0.5)
 	local y = math.floor((h - s) * 0.5)
-	RelapseUI.RoundFill(RelapseUI.RadPx("Bar"), x, y, s, s, (self.Hovered or self:IsDown()) and c.Text or c.Muted)
+	local fill = c.Text
+	if not self.RelapseKnobWhite and not (self.Hovered or self:IsDown()) then
+		fill = c.Muted
+	end
+	RelapseUI.RoundFill(RelapseUI.RadPx("Bar"), x, y, s, s, fill)
 	return true
+end
+
+-- DSlider keeps moving on hover if Knob.Depressed stuck after a missed mouse-up.
+function RelapseUI.FreeStuckSlider(bar)
+	if not IsValid(bar) then return end
+	if input.IsMouseDown(MOUSE_LEFT) then return end
+	if bar.Dragging then
+		bar.Dragging = false
+		bar:MouseCapture(false)
+	end
+	local knob = bar.Knob
+	if IsValid(knob) then
+		if knob.Depressed then
+			knob.Depressed = false
+		end
+		knob:MouseCapture(false)
+	end
+end
+
+function RelapseUI.BindSliderRelease(bar)
+	if not IsValid(bar) or bar._RelapseSliderRelease then return end
+	bar._RelapseSliderRelease = true
+	local oldThink = bar.Think
+	bar.Think = function(me)
+		if oldThink then
+			oldThink(me)
+		end
+		RelapseUI.FreeStuckSlider(me)
+	end
+	local oldMoved = bar.OnCursorMoved
+	bar.OnCursorMoved = function(me, x, y)
+		if not input.IsMouseDown(MOUSE_LEFT) then
+			RelapseUI.FreeStuckSlider(me)
+			return
+		end
+		if oldMoved then
+			return oldMoved(me, x, y)
+		end
+	end
 end
 
 function RelapseUI.MakeOptionsScroll(sheet)
@@ -3808,7 +4336,7 @@ function RelapseUI.MakeOptionsScroll(sheet)
 	end
 	local bar = scroll:GetVBar()
 	if IsValid(bar) then
-		bar:DockMargin(0, top, 0, RelapseUI.Grid15())
+		bar:DockMargin(RelapseUI.ScrollBarW() - RelapseUI.ScrollBarHitW(), top, 0, RelapseUI.Grid15())
 	end
 	return scroll
 end
@@ -3818,7 +4346,7 @@ function RelapseUI.OptionsCheckGap()
 	return RelapseUI.Grid15(2) - RelapseUI.sPx(5)
 end
 
-function RelapseUI.OptionsCheck(parent, text, cvar)
+function RelapseUI.OptionsCheck(parent, text, cvar, onToggle)
 	local row = vgui.Create("DButton", parent)
 	row:SetText("")
 	row:SetTall(RelapseUI.sPx(20))
@@ -3832,6 +4360,9 @@ function RelapseUI.OptionsCheck(parent, text, cvar)
 		local cv = GetConVar(me.RelapseCvar)
 		if not cv then return end
 		cv:SetBool(not cv:GetBool())
+		if onToggle then
+			onToggle(cv:GetBool())
+		end
 	end
 	return row
 end
@@ -3864,7 +4395,7 @@ function RelapseUI.PadCreditsScroll(scroll, frame, L)
 	end
 	local bar = scroll:GetVBar()
 	if IsValid(bar) then
-		bar:DockMargin(0, top, 0, RelapseUI.Grid15())
+		bar:DockMargin(RelapseUI.ScrollBarW() - RelapseUI.ScrollBarHitW(), top, 0, RelapseUI.Grid15())
 	end
 end
 
@@ -3919,6 +4450,7 @@ function RelapseUI.StyleNumSlider(slider)
 	local bar = slider.Slider
 	if IsValid(bar) then
 		bar.Paint = RelapseUI.PaintSliderTrack
+		RelapseUI.BindSliderRelease(bar)
 		if IsValid(bar.Knob) then
 			local s = RelapseUI.Grid15()
 			bar.Knob:SetSize(s, s)
@@ -3943,6 +4475,208 @@ function RelapseUI.OptionsSlider(parent, text, cvar, min, max, decimals)
 	slider:SetDecimals(decimals or 0)
 	slider:SetConVar(cvar)
 	RelapseUI.StyleNumSlider(slider)
+	return slider
+end
+
+function RelapseUI.MakeStepSlider(parent, min, max, step, value, onChange)
+	local slider = vgui.Create("DNumSlider", parent)
+	slider:SetText("")
+	slider:SetMinMax(min, max)
+	slider:SetDecimals(0)
+	slider:SetValue(value or min)
+	if IsValid(slider.Label) then
+		slider.Label:SetVisible(false)
+		slider.Label:SetText("")
+		slider.Label:SetWide(0)
+	end
+	RelapseUI.StyleNumSlider(slider)
+	if IsValid(slider.TextArea) then
+		slider.TextArea:SetTextColor(RelapseUI.Col.Text)
+		slider.TextArea.Paint = function(me, w, h)
+			draw.SimpleText(me:GetValue(), "Relapse20", w, h * 0.5, RelapseUI.Col.Text, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+			return true
+		end
+	end
+
+	local bar = slider.Slider
+	if IsValid(bar) then
+		bar.Paint = function(me, w, h)
+			RelapseUI.PaintSteppedSliderTrack(me, w, h, min, max, step)
+		end
+		if IsValid(bar.Knob) then
+			local s = RelapseUI.Grid5(2)
+			bar.Knob:SetSize(s, s)
+			bar.Knob.RelapseKnobWhite = true
+		end
+	end
+
+	slider.PerformLayout = function(me, w, h)
+		w = w or me:GetWide()
+		h = h or me:GetTall()
+		local text = me.TextArea
+		local slide = me.Slider
+		local tw = RelapseUI.Grid15(3)
+		if IsValid(me.Label) then
+			me.Label:SetVisible(false)
+			me.Label:SetSize(0, 0)
+		end
+		if IsValid(text) then
+			text:SetSize(tw, h)
+			text:SetPos(w - tw, 0)
+		end
+		if IsValid(slide) then
+			slide:SetPos(0, 0)
+			slide:SetSize(math.max(1, w - tw - RelapseUI.Grid15()), h)
+		end
+	end
+
+	local function snap(val)
+		val = tonumber(val) or min
+		return math.Clamp(math.floor(val / step + 0.5) * step, min, max)
+	end
+
+	slider.OnValueChanged = function(me, val)
+		if me._RelapseSilent then return end
+		local s = snap(val)
+		if math.abs((tonumber(val) or 0) - s) > 0.001 then
+			me._RelapseSilent = true
+			me:SetValue(s)
+			me._RelapseSilent = false
+		end
+		if me._RelapseLast == s then return end
+		me._RelapseLast = s
+		if onChange then
+			onChange(s)
+		end
+	end
+	slider._RelapseLast = snap(value or min)
+
+	local function onWheel(_, dlta)
+		if not dlta or dlta == 0 then return true end
+		local next = snap((slider:GetValue() or min) + step * (dlta > 0 and 1 or -1))
+		if math.abs((slider:GetValue() or 0) - next) > 0.01 then
+			slider:SetValue(next)
+		end
+		return true
+	end
+	slider.OnMouseWheeled = onWheel
+	slider:SetMouseInputEnabled(true)
+	if IsValid(bar) then
+		bar.OnMouseWheeled = onWheel
+		bar:SetMouseInputEnabled(true)
+		if IsValid(bar.Knob) then
+			bar.Knob.OnMouseWheeled = onWheel
+			bar.Knob:SetMouseInputEnabled(true)
+		end
+	end
+	if IsValid(slider.TextArea) then
+		slider.TextArea.OnMouseWheeled = onWheel
+	end
+
+	return slider
+end
+
+function RelapseUI.BindAmmoPackSlider(slider, role)
+	if not IsValid(slider) then return slider end
+	slider.RelapseAmmoRole = role or "shop"
+	RelapseUI.AmmoPackSliders = RelapseUI.AmmoPackSliders or {}
+	table.insert(RelapseUI.AmmoPackSliders, slider)
+	return slider
+end
+
+function RelapseUI.SyncAmmoPackSliders()
+	local list = RelapseUI.AmmoPackSliders
+	if not list then return end
+
+	local def = 15
+	local cur = 15
+	if GAMEMODE and GAMEMODE.ClampAmmoPackPoints then
+		local cv = GetConVar("zs_ammopackpoints")
+		def = GAMEMODE:ClampAmmoPackPoints(cv and cv:GetInt())
+		cur = GAMEMODE.GetClientAmmoPackPoints and GAMEMODE:GetClientAmmoPackPoints() or def
+	end
+
+	for i = #list, 1, -1 do
+		local slider = list[i]
+		if not IsValid(slider) then
+			table.remove(list, i)
+		else
+			local v = slider.RelapseAmmoRole == "default" and def or cur
+			if math.abs((slider:GetValue() or 0) - v) > 0.01 then
+				slider._RelapseSilent = true
+				slider:SetValue(v)
+				slider._RelapseSilent = false
+				slider._RelapseLast = v
+			end
+		end
+	end
+end
+
+function RelapseUI.OptionsStepSlider(parent, text, cvar, min, max, step)
+	local cap = RelapseUI.OptionsCaption(parent, text)
+
+	local wrap = vgui.Create("DPanel", parent)
+	wrap:SetTall(RelapseUI.Grid15(3))
+	wrap:Dock(TOP)
+	wrap:DockMargin(0, 0, 0, RelapseUI.Grid15())
+	wrap:SetPaintBackground(false)
+	wrap.Paint = function() return true end
+
+	local cv = GetConVar(cvar)
+	local slider = RelapseUI.MakeStepSlider(wrap, min, max, step, cv and cv:GetInt() or min, function(v)
+		local con = GetConVar(cvar)
+		if con and con:GetInt() ~= v then
+			con:SetInt(v)
+		end
+	end)
+	slider:Dock(FILL)
+	return slider, wrap, cap
+end
+
+function RelapseUI.AmmoPackSegW()
+	return RelapseUI.sPx(15)
+end
+
+function RelapseUI.AmmoPackSliderWide(min, max, step)
+	min = min or 5
+	max = max or 75
+	step = step or 5
+	-- 75/5 = 15 shelves. Each shelf is 15px; the bar grows left from the counter.
+	local segs = math.max(1, math.floor(max / step + 0.5))
+	local knob = RelapseUI.Grid5(2)
+	local slide = segs * RelapseUI.AmmoPackSegW() + knob
+	return slide + RelapseUI.Grid15() + RelapseUI.Grid15(3)
+end
+
+function RelapseUI.PlaceShopAmmoPack(slider, L)
+	if not IsValid(slider) then return end
+	local host = slider:GetParent()
+	if IsValid(host) then
+		-- Track is at slider mid-Y. Center it in the footer (card block → window bottom).
+		slider:SetY(math.floor((host:GetTall() - slider:GetTall()) * 0.5 + 0.5))
+	else
+		RelapseUI.AlignFooterBottom(slider)
+	end
+	slider:SetX((L and L.gridW or 0) - RelapseUI.sPx(45) - slider:GetWide())
+end
+
+function RelapseUI.CreateShopAmmoPackSlider(parent, L)
+	local price = GAMEMODE and GAMEMODE.RelapseAmmoPrice
+	local min = price and price.ShopPointsMin or 5
+	local max = price and price.ShopPointsMax or 75
+	local step = price and price.ShopPointsStep or 5
+	local cur = GAMEMODE and GAMEMODE.GetClientAmmoPackPoints and GAMEMODE:GetClientAmmoPackPoints() or 15
+	local slider = RelapseUI.MakeStepSlider(parent, min, max, step, cur, function(v)
+		if GAMEMODE and GAMEMODE.SetClientAmmoPackPoints then
+			GAMEMODE:SetClientAmmoPackPoints(v)
+		end
+	end)
+	RelapseUI.BindAmmoPackSlider(slider, "shop")
+	slider:SetSize(RelapseUI.AmmoPackSliderWide(min, max, step), RelapseUI.M().btnH)
+	slider:SetVisible(false)
+	if L then
+		RelapseUI.PlaceShopAmmoPack(slider, L)
+	end
 	return slider
 end
 
@@ -3980,15 +4714,23 @@ function RelapseUI.StyleComboMenu(combo)
 	local rowH = RelapseUI.Grid15(3)
 	local selected = combo:GetText()
 
-	menu:SetDrawBorder(false)
-	menu:SetPaintBackground(false)
-	menu:SetPadding(0)
+	if menu.SetDrawBorder then
+		menu:SetDrawBorder(false)
+	end
+	if menu.SetPaintBackground then
+		menu:SetPaintBackground(false)
+	end
+	if menu.SetPadding then
+		menu:SetPadding(0)
+	end
 	menu.Paint = RelapseUI.PaintComboMenu
 
 	RelapseUI.StyleScroll(menu)
 	local canvas = menu.GetCanvas and menu:GetCanvas()
 	if IsValid(canvas) then
-		canvas:SetPaintBackground(false)
+		if canvas.SetPaintBackground then
+			canvas:SetPaintBackground(false)
+		end
 		canvas.Paint = function() return true end
 	end
 

@@ -7,11 +7,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_m1911", "zombiesurvival/killicons/weapon_zs_colt1911.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_colt1911.png")
+    killicon.Add("mg_m1911", "zombiesurvival/killicons/weapon_zs_colt1911_3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_colt1911_3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_colt1911.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_colt1911_3.png"
 -- World receiver is the parent. Slide and mag bone-merge onto it (same as MW in-game).
 SWEP.RelapsePreviewBoneMerge = true
 SWEP.RelapsePreviewParts = {

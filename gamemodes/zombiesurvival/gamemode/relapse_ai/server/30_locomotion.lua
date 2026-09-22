@@ -245,6 +245,7 @@ function Loco:Stop()
 	self.Exhausted = false
 	self.ExhaustedSince = nil
 	self.LastPathEnd = nil
+	self.IslandCut = false
 	self.Path = nil
 	self.CursorFloor = nil
 	self.DropBrushKey = nil
@@ -296,6 +297,7 @@ function Loco:IsHopeless()
 	if self.PathPending then return false end
 	local combat = self.Bot and self.Bot.Combat
 	if combat and combat.InReach then return false end
+	if self.IslandCut and self.PathValid then return true end
 
 	if self.PathValid then
 		if self.Exhausted and self.ExhaustedSince
@@ -322,6 +324,9 @@ function Loco:OnPathResult(path, reached, goal)
 	self.PathTime = CurTime()
 	self.Exhausted = false
 	self.OffPath = false
+
+	-- No edge to that island. Standing at the closest cell is the wall grind.
+	self.IslandCut = self.PathValid and not self.PathReached and self:GoalOnOtherIsland()
 
 	-- The exhausted clock survives a repath that ends where the last one did:
 	-- a moving target that stays unreachable would otherwise reset it every
@@ -578,6 +583,16 @@ function Loco:ProbeLedge(pos, dx, dy, dist, maxHeight, maxDrop)
 		end
 	end
 	if not tr.Hit or tr.HitNormal.z > WALKABLE_Z then return LEDGE_CLEAR end
+	-- A dumpster, drum or door reads as a curb with a floor beyond it. Hopping
+	-- that face is the loop against the prop. A brush lip is still a jump.
+	if IsValid(tr.Entity) and not tr.Entity:IsWorld() then
+		local class = tr.Entity:GetClass()
+		if string.sub(class, 1, 12) == "prop_physics"
+		or class == "func_physbox" or class == "func_physbox_multiplayer"
+		or class == "prop_door_rotating" or class == "func_door" or class == "func_door_rotating" then
+			return LEDGE_WALL
+		end
+	end
 
 	-- How high is it? Look down just inside its face, from the highest top we could take.
 	local topZ = pos.z + maxHeight + 1
@@ -638,10 +653,63 @@ local function IsPhysicsPropClass(class)
 		or class == "func_physbox" or class == "func_physbox_multiplayer"
 end
 
+-- Pad just outside the footprint. A pad into a brush is skipped: the nearest
+-- edge of a bed against a wall is the wall, and steering there is the pile-up.
+local exitTrace = {
+	mask = MASK_SOLID_BRUSHONLY,
+	mins = Vector(-12, -12, 2),
+	maxs = Vector(12, 12, 36),
+}
+local function ExitClear(pl, pos, nx, ny)
+	exitTrace.start = Vector(pos.x, pos.y, pos.z + 8)
+	exitTrace.endpos = Vector(nx, ny, pos.z + 8)
+	exitTrace.filter = pl
+	local tr = util.TraceHull(exitTrace)
+	if tr.StartSolid then return false end
+	if tr.Hit and tr.Fraction < 0.85 and math.abs(tr.HitNormal.z) <= 0.5 then
+		return false
+	end
+	return true
+end
+
+-- Nearest open point just outside the prop's footprint, on its bottom. The path
+-- point can sit on the far side of a dumpster; steering there walks across the lid.
+function Loco:LoosePropExit(ent)
+	local pl = self.Player
+	local pos = pl:GetPos()
+	local mins, maxs = ent:WorldSpaceAABB()
+	local pad = 36
+	local best = math.huge
+	local x, y
+	local function consider(dist, nx, ny)
+		if dist < best and ExitClear(pl, pos, nx, ny) then
+			best, x, y = dist, nx, ny
+		end
+	end
+	consider(pos.x - mins.x, mins.x - pad, pos.y)
+	consider(maxs.x - pos.x, maxs.x + pad, pos.y)
+	consider(pos.y - mins.y, pos.x, mins.y - pad)
+	consider(maxs.y - pos.y, pos.x, maxs.y + pad)
+	if not x then return nil end
+	return Vector(x, y, mins.z)
+end
+
+-- Physics we are standing on, nailed shelf included. Steering uses this.
+-- Hopping does not: a nailed shelf is a barricade to punch from the floor.
+function Loco:PropUnderfoot()
+	local g = self.Player:GetGroundEntity()
+	if not IsValid(g) or g:IsWorld() then return nil end
+	if not IsPhysicsPropClass(g:GetClass()) then return nil end
+	if g:GetMoveType() == MOVETYPE_VPHYSICS then return g end
+	if g.IsNailed and g:IsNailed() then return g end
+	return nil
+end
+
 -- Unnailed physics we are standing on: hop off, never punch the floor.
 function Loco:OnLooseProp()
 	local g = self.Player:GetGroundEntity()
 	if not IsValid(g) or g:IsWorld() then return nil end
+	if g.IsNailed and g:IsNailed() then return nil end
 	local brk, loose = Loco.IsBreakable(g)
 	if brk and loose then return g end
 	if IsPhysicsPropClass(g:GetClass()) and g:GetMoveType() == MOVETYPE_VPHYSICS then
@@ -702,8 +770,22 @@ function Loco:ClearDest()
 end
 
 -- Unnailed junk beside the path or under a ledge is not worth a swing.
+function Loco:GoalOnOtherIsland()
+	local mesh = AI.Mesh
+	if not (mesh and mesh.IsReady and mesh.IsReady() and mesh.Nearest and self.Goal) then return false end
+	local mine = mesh.Nearest(self.Player:GetPos(), 120, 80)
+	local theirs = mesh.Nearest(self.Goal, 240)
+	if not mine or not theirs or not mine.comp or not theirs.comp then return false end
+	return mine.comp ~= theirs.comp
+end
+
 function Loco:LooseWorthBreaking(ent, hitPos, generous)
+	-- The mesh already reaches the sigil or the player. A crate on that route
+	-- is a sidestep, not a break.
+	if self.PathReached then return false end
 	if self.Obstacle == ent then return true end
+	-- The goal is another island: a crate at our cliff is not the passage.
+	if not self.PathReached and self:GoalOnOtherIsland() then return false end
 	-- A shelf in the shaft is the way up, not courtyard clutter.
 	if self.Ladder then return true end
 	if not self.ClearPath then return false end
@@ -726,6 +808,13 @@ function Loco:LooseWorthBreaking(ent, hitPos, generous)
 	local side = math_abs(hx * -gy + hy * gx) / glen
 	local sideMax = generous and 88 or 52
 	if side > sideMax then return false end
+	-- A prop well short of where the path actually ends is clutter on the way
+	-- to the sigil, not the thing that stops the route.
+	local path = self.Path
+	if path and path.GetEnd then
+		local endp = path:GetEnd()
+		if endp and hitPos:DistToSqr(endp) > 120 * 120 then return false end
+	end
 	return true
 end
 
@@ -733,6 +822,17 @@ end
 -- loose prop or the sigil we are heading for anyway.
 local function IsBarricade(ent, loose)
 	return not loose and ent:GetClass() ~= "prop_obj_sigil"
+end
+
+-- Cells under the whole prop, plus a body-width of margin. One centre still
+-- leaves the next chord inside the model.
+local function MarkFootprint(ent, duration, penalty)
+	if not (AI.Mesh and AI.Mesh.IsReady and AI.Mesh.IsReady() and AI.Mesh.MarkBlockedAround) then return end
+	local mins, maxs = ent:WorldSpaceAABB()
+	local rx = (maxs.x - mins.x) * 0.5 + 40
+	local ry = (maxs.y - mins.y) * 0.5 + 40
+	AI.Mesh.MarkBlockedAround(Vector((mins.x + maxs.x) * 0.5, (mins.y + maxs.y) * 0.5, (mins.z + maxs.z) * 0.5),
+		math.sqrt(rx * rx + ry * ry), duration, penalty)
 end
 
 -- Put a price on the barricade's area(s) so paths prefer a way around it.
@@ -747,6 +847,7 @@ function Loco:MarkObstacle(ent, now, duration, penalty)
 	if a then ids[#ids + 1] = a:GetID() end
 	local b = Nav.MarkBlockedAt(ent:WorldSpaceCenter(), duration, penalty)
 	if b and b ~= a then ids[#ids + 1] = b:GetID() end
+	MarkFootprint(ent, duration, penalty)
 
 	self.ObstacleAreas = ids
 	self.NextMark = now + 10
@@ -763,6 +864,90 @@ end
 local function IsDoor(ent)
 	local class = ent:GetClass()
 	return class == "prop_door_rotating" or class == "func_door" or class == "func_door_rotating"
+end
+
+-- State can still say closed after the leaf has swung. A hull that misses
+-- the leaf means walk. The wish is checked too: the centre line can clip
+-- only the hinge while the body is pushing through the slab.
+local function DoorStillBlocks(self, door)
+	local Mesh = AI.Mesh
+	if not (Mesh and Mesh.DoorwayOpen) then return true end
+	local pos = self.Player:GetPos()
+	local id = door:EntIndex()
+	local function blocks(tx, ty)
+		return not Mesh.DoorwayOpen(id, pos.x, pos.y, pos.z, tx, ty, pos.z)
+	end
+	local dir = self.WishDir
+	if (not dir or (dir.x == 0 and dir.y == 0)) and self.PathDir then dir = self.PathDir end
+	if dir and (dir.x ~= 0 or dir.y ~= 0) and blocks(pos.x + dir.x * 72, pos.y + dir.y * 72) then
+		return true
+	end
+	local c = door:WorldSpaceCenter()
+	local dx, dy = c.x - pos.x, c.y - pos.y
+	local len = math.sqrt(dx * dx + dy * dy)
+	if len < 8 then return true end
+	local nx, ny = dx / len, dy / len
+	return blocks(pos.x + nx * (len + 56), pos.y + ny * (len + 56))
+end
+
+local doorSlideTrace = {
+	mask = MASK_PLAYERSOLID,
+	mins = Vector(-16, -16, 4),
+	maxs = Vector(16, 16, 48),
+	filter = ProbeFilter,
+}
+
+-- Stand in front of the leaf. The path point can sit on the frame, and direct
+-- mode then walks north into the wall beside the door.
+function Loco:DoorStand(pos, target)
+	local door = self.Obstacle
+	if not IsValid(door) or not IsDoor(door) then return nil end
+	local c = door:WorldSpaceCenter()
+	if pos:DistToSqr(c) > 160 * 160 then return nil end
+	SetProbeContext(self)
+	local function blocked(tx, ty)
+		doorSlideTrace.start = Vector(pos.x, pos.y, pos.z + 20)
+		doorSlideTrace.endpos = Vector(tx, ty, pos.z + 20)
+		local tr = util.TraceHull(doorSlideTrace)
+		if tr.StartSolid then return true end
+		if not tr.Hit or tr.Entity == door then return false end
+		if tr.HitWorld then return true end
+		return IsValid(tr.Entity) and (tr.Entity:IsWorld() or tr.Entity:GetSolid() == SOLID_BSP)
+	end
+	-- A clear centre line still clips the frame for a body standing beside it.
+	-- A teammate on that same stand point counts too: both swing into each other.
+	if target and not blocked(target.x, target.y) and not self:IsBlockedByPlayer(pos) then return nil end
+	local dx, dy = pos.x - c.x, pos.y - c.y
+	local len = math.sqrt(dx * dx + dy * dy)
+	if len < 1 then return nil end
+	dx, dy = dx / len, dy / len
+	local nx, ny = -dy, dx
+	local stand = 42
+	local function consider(tx, ty)
+		if not blocked(tx, ty) then return Vector(tx, ty, pos.z) end
+	end
+	local spot = consider(c.x + dx * stand, c.y + dy * stand)
+	if spot then return spot end
+	for _, s in ipairs({1, -1}) do
+		for step = 1, 3 do
+			spot = consider(c.x + dx * stand + nx * s * step * 28, c.y + dy * stand + ny * s * step * 28)
+			if spot then return spot end
+		end
+	end
+	return nil
+end
+
+function Loco:WishHitsWorld(pos, dir)
+	if not dir or (dir.x == 0 and dir.y == 0) then return false end
+	SetProbeContext(self)
+	probeTrace.maxs.z = 36
+	probeTrace.start = Vector(pos.x, pos.y, pos.z + 8)
+	probeTrace.endpos = Vector(pos.x + dir.x * 28, pos.y + dir.y * 28, pos.z + 8)
+	local tr = util_TraceHull(probeTrace)
+	probeTrace.maxs.z = PROBE_BAND
+	if not tr.Hit then return false end
+	if tr.HitWorld then return true end
+	return IsValid(tr.Entity) and (tr.Entity:IsWorld() or tr.Entity:GetSolid() == SOLID_BSP)
 end
 
 function Loco:GetObstacle()
@@ -783,6 +968,29 @@ function Loco:GetObstacle()
 	if ent:GetPos():DistToSqr(self.ObstaclePos) > 48 * 48 then
 		self:ClearObstacle(true) -- pushed or knocked away
 		return nil
+	end
+
+	if IsDoor(ent) and not DoorStillBlocks(self, ent) then
+		if AI.Mesh and AI.Mesh.LiftDoorBlock then AI.Mesh.LiftDoorBlock(ent) end
+		self:ClearObstacle(true)
+		self.PathValid = false
+		self.NextRepath = 0
+		self:Note("door:clear")
+		return nil
+	end
+	if self.ObstacleLoose and self.PathReached then
+		self:ClearObstacle(true)
+		self:Note("prop:past")
+		return nil
+	end
+	if self.ObstacleLoose and self.Path and self.Path.GetEnd then
+		local endp = self.Path:GetEnd()
+		local hit = self.ObstacleHit or ent:WorldSpaceCenter()
+		if endp and hit:DistToSqr(endp) > 120 * 120 then
+			self:ClearObstacle(true)
+			self:Note("prop:past")
+			return nil
+		end
 	end
 
 	-- Wander / no chase: drop a loose prop we had started hitting.
@@ -811,11 +1019,21 @@ function Loco:GetObstacle()
 	self.ObstacleHP = hp
 
 	-- Hammered it for too long without result (locked door, elevator...): route around it for a while.
-	if now - math_max(self.ObstacleSince, self.ObstacleProgress or 0) > self.P.ObstacleTimeout then
+	-- Loose map furniture with no health never shows a dent. Don't stand on it for the full barricade timer.
+	local limit = self.P.ObstacleTimeout
+	if self.ObstacleLoose and (not hp or hp <= 0) and not (ent.IsNailed and ent:IsNailed()) then
+		limit = 4
+	end
+	if now - math_max(self.ObstacleSince, self.ObstacleProgress or 0) > limit then
 		local Nav = AI.Nav
 		self.IgnoredObstacles[ent] = now + self.P.ObstacleIgnore
 		Nav.MarkBlockedAt(mypos, 45, Nav.Penalty.Unbreakable)
 		Nav.MarkBlockedAt(ent:WorldSpaceCenter(), 45, Nav.Penalty.Unbreakable)
+		MarkFootprint(ent, 45, Nav.Penalty.Unbreakable)
+		-- The mesh edge stays. Without a ban the next search walks up to the same leaf.
+		if IsDoor(ent) and AI.Mesh and AI.Mesh.BanDoor then
+			AI.Mesh.BanDoor(ent, 45)
+		end
 		self:ClearObstacle(false)
 		self.PathValid = false
 		self.NextRepath = 0
@@ -863,8 +1081,13 @@ function Loco:SetObstacle(ent, loose, hitPos)
 			local known = Nav.BlockedSince(self.ObstacleHit, penalty)
 			self:MarkObstacle(ent, now, duration, penalty)
 			-- On a ladder there is no "around": punch or we stall and abort.
+			local nailed = ent.IsNailed and ent:IsNailed()
 			if self.Ladder then
 				self:Note("break:ladder:" .. ent:GetClass())
+			elseif nailed then
+				-- Already against a nailed shelf. A detour that misses the
+				-- footprint still leaves us standing on it for the ignore window.
+				self:Note("break:" .. ent:GetClass())
 			elseif self.Mode == "path" and not self.Hold and not (known and self.PathTime > known) then
 				-- Following a path that does not already pay for this: see whether
 				-- the penalty buys us a way around before swinging.
@@ -907,6 +1130,7 @@ local function ConsiderHit(self, tr, includeLoose, dist)
 	local breakable, loose = Loco.IsBreakable(ent)
 	if not breakable then return nil end
 	if loose and not self:LooseWorthBreaking(ent, tr.HitPos, includeLoose) then return nil end
+	if IsDoor(ent) and not DoorStillBlocks(self, ent) then return nil end
 	if self:SetObstacle(ent, loose, tr.HitPos) then
 		return ent
 	end
@@ -948,7 +1172,10 @@ function Loco:ProbeObstacle(pos, includeLoose)
 		if self.Obstacle == on then
 			self:ClearObstacle(true)
 		end
-		self:Jump("prop:off")
+		-- No open pad: a hop leaves us in the wall the lid is against.
+		if self:LoosePropExit(on) then
+			self:Jump("prop:off")
+		end
 		return nil
 	end
 
@@ -1119,12 +1346,21 @@ function Loco:Escalate(pos)
 			self:SideStepFor(0.7) -- nothing to jump onto: slide along it
 			self:Note("stuck1:wall")
 		else
-			self:Jump("stuck1:snag") -- snagged on something small
+			-- Step probe is clear, but the body hull is already in a brush
+			-- beside the cell centre. A hop drives us further into that wall.
+			if self:WishHitsWorld(pos, dir) then
+				self:SideStepFor(0.7)
+				self:Note("stuck1:wall")
+			else
+				self:Jump("stuck1:snag")
+			end
 		end
 	elseif level == 2 then
 		self:ProbeObstacle(pos, true)
 		self:SideStepFor(0.7)
-		self:Jump("stuck2")
+		if not self:WishHitsWorld(pos, dir) then
+			self:Jump("stuck2")
+		end
 		self:Note("stuck2")
 	elseif level == 3 then
 		local Nav = AI.Nav
@@ -2693,6 +2929,21 @@ function Loco:Think(dt)
 		self.ExhaustedSince = now
 	end
 
+	-- Path ended on a closed door. Set it once we are close; the barricade
+	-- timer then either breaks the leaf or bans the edge.
+	local doorPath = self.Path
+	local door = doorPath and doorPath.GetDoor and doorPath:GetDoor()
+	if door and not self.Obstacle and self.PathValid and pos:DistToSqr(doorPath:GetEnd()) < 80 * 80 then
+		if DoorStillBlocks(self, door) then
+			self:SetObstacle(door, false, door:WorldSpaceCenter())
+		else
+			if AI.Mesh and AI.Mesh.LiftDoorBlock then AI.Mesh.LiftDoorBlock(door) end
+			self.PathValid = false
+			self.NextRepath = 0
+			self:Note("door:clear")
+		end
+	end
+
 	-- Nav attributes: crouch here and ahead, jump only where a ledge really is.
 	local wish = self.WishDir
 	local moving = wish.x ~= 0 or wish.y ~= 0
@@ -2721,7 +2972,9 @@ function Loco:Think(dt)
 	end
 
 	-- Unnailed physics: hop off even if the path died (WishDir would be zero).
-	if self:OnLooseProp() then
+	-- Only when a pad beside the prop is open. A nailed shelf is not this.
+	local hop = self:OnLooseProp()
+	if hop and self:LoosePropExit(hop) then
 		if self.Obstacle then
 			self:ClearObstacle(true)
 		end
@@ -2889,14 +3142,20 @@ function Loco:Step(cmd, viewYaw, dt)
 		else
 			target = path:GetPositionOnPath(cursor + look)
 		end
+		local under = self:PropUnderfoot()
+		if under then
+			local exitPos = self:LoosePropExit(under)
+			if exitPos then target = exitPos end
+		end
 
 		self.LookPos = path:GetPositionOnPath(math_min(cursor + look + 140, length))
 	else
 		-- No path yet. Walk to a same-floor mount instead of idling at spawn.
 		local dest = self.WalkDest
-		if self:OnLooseProp() then
-			target = goal
-			self.SteerPos = goal
+		local under = self:PropUnderfoot()
+		if under then
+			target = self:LoosePropExit(under) or goal
+			self.SteerPos = target
 		elseif dest and AI.Nav.HasLadder(self.ViaLadder) and math_abs(dest.z - pos.z) < 48 then
 			target = dest
 			self.SteerPos = dest
@@ -2912,6 +3171,12 @@ function Loco:Step(cmd, viewYaw, dt)
 			self.WishDir:Zero()
 			return buttons
 		end
+	end
+
+	local leaf = self:DoorStand(pos, target)
+	if leaf then
+		target = leaf
+		self.SteerPos = leaf
 	end
 
 	local dropBusy, holdXY

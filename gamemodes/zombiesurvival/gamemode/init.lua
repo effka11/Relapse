@@ -61,6 +61,7 @@ AddCSLuaFile("cl_relapse_wmpose.lua")
 AddCSLuaFile("cl_relapse_inventory.lua")
 AddCSLuaFile("cl_relapse_loadout.lua")
 AddCSLuaFile("cl_relapse_breath.lua")
+AddCSLuaFile("cl_relapse_iconsdev.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -553,6 +554,7 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_legdamage")
 	util.AddNetworkString("zs_armdamage")
 	util.AddNetworkString("zs_extrastartingworth")
+	util.AddNetworkString("zs_remainingstartingworth")
 	util.AddNetworkString("zs_ammopickup")
 	util.AddNetworkString("zs_ammogive")
 	util.AddNetworkString("zs_ammogiven")
@@ -2195,6 +2197,8 @@ function GM:PlayerReadyRound(pl)
 		if self.CheckedOut[pl:UniqueID()] then
 			-- Reconnected humans already have their worth/arsenal gear.
 		elseif self:GetWave() <= 0 and self.StartingWorth > 0 and not self.StartingLoadout and not self.ZombieEscape then
+			self:GetRemainingStartingWorth(pl)
+			self:SyncRemainingStartingWorth(pl)
 			pl:SendLua("InitialWorthMenu()")
 		else
 			gamemode.Call("GiveDefaultOrRandomEquipment", pl)
@@ -2382,6 +2386,8 @@ function GM:PlayerInitialSpawnRound(pl)
 
 	pl.m_ReconnectRestore = nil
 	pl.m_ReconnectRestored = nil
+	pl.RemainingStartingWorth = nil
+	pl.RemainingStartingWorthBase = nil
 	pl.m_ReconnectAmmoState = nil
 	pl.m_ReconnectEmptyLock = nil
 
@@ -2668,13 +2674,59 @@ function GM:RemoveDuplicateAmmo(pl)
 	end
 end
 
+function GM:GetRemainingStartingWorth(pl)
+	if not IsValid(pl) then return 0 end
+	if pl.RemainingStartingWorth == nil then
+		local full = (self.StartingWorth or 0) + (pl.ExtraStartingWorth or 0)
+		pl.RemainingStartingWorth = full
+		pl.RemainingStartingWorthBase = full
+	end
+	return pl.RemainingStartingWorth
+end
+
+function GM:SyncRemainingStartingWorth(pl)
+	if not IsValid(pl) then return end
+	net.Start("zs_remainingstartingworth")
+		net.WriteInt(self:GetRemainingStartingWorth(pl), 16)
+	net.Send(pl)
+end
+
+function GM:ApplyExtraStartingWorth(pl)
+	if not IsValid(pl) then return end
+	-- Reconnect restores leftover worth after skills; don't refill the pool first.
+	if (pl.m_ReconnectRestore or pl.m_ReconnectRestored) and pl.RemainingStartingWorth == nil then
+		return
+	end
+	local want = (self.StartingWorth or 0) + (pl.ExtraStartingWorth or 0)
+	if pl.RemainingStartingWorth == nil then
+		pl.RemainingStartingWorth = want
+		pl.RemainingStartingWorthBase = want
+		self:SyncRemainingStartingWorth(pl)
+		return
+	end
+	local base = pl.RemainingStartingWorthBase or want
+	local delta = want - base
+	if delta > 0 then
+		pl.RemainingStartingWorth = pl.RemainingStartingWorth + delta
+	end
+	pl.RemainingStartingWorthBase = want
+	self:SyncRemainingStartingWorth(pl)
+end
+
+function GM:HasSpentStartingWorth(pl)
+	if not IsValid(pl) or pl.RemainingStartingWorth == nil then return false end
+	local full = (self.StartingWorth or 0) + (pl.ExtraStartingWorth or 0)
+	return pl.RemainingStartingWorth < full
+end
+
 local function TimedOut(pl)
-	if pl:IsValid() and pl:Team() == TEAM_HUMAN and pl:Alive() and not GAMEMODE.CheckedOut[pl:UniqueID()] then
+	if pl:IsValid() and pl:Team() == TEAM_HUMAN and pl:Alive() and not GAMEMODE.CheckedOut[pl:UniqueID()] and not GAMEMODE:HasSpentStartingWorth(pl) then
 		gamemode.Call("GiveRandomEquipment", pl)
 	end
 end
 
 function GM:GiveDefaultOrRandomEquipment(pl)
+	if self:HasSpentStartingWorth(pl) then return end
 	if not self.CheckedOut[pl:UniqueID()] and not self.ZombieEscape then
 		if self.StartingLoadout then
 			self:GiveStartingLoadout(pl)
@@ -2728,7 +2780,7 @@ function GM:GiveRandomEquipment(pl)
 end
 
 function GM:PlayerCanCheckout(pl)
-	return pl:IsValid() and not pl:IsForcedUndeadBot() and pl:Team() == TEAM_HUMAN and pl:Alive() and not self.CheckedOut[pl:UniqueID()] and not self.StartingLoadout and not self.ZombieEscape and self.StartingWorth > 0 and self:GetWave() < 2
+	return pl:IsValid() and not pl:IsForcedUndeadBot() and pl:Team() == TEAM_HUMAN and pl:Alive() and not self.CheckedOut[pl:UniqueID()] and not self.StartingLoadout and not self.ZombieEscape and self.StartingWorth > 0 and self:GetWave() <= 0
 end
 
 function GM:PlayerDeathThink(pl)
@@ -3501,10 +3553,10 @@ function GM:KeyPress(pl, key)
 						self:TryHumanPickup(pl, use)
 					end
 				end
-				if not pl:IsHolding() and pl:NearArsenalCrate() then
+				if not pl:IsHolding() then
 					local use = pl.GetUseEntity and pl:GetUseEntity()
 					local class = IsValid(use) and use:GetClass()
-					if not class or class == "prop_arsenalcrate" or class == "status_arsenalpack" or class == "func_arsenalzone" then
+					if class == "prop_arsenalcrate" or class == "status_arsenalpack" then
 						pl:SendLua("GAMEMODE:OpenArsenalMenu()")
 					end
 				end

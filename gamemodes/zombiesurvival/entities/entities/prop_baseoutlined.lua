@@ -6,7 +6,7 @@ if not CLIENT then return end
 
 ENT.RenderGroup = RENDERGROUP_BOTH
 
-ENT.ColorModulation = Color(1, 0.5, 1)
+ENT.ColorModulation = Color(1, 1, 1)
 ENT.Seed = 0
 
 function ENT:Initialize()

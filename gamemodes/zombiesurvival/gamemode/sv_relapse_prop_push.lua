@@ -15,6 +15,9 @@ local SLOW_ANG_SQR = 20 * 20
 -- larger is a hang (player crawled out, door opened, the crate underneath moved).
 local SUPPORT_DROP = 8
 local CONTACT_DIST_SQR = SUPPORT_DROP * SUPPORT_DROP
+-- Same spot: a shuffled player or a door that turned is a new support check.
+local SUPPORT_MOVE_SQR = 1
+local SUPPORT_TURN = 1
 local LIFT_TRACE = Vector(0, 0, 1)
 -- Jump-land embed vs foot clip on a frozen lid. Not SUPPORT_DROP.
 local STUCK_LIFT = 4
@@ -84,15 +87,70 @@ end
 -- True if the collision hull still meets world / another solid within SUPPORT_DROP.
 -- Players and NPCs count: while they are underneath the prop stays put; once they
 -- leave, the next settle tick unfreezes it so it can fall.
-local function HasRestSupport(ent)
+local supportStart = Vector()
+local supportEnd = Vector()
+local supportTr = {
+	mask = MASK_SOLID,
+	filter = nil,
+	start = supportStart,
+	endpos = supportEnd,
+}
+
+local function ProbeRestSupport(ent)
 	local pos = ent:GetPos()
-	local tr = util.TraceEntity({
-		start = pos,
-		endpos = pos + Vector(0, 0, -SUPPORT_DROP),
-		filter = ent,
-		mask = MASK_SOLID,
-	}, ent)
-	return tr.Hit or tr.StartSolid
+	supportStart:Set(pos)
+	supportEnd:Set(pos)
+	supportEnd.z = supportEnd.z - SUPPORT_DROP
+	supportTr.filter = ent
+	local tr = util.TraceEntity(supportTr, ent)
+	return tr.Hit or tr.StartSolid, tr
+end
+
+local function ClearSupport(ent)
+	ent.m_RelapseSupportWorld = nil
+	ent.m_RelapseSupportEnt = nil
+end
+
+-- World, or a live entity still at the stored pose. A miss means the next
+-- settle tick traces again. StartSolid with no hit entity is not remembered:
+-- the body inside us may leave without moving a brush.
+local function RememberSupport(ent, tr)
+	if tr.StartSolid and not tr.Hit then
+		ClearSupport(ent)
+		return
+	end
+	local sup = tr.Entity
+	if tr.HitWorld or not IsValid(sup) or sup:IsWorld() then
+		ent.m_RelapseSupportEnt = nil
+		ent.m_RelapseSupportPos = nil
+		ent.m_RelapseSupportAng = nil
+		ent.m_RelapseSupportWorld = true
+		return
+	end
+	ent.m_RelapseSupportWorld = nil
+	ent.m_RelapseSupportEnt = sup
+	local pos = ent.m_RelapseSupportPos
+	if not pos then
+		ent.m_RelapseSupportPos = Vector(sup:GetPos())
+		ent.m_RelapseSupportAng = Angle(sup:GetAngles())
+	else
+		pos:Set(sup:GetPos())
+		ent.m_RelapseSupportAng:Set(sup:GetAngles())
+	end
+end
+
+local function SupportUnmoved(ent)
+	if ent.m_RelapseSupportWorld then return true end
+	local sup = ent.m_RelapseSupportEnt
+	if not IsValid(sup) then return false end
+	local pos = ent.m_RelapseSupportPos
+	if not pos or sup:GetPos():DistToSqr(pos) > SUPPORT_MOVE_SQR then return false end
+	local ang = ent.m_RelapseSupportAng
+	if not ang then return false end
+	local now = sup:GetAngles()
+	return math.abs(math.AngleDifference(ang.p, now.p)) <= SUPPORT_TURN
+		and math.abs(math.AngleDifference(ang.y, now.y)) <= SUPPORT_TURN
+		and math.abs(math.AngleDifference(ang.r, now.r)) <= SUPPORT_TURN
 end
 
 local function WakePhys(ent)
@@ -284,10 +342,12 @@ function meta:RelapseFreezeAgainstPush()
 
 	local phys = self:GetPhysicsObject()
 	if not phys:IsValid() or not phys:IsMoveable() then return false end
-	if not HasRestSupport(self) then return false end
+	local supported, tr = ProbeRestSupport(self)
+	if not supported then return false end
 	if PlayerStuckOnTop(self) then return false end
 
 	self.m_RelapsePushFrozen = true
+	RememberSupport(self, tr)
 	EachPhys(self, function(obj)
 		obj:EnableMotion(false)
 	end)
@@ -296,6 +356,7 @@ end
 
 function meta:RelapseUnfreezeAgainstPush()
 	self.m_RelapseNoPushUntil = CurTime() + 0.35
+	ClearSupport(self)
 	if not self.m_RelapsePushFrozen then return false end
 	self.m_RelapsePushFrozen = nil
 	if self:GetNailFrozen() then return false end
@@ -313,7 +374,15 @@ local function TrySettle(ent)
 	if IsHeldByGameplay(ent) then return end
 
 	if ent.m_RelapsePushFrozen then
-		if not HasRestSupport(ent) or PlayerStuckOnTop(ent) then
+		local supported = SupportUnmoved(ent)
+		if not supported then
+			local ok, tr = ProbeRestSupport(ent)
+			if ok then
+				RememberSupport(ent, tr)
+				supported = true
+			end
+		end
+		if not supported or PlayerStuckOnTop(ent) then
 			ent:RelapseUnfreezeAgainstPush()
 		end
 		return
@@ -331,7 +400,7 @@ local function TrySettle(ent)
 
 	-- Asleep / slow in mid-air: the thing it landed on walked away. Wake so
 	-- gravity runs; do not freeze or it stays a static hanging hull.
-	if not HasRestSupport(ent) then
+	if not ProbeRestSupport(ent) then
 		if asleep then
 			WakePhys(ent)
 		end
@@ -400,8 +469,20 @@ local function HookPropCollide(ent)
 	end)
 end
 
+-- Settle walks this list. FindByClass every tick rebuilt the whole prop table
+-- after the pile had already frozen.
+local pushCandidates = {}
+local pushCandidateSet = {}
+
+local function TrackPushCandidate(ent)
+	if not IsPhysicsProp(ent) or pushCandidateSet[ent] then return end
+	pushCandidateSet[ent] = true
+	pushCandidates[#pushCandidates + 1] = ent
+end
+
 local function ScanExisting()
 	for _, ent in ipairs(ents.FindByClass("prop_physics*")) do
+		TrackPushCandidate(ent)
 		HookPropCollide(ent)
 		TrySettle(ent)
 	end
@@ -458,6 +539,7 @@ end
 hook.Add("OnEntityCreated", "RelapsePropPush", function(ent)
 	timer.Simple(0, function()
 		if not ent:IsValid() then return end
+		TrackPushCandidate(ent)
 		HookPropCollide(ent)
 		TrySettle(ent)
 	end)
@@ -481,7 +563,22 @@ hook.Add("EntityTakeDamage", "RelapsePropPush", function(ent, dmginfo)
 end)
 
 timer.Create("RelapsePropPushSettle", 0.25, 0, function()
-	for _, ent in ipairs(ents.FindByClass("prop_physics*")) do
-		TrySettle(ent)
+	local n = 1
+	for i = 1, #pushCandidates do
+		local ent = pushCandidates[i]
+		if ent:IsValid() then
+			pushCandidates[n] = ent
+			n = n + 1
+			TrySettle(ent)
+		else
+			pushCandidateSet[ent] = nil
+		end
+	end
+	for i = n, #pushCandidates do
+		pushCandidates[i] = nil
 	end
 end)
+
+if GAMEMODE and GAMEMODE.DidInitPostEntity then
+	ScanExisting()
+end

@@ -9,11 +9,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_alpha50", "zombiesurvival/killicons/weapon_zs_ax50_side2.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_ax50_side2.png")
+    killicon.Add("mg_alpha50", "zombiesurvival/killicons/weapon_zs_ax50_side3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_ax50_side3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_ax50_side2.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_ax50_side3.png"
 -- WM draws the receiver. Barrel/mag/stock bone-merge onto tag_*_attach.
 -- Default optic is att_sight (irons), not the AX-50 scope. WM variant 0 — do not copy MP5 [0]=1.
 -- Studio hull / DrawModel is along +X like PKM, not +Z like SKS. LocalAng 90

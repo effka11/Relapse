@@ -1,7 +1,7 @@
 INC_CLIENT()
 include("cl_animations.lua")
 
-ENT.ColorModulation = Color(1, 0.5, 0)
+ENT.ColorModulation = Color(1, 1, 1)
 
 function ENT:Think()
 	local itype = self:GetInventoryItemType()

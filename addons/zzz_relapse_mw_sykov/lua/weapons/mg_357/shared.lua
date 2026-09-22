@@ -7,11 +7,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_357", "zombiesurvival/killicons/weapon_zs_python357.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_python357.png")
+    killicon.Add("mg_357", "zombiesurvival/killicons/weapon_zs_python357_3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_python357_3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_python357.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_python357_3.png"
 -- World frame already has the cylinder. VM mag has ShowOnWorldModel=false and
 -- no WM bones — bone-merging it leaves a speedloader floating at origin.
 SWEP.RelapsePreviewBoneMerge = true

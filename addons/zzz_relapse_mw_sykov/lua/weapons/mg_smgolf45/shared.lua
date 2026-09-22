@@ -8,11 +8,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_smgolf45", "zombiesurvival/killicons/weapon_zs_ump45_side2.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_ump45_side2.png")
+    killicon.Add("mg_smgolf45", "zombiesurvival/killicons/weapon_zs_ump45_side3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_ump45_side3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_ump45_side2.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_ump45_side3.png"
 -- WM is the receiver. Barrel, mag, stock, and receiver att bone-merge like MP5/SKS.
 -- DrawModel after SetupBones is +Z: hull + LocalAng 90. Frame like MP5, not a rifle.
 SWEP.RelapsePreviewBoneMerge = true

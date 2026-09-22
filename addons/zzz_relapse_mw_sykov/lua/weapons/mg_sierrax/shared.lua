@@ -7,11 +7,11 @@ include("animations.lua")
 include("customization.lua")
 
 if CLIENT then
-    killicon.Add("mg_sierrax", "zombiesurvival/killicons/weapon_zs_finn_side2.png", Color(255, 255, 255))
-    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_finn_side2.png")
+    killicon.Add("mg_sierrax", "zombiesurvival/killicons/weapon_zs_finn_side3.png", Color(255, 255, 255))
+    SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_finn_side3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_finn_side2.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_finn_side3.png"
 -- WM receiver is bodygroup 0 (same as PKM/AK — do not copy MP5 [0]=1).
 -- Barrel, box mag, and stock bone-merge onto tag_*_attach. Default grip slot is att_grip.
 -- Studio hull / DrawModel is along +X (muzzle +X), not +Z like SCAR. LocalAng 90
