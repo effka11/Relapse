@@ -34,6 +34,11 @@ HM_PACIFIST = 19
 HM_SCARECROW = 20
 HM_NESTDESTROYER = 21
 HM_NESTMASTER = 22
+HM_SIGILCORRUPT = 23
+HM_SIGILRESTORE = 24
+HM_BOSSKILL = 25
+HM_MELEEKILLS = 26
+HM_REDEEMED = 27
 
 DT_PLAYER_INT_TABCLASS = 2
 DT_PLAYER_INT_REMORTLEVEL = 5
@@ -47,6 +52,8 @@ DT_PLAYER_FLOAT_WIDELOAD = 5
 DT_PLAYER_FLOAT_PHANTOMHEALTH = 6
 DT_PLAYER_FLOAT_EXTRAWEIGHT = 7
 DT_PLAYER_FLOAT_STAMINA = 8
+DT_PLAYER_FLOAT_NOISE = 9
+DT_PLAYER_FLOAT_NOISETIME = 10
 DT_PLAYER_BOOL_STAMINAEXHAUST = 9
 
 VOICESET_MALE = 0
@@ -120,8 +127,8 @@ GM.BaseDeploySpeed = 1 -- Put this back to 1 to increase the value of it
 GM.ExtraNailHealth = 0.20
 GM.MaxNails = 4
 
--- Moved from options to globals because the game is now balanced around it being static. The gamemode will BREAK if this is not 6!!
-GM.NumberOfWaves = 6
+-- Class unlocks are authored as a fraction of 6 and clamped to this count in RegisterZombieClass.
+GM.NumberOfWaves = 5
 
 GM.PulsePointsMultiplier = 1.25
 
@@ -384,7 +391,7 @@ GM.AmmoModels["grenade"] = "models/weapons/w_grenade.mdl" -- Grenades
 GM.AmmoModels["thumper"] = "models/Combine_turrets/Floor_turret.mdl" -- Gun turrets
 GM.AmmoModels["airboatgun"] = "models/Items/item_item_crate.mdl" -- Arsenal crates
 GM.AmmoModels["striderminigun"] = "models/props_combine/combine_mine01.mdl" -- Message beacons
-GM.AmmoModels["helicoptergun"] = "models/Items/ammocrate_ar2.mdl" -- Resupply boxes
+GM.AmmoModels["helicoptergun"] = "models/ammo/fas2/ammocrate.mdl" -- Resupply boxes
 GM.AmmoModels["slam"] = "models/props_lab/lab_flourescentlight002b.mdl" -- Force Field Emitters
 GM.AmmoModels["spotlamp"] = "models/props_combine/combine_light001a.mdl"
 GM.AmmoModels["aloe"] = "models/srp/prop_pbucket.mdl"

@@ -67,7 +67,11 @@ end
 
 function SWEP:GetFireDelay()
 	local owner = self:GetOwner()
-	return (self.Primary.Delay * (owner.MedgunFireDelayMul or 1)) / (owner:GetStatus("frost") and 0.7 or 1)
+	local delay = (self.Primary.Delay * (owner.MedgunFireDelayMul or 1)) / (owner:GetStatus("frost") and 0.7 or 1)
+	if GAMEMODE and GAMEMODE.GetGunFireDelay then
+		delay = GAMEMODE:GetGunFireDelay(owner, delay)
+	end
+	return delay
 end
 
 function SWEP:GetReloadSpeedMultiplier()

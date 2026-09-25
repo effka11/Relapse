@@ -341,7 +341,7 @@ function meta:GetAllConstrainedEntities()
 	return allcons
 end
 
-function meta:PackUp(pl)
+function meta:PackUp(pl, sell)
 	if not self.CanPackUp then return end
 
 	local cur = pl:GetStatus("packup")
@@ -350,13 +350,22 @@ function meta:PackUp(pl)
 	local status = pl:GiveStatus("packup")
 	if status:IsValid() then
 		status:SetPackUpEntity(self)
-		status:SetEndTime(CurTime() + (self.PackUpTime or 3) * (not self.IgnorePackTimeMul and pl.DeployablePackTimeMul or 1))
+		local packMul = 1
+		if GAMEMODE.GetDevicePackTimeMul then
+			packMul = GAMEMODE:GetDevicePackTimeMul(pl, self)
+		elseif not self.IgnorePackTimeMul then
+			packMul = pl.DeployablePackTimeMul or 1
+		end
+		status:SetEndTime(CurTime() + (self.PackUpTime or 3) * packMul)
 
 		if self.GetObjectOwner then
 			local owner = self:GetObjectOwner()
 			if owner:IsValid() and owner:Team() == TEAM_HUMAN and owner ~= pl and not gamemode.Call("PlayerIsAdmin", pl) then
 				status:SetNotOwner(true)
 			end
+		end
+		if sell and status.SetSupplySell then
+			status:SetSupplySell(true)
 		end
 	end
 end
@@ -452,6 +461,16 @@ function meta:DamageNails(attacker, inflictor, damage, dmginfo)
 
 		dmginfo:SetDamage(dmginfo:GetDamage() * multi)
 		damage = damage * multi
+	end
+
+	if GAMEMODE.GetBarricadeDamageMul then
+		local mul = GAMEMODE:GetBarricadeDamageMul(attacker)
+		if mul ~= 1 then
+			damage = damage * mul
+			if dmginfo then
+				dmginfo:SetDamage(dmginfo:GetDamage() * mul)
+			end
+		end
 	end
 
 	self:ResetLastBarricadeAttacker(attacker, dmginfo)

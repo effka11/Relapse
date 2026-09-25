@@ -8,9 +8,9 @@
 -- height, and a lifted hull along it meets no wall. Ramps and stair runs pass;
 -- a crate face does not (that pair becomes a hop). A prop_door in that hull is
 -- not a walk: the edge stays, and A* crosses it only while the leaf is open.
--- A straight same-floor hole of a few cells (paint skipped a strip) is the
--- same walk when that chord is clear for a whole body (no paint, no clearance
--- promise there).
+-- A straight same-floor hole of up to seven cells (paint skipped a strip) is
+-- the same walk when that chord is clear for a whole body (no paint, no
+-- clearance promise there).
 -- Drops are found from the higher cell and are one-way: A* never climbs a cliff.
 -- A closed door cuts the returned path on its near side and rides along as
 -- path:GetDoor(), whichever way it leads. A spot a body could not pass taxes
@@ -167,13 +167,19 @@ function Mesh.DoorBanned(id)
 end
 
 -- Door standing in the walk chord, if the world already called it clear.
+-- A hull that begins already inside the leaf reports StartSolid and often no
+-- HitPos on the slab. That is still the leaf: the chord is not a clear walk.
 local function DoorOnChord(ax, ay, az, bx, by, bz)
 	doorTr.mins.z = 0
 	doorTr.maxs.z = STAND_TOP - WALK_LIFT
 	doorStart:SetUnpacked(ax, ay, az + WALK_LIFT)
 	doorEnd:SetUnpacked(bx, by, bz + WALK_LIFT)
 	util.TraceHull(doorTr)
-	if doorRes.Hit and IsDoorEnt(doorRes.Entity) then
+	if not IsDoorEnt(doorRes.Entity) then return nil end
+	if doorRes.StartSolid then
+		return doorRes.Entity, doorStart
+	end
+	if doorRes.Hit then
 		return doorRes.Entity, doorRes.HitPos
 	end
 	return nil
@@ -728,10 +734,16 @@ local function LinkPair(i, j, a, b, cell, dropZ)
 	end
 end
 
--- Paint skipped a straight strip. Neighbours stop at one cell, so a five-cell
--- hole stays two islands even when a player walks it. Only the open axis, and
--- only when the chord itself is a walk.
-local GAP_CELLS = 5
+-- Paint skipped a straight strip. Neighbours stop at one cell, so a hole of a
+-- few cells stays two islands even when a player walks it. Seven covers the
+-- hall in front of a door: five left that porch on the far island, the path
+-- ended at the near wall, and nobody walked up to the leaf. Only the open
+-- axis, and only when the chord itself is a walk. A doorway the paint skipped
+-- is the other case: the body hull clips the frame, so the islands stay split
+-- and the leaf is never an edge. The narrow box may cross that frame only
+-- when a door stands on the chord. A narrow chord with no door is the slit
+-- beside a frame.
+local GAP_CELLS = 7
 -- No paint under a bridge means no clearance promise there. The narrow link
 -- box slipped through a 20u slit beside a doorway and every bot walked into
 -- that wall; the chord has to fit a body (32u player, 2u to spare).
@@ -744,6 +756,17 @@ local function BridgeOK(a, b)
 	linkTr.mins.x, linkTr.mins.y = -LINK_HULL, -LINK_HULL
 	linkTr.maxs.x, linkTr.maxs.y = LINK_HULL, LINK_HULL
 	return ok, crouch
+end
+
+-- Body hull failed. The link box is restored, so this is the narrow chord.
+-- It counts only with a door on it: that leaf is the gap the paint skipped.
+local function DoorBridge(a, b)
+	local ok, crouch = WalkOK(a, b)
+	if not ok then return false end
+	if not DoorOnChord(a.pos.x, a.pos.y, a.pos.z, b.pos.x, b.pos.y, b.pos.z) then
+		return false
+	end
+	return true, crouch
 end
 
 local function BridgeGaps()
@@ -783,6 +806,9 @@ local function BridgeGaps()
 			if j then
 				local b = cells[j]
 				local ok, crouch = BridgeOK(a, b)
+				if not ok then
+					ok, crouch = DoorBridge(a, b)
+				end
 				if ok then
 					local dx, dy, dz = b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z
 					AddWalkPair(i, j, a, b, math.sqrt(dx * dx + dy * dy + dz * dz), crouch)
@@ -1406,10 +1432,98 @@ local function CutClosedDoor(ids, edges)
 	return ids, edges, false
 end
 
+-- An open leaf swings out of its hole and across a plain walk that was traced
+-- while the leaf was shut. That walk is still in the graph. The body stops in
+-- the leaf (reach 1, no door on the path). The door's own edge stays a walk:
+-- the hole beside the hinge is the way through. Only a plain walk is dropped.
+local searchDoors
+local LEAF_REACH = 96
+local LEAF_HULL = 16
+
+local function CollectOpenDoors()
+	searchDoors = {}
+	local found = ents.FindByClass("prop_door_rotating")
+	for i = 1, #found do
+		local door = found[i]
+		if IsValid(door) and not door.Broken and Mesh.DoorPassable(door:EntIndex()) then
+			searchDoors[#searchDoors + 1] = door
+		end
+	end
+end
+
+local function OpenLeafBlocksWalk(ax, ay, az, bx, by, bz)
+	local doors = searchDoors
+	if not doors or #doors == 0 then return false end
+	local mx, my, mz = (ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5
+	local reach2 = LEAF_REACH * LEAF_REACH
+	doorTr.mins.x, doorTr.mins.y = -LEAF_HULL, -LEAF_HULL
+	doorTr.maxs.x, doorTr.maxs.y = LEAF_HULL, LEAF_HULL
+	local blocked = false
+	for i = 1, #doors do
+		local door = doors[i]
+		if IsValid(door) then
+			local h = door:GetPos()
+			local dx, dy = h.x - mx, h.y - my
+			if dx * dx + dy * dy <= reach2 and math.abs(h.z - mz) <= 72 then
+				if DoorLeafInChord(door:EntIndex(), ax, ay, az, bx, by, bz) then
+					blocked = true
+					break
+				end
+			end
+		end
+	end
+	doorTr.mins.x, doorTr.mins.y = -LINK_HULL, -LINK_HULL
+	doorTr.maxs.x, doorTr.maxs.y = LINK_HULL, LINK_HULL
+	return blocked
+end
+
+-- Body hull on this cell overlaps an open leaf. A point trace would miss the
+-- tip: the centre sits just outside the bounds while the hull is already in.
+local function CellInOpenLeaf(x, y, z)
+	local doors = searchDoors
+	if not doors or #doors == 0 then return false end
+	local reach2 = LEAF_REACH * LEAF_REACH
+	local near = false
+	for i = 1, #doors do
+		local door = doors[i]
+		if IsValid(door) then
+			local h = door:GetPos()
+			local dx, dy = h.x - x, h.y - y
+			if dx * dx + dy * dy <= reach2 and math.abs(h.z - z) <= 72 then
+				near = true
+				break
+			end
+		end
+	end
+	if not near then return false end
+	doorTr.mins.x, doorTr.mins.y = -LEAF_HULL, -LEAF_HULL
+	doorTr.maxs.x, doorTr.maxs.y = LEAF_HULL, LEAF_HULL
+	doorTr.mins.z = 0
+	doorTr.maxs.z = STAND_TOP - WALK_LIFT
+	doorStart:SetUnpacked(x, y, z + WALK_LIFT)
+	doorEnd:SetUnpacked(x, y, z + WALK_LIFT)
+	util.TraceHull(doorTr)
+	local inside = doorRes.StartSolid and IsDoorEnt(doorRes.Entity)
+	doorTr.mins.x, doorTr.mins.y = -LINK_HULL, -LINK_HULL
+	doorTr.maxs.x, doorTr.maxs.y = LINK_HULL, LINK_HULL
+	return inside
+end
+
+-- The start cell is already in the leaf, so every chord out of it hits the
+-- leaf and the search dies on that cell. A step whose middle and end are
+-- clear is the way back out; a chord that still crosses the leaf is not.
+local function LeafExit(ax, ay, az, bx, by, bz)
+	if not CellInOpenLeaf(ax, ay, az) then return false end
+	local mx, my, mz = (ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5
+	if CellInOpenLeaf(mx, my, mz) or CellInOpenLeaf(bx, by, bz) then return false end
+	return true
+end
+
 -- Returns ids, edges, reached. When the goal cannot be reached (island, one-way
 -- drop, budget) the result is the path to the expanded cell closest to the goal:
 -- the bot walks to the cliff edge under the balcony instead of standing at spawn.
 local function AStar(startI, goalI, expandCap)
+	CollectOpenDoors()
 	local cells = Mesh.Cells
 	if startI == goalI then
 		return {startI}, {}, true
@@ -1479,6 +1593,12 @@ local function AStar(startI, goalI, expandCap)
 						if untilT and untilT > now then
 							j = nil
 						end
+					elseif e.kind == "walk" and not e.door then
+						local ap, bp = cells[i].pos, cells[j].pos
+						if OpenLeafBlocksWalk(ap.x, ap.y, ap.z, bp.x, bp.y, bp.z)
+							and not LeafExit(ap.x, ap.y, ap.z, bp.x, bp.y, bp.z) then
+							j = nil
+						end
 					end
 					if j then
 						local extra = payDoor and DOOR_CROSS or 0
@@ -1537,7 +1657,10 @@ local function CollapseWaypoints(pts)
 			local bcx, bcy = c.x - b.x, c.y - b.y
 			local cross = abx * bcy - aby * bcx
 			local dot = abx * bcx + aby * bcy
-			if math.abs(cross) > 80 or dot <= 0 or not SpanClear(a, c, cr) then
+			-- SpanClear is the world. An open leaf that swung onto this line is
+			-- invisible to it, so the pull walks the body into the leaf.
+			if math.abs(cross) > 80 or dot <= 0 or not SpanClear(a, c, cr)
+				or OpenLeafBlocksWalk(a.x, a.y, a.z, c.x, c.y, c.z) then
 				out[#out + 1] = cur
 			end
 		end
@@ -1733,14 +1856,19 @@ local function BuildPath(from, goal, ids, edges)
 	end
 	-- The start snaps to the nearest centre, which can sit behind us: the first
 	-- leg doubles back, the cursor sits on it, and the steer point is at our
-	-- heels. When the second centre is a plain walk and the chord to it is
-	-- clear for a body, the first one is not a waypoint.
+	-- heels. When the second centre is a plain walk, the first centre is on
+	-- this step, and the chord to the second is a floor a body can walk, the
+	-- first one is not a waypoint. A centre a storey below stays: dropping it
+	-- for a same-height cell across a hole is a ground chord into the pit.
 	if #pts >= 3 then
 		local a, b, c = pts[1].pos, pts[2].pos, pts[3].pos
 		local e2 = pts[3].enter
 		if e2 and e2.kind == "walk" and not e2.crouch
 			and (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0
-			and math.abs(c.z - a.z) <= STEP_Z and SpanClear(a, c, false) then
+			and math.abs(b.z - a.z) <= STEP_Z and math.abs(c.z - a.z) <= STEP_Z
+			and SpanClear(a, c, false)
+			and not OpenLeafBlocksWalk(a.x, a.y, a.z, c.x, c.y, c.z)
+			and GroundContinuous(a.x, a.y, a.z, c.x, c.y, c.z, WALK_LIFT) then
 			table.remove(pts, 2)
 		end
 	end
@@ -1787,10 +1915,68 @@ local function BuildPath(from, goal, ids, edges)
 	return path
 end
 
+-- Live feet are not a cell. A same-floor centre across a hole still wins the
+-- Z band (the floor under the lip is a storey down, outside the band), and the
+-- opening chord has no graph edge so it is typed ground. That walks off the
+-- lip into the pit. A start within a step needs no floor test. Farther on this
+-- floor, only when the floor is under the chord. Otherwise a drop onto a floor
+-- within drop reach, the same test as a drop link. Nothing of either: no path.
+local function StartDrop(from, dropZ)
+	local size = CellSize()
+	local flatMax = size * 3.2
+	local flatMax2 = flatMax * flatMax
+	local gx, gy = math.floor(from.x / size), math.floor(from.y / size)
+	local reach = math.ceil(flatMax / size) + 1
+	local found = {}
+	for dx = -reach, reach do
+		for dy = -reach, reach do
+			local bucket = GridGet(gx + dx, gy + dy)
+			if bucket then
+				for i = 1, #bucket do
+					local c = Mesh.Cells[bucket[i]]
+					local dz = from.z - c.pos.z
+					if dz > STEP_Z and dz <= dropZ then
+						local fx, fy = c.pos.x - from.x, c.pos.y - from.y
+						local flat2 = fx * fx + fy * fy
+						if flat2 <= flatMax2 then
+							found[#found + 1] = {c = c, d = flat2}
+						end
+					end
+				end
+			end
+		end
+	end
+	table.sort(found, function(a, b) return a.d < b.d end)
+	local hi = {pos = from}
+	local n = #found
+	if n > 4 then n = 4 end
+	for i = 1, n do
+		if DropOK(hi, found[i].c) then
+			return found[i].c
+		end
+	end
+	return nil
+end
+
+local function StartCell(from)
+	local near = CellSize() * 1.6
+	local close = Mesh.NearestOnFloor(from, near, STEP_Z)
+	if close then return close, false end
+
+	local band = Mesh.NearestOnFloor(from, 240, STEP_Z)
+	if band and GroundContinuous(from.x, from.y, from.z, band.pos.x, band.pos.y, band.pos.z, WALK_LIFT) then
+		return band, false
+	end
+
+	local drop = StartDrop(from, DropZ())
+	if drop then return drop, true end
+	return nil, false
+end
+
 -- Snap start and goal to cells, A*, build. Returns path, reached, startC.
 -- A path that does not reach ends at the closest approach (reached = false).
 function Mesh.FindPath(from, goal)
-	local startC = Mesh.NearestOnFloor(from, 240, 56) or Mesh.Nearest(from, 240, 72) or Mesh.Nearest(from, 240)
+	local startC, openingDrop = StartCell(from)
 	local cross = math.abs(goal.z - from.z) > 40
 	local goalC = Mesh.NearestOnFloor(goal, 200, 48)
 		or Mesh.NearestOnFloor(goal, 360, 56)
@@ -1818,6 +2004,9 @@ function Mesh.FindPath(from, goal)
 		cap = MAX_EXPAND_CROSS
 	end
 	local ids, edges, found, cutDoor, cutFar = AStar(startC.i, goalC.i, cap)
+	if openingDrop then
+		edges[0] = {kind = "drop", seg = SEG_DROP}
+	end
 	local path = BuildPath(from, goal, ids, edges)
 	local lastI = ids[#ids]
 	local lastCell = Mesh.Cells[lastI]

@@ -84,7 +84,11 @@ function GM:Move(pl, move)
 			and (pt.RelapseLadderGhostHop or 0) <= curtime() then
 			-- Use 7, because friction will amount this to a velocity of 1 roughly.
 			phase = pt.NoGhosting and E_GetDTFloat(pl, DT_PLAYER_FLOAT_WIDELOAD) > curtime()
-			M_SetMaxClientSpeed(move, math_min(M_GetMaxClientSpeed(move), phase and 7 or ((GAMEMODE.BarricadeGhostSpeed or 10) * (pt.BarricadePhaseSpeedMul or 1))))
+			local phaseMul = pt.BarricadePhaseSpeedMul or 1
+			if self.StackPercentMul and self.GetUpgradePercent then
+				phaseMul = self:StackPercentMul(self:GetUpgradePercent(pl, "Phase"), phaseMul - 1)
+			end
+			M_SetMaxClientSpeed(move, math_min(M_GetMaxClientSpeed(move), phase and 7 or ((GAMEMODE.BarricadeGhostSpeed or 10) * phaseMul)))
 		elseif not pt.NoBWSpeedPenalty then
 			fw = M_GetForwardSpeed(move)
 			if fw < 0 then

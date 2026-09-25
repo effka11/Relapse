@@ -20,6 +20,7 @@ AddCSLuaFile("sh_serialization.lua")
 AddCSLuaFile("sh_globals.lua")
 AddCSLuaFile("sh_util.lua")
 AddCSLuaFile("sh_options.lua")
+AddCSLuaFile("sh_mapvote.lua")
 AddCSLuaFile("sh_zombieclasses.lua")
 AddCSLuaFile("sh_animations.lua")
 AddCSLuaFile("sh_sigils.lua")
@@ -37,6 +38,8 @@ AddCSLuaFile("sh_relapse_scars.lua")
 AddCSLuaFile("sh_cycle_grid.lua")
 AddCSLuaFile("sh_relapse_percent.lua")
 AddCSLuaFile("sh_relapse_stamina.lua")
+AddCSLuaFile("sh_relapse_hearing.lua")
+AddCSLuaFile("sh_relapse_hearing_peaks.lua")
 AddCSLuaFile("sh_relapse_wmpose.lua")
 
 AddCSLuaFile("vault/shared.lua")
@@ -62,6 +65,9 @@ AddCSLuaFile("cl_relapse_inventory.lua")
 AddCSLuaFile("cl_relapse_loadout.lua")
 AddCSLuaFile("cl_relapse_breath.lua")
 AddCSLuaFile("cl_relapse_iconsdev.lua")
+AddCSLuaFile("cl_relapse_viewmodel_dev.lua")
+AddCSLuaFile("cl_relapse_hitboxes.lua")
+AddCSLuaFile("cl_relapse_hearing.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -98,6 +104,7 @@ AddCSLuaFile("vgui/pcharacter.lua")
 AddCSLuaFile("vgui/phelp.lua")
 AddCSLuaFile("vgui/pclassselect.lua")
 AddCSLuaFile("vgui/pendboard.lua")
+AddCSLuaFile("vgui/pmapvote.lua")
 AddCSLuaFile("vgui/relapse_ui.lua")
 AddCSLuaFile("vgui/pworth.lua")
 AddCSLuaFile("vgui/parsenal.lua")
@@ -121,6 +128,7 @@ include("loader.lua")
 
 include("shared.lua")
 include("sv_options.lua")
+include("sv_mapvote.lua")
 include("mapeditor.lua")
 include("sv_playerspawnentities.lua")
 include("sv_profiling.lua")
@@ -137,6 +145,7 @@ include("itemstocks/sv_stock.lua")
 
 include("vault/server.lua")
 include("sv_relapse_scars.lua")
+include("sv_relapse_hearing.lua")
 include("sv_cycle_grid.lua")
 
 include("skillweb/sv_registry.lua")
@@ -336,6 +345,26 @@ function GM:AddResources()
 	resource.AddFile("models/weapons/w_hammer.mdl")
 	resource.AddFile("models/weapons/v_hammer/c_hammer.mdl")
 
+	resource.AddFile("models/ammo/fas2/ammocrate.mdl")
+	resource.AddFile("models/ammo/fas2/ammocrate.dx80.vtx")
+	resource.AddFile("models/ammo/fas2/ammocrate.dx90.vtx")
+	resource.AddFile("models/ammo/fas2/ammocrate.sw.vtx")
+	resource.AddFile("models/ammo/fas2/ammocrate.vvd")
+	resource.AddFile("models/ammo/fas2/ammocrate.phy")
+	resource.AddFile("models/ammo/fas2/cratehit.mdl")
+	resource.AddFile("models/ammo/fas2/cratehit.dx80.vtx")
+	resource.AddFile("models/ammo/fas2/cratehit.dx90.vtx")
+	resource.AddFile("models/ammo/fas2/cratehit.vvd")
+	resource.AddFile("models/ammo/fas2/cratehit.phy")
+	resource.AddFile("materials/models/ammo/fas2/ammocrate.vmt")
+	resource.AddFile("materials/models/ammo/fas2/ammocrate.vtf")
+	resource.AddFile("materials/models/ammo/fas2/fas_metal_detail_01.vtf")
+	resource.AddFile("materials/models/ammo/fas2/smallammobox.vmt")
+	resource.AddFile("materials/models/ammo/fas2/smallammobox.vtf")
+	resource.AddFile("materials/models/weapons/fas2/misc/ammobox/ammobox.vmt")
+	resource.AddFile("materials/models/weapons/fas2/misc/ammobox/ammobox.vtf")
+	resource.AddFile("materials/models/weapons/fas2/default_normal.vtf")
+
 	resource.AddFile("models/weapons/c_aegiskit.mdl")
 
 	resource.AddFile("materials/models/weapons/v_hand/armtexture.vmt")
@@ -478,6 +507,7 @@ function GM:AddResources()
 	resource.AddWorkshop("3627414330") -- COD MW2019 Russian J-12 playermodel
 	resource.AddWorkshop("2929135394") -- Max Payne 3 Tropa Z / Tropa Z 2
 	resource.AddWorkshop("3739488356") -- [RE2: Remake] Zombies Ragdolls
+	resource.AddWorkshop("2824766377") -- L4D medkit only (replaces c_medkit / w_medkit)
 end
 
 function GM:Initialize()
@@ -531,6 +561,7 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_penalty")
 	util.AddNetworkString("zs_nextresupplyuse")
 	util.AddNetworkString("zs_stowagecaches")
+	util.AddNetworkString("zs_resupplystock")
 	util.AddNetworkString("zs_lifestats")
 	util.AddNetworkString("zs_lifestatsbd")
 	util.AddNetworkString("zs_lifestatshd")
@@ -600,6 +631,7 @@ function GM:AddNetworkStrings()
 	util.AddNetworkString("zs_scars_request")
 	util.AddNetworkString("zs_cycle_grid_sync")
 	util.AddNetworkString("zs_cycle_grid_unlock")
+	util.AddNetworkString("zs_cycle_grid_mute")
 
 	util.AddNetworkString("zs_crow_kill_crow")
 	util.AddNetworkString("zs_pl_kill_pl")
@@ -1306,6 +1338,10 @@ function GM:Think()
 	if NextTick <= time then
 		NextTick = time + 1
 
+		if self.TickResupplyStock then
+			self:TickResupplyStock(time)
+		end
+
 		local plpos
 
 		for _, pl in pairs(allplayers) do
@@ -1339,7 +1375,7 @@ function GM:Think()
 
 				if pl:IsSkillActive(SKILL_BLOODARMOR) and pl.MaxBloodArmor > 0 and time >= pl.NextBloodArmorRegen and pl:GetBloodArmor() < pl.MaxBloodArmor then
 					pl.NextBloodArmorRegen = time + 8
-					pl:SetBloodArmor(math.min(pl.MaxBloodArmor, pl:GetBloodArmor() + (1 * pl.BloodarmorGainMul)))
+					pl:SetBloodArmor(math.min(pl.MaxBloodArmor, pl:GetBloodArmor() + GAMEMODE:GetBloodArmorGainMul(pl)))
 				end
 
 				if pl:KeyDown(IN_SPEED) and pl:GetVelocity() ~= vector_origin and pl:IsSkillActive(SKILL_CARDIOTONIC) then
@@ -1390,20 +1426,6 @@ function GM:Think()
 					pl.OldWeaponToReload = nil
 				end
 
-				if pl:IsSkillActive(SKILL_STOWAGE) and self:GetWave() > 0 and time > (pl.NextResupplyUse or 0) then
-					local stockpiling = pl:IsSkillActive(SKILL_STOCKPILE)
-
-					pl.NextResupplyUse = time + self.ResupplyBoxCooldown * (pl.ResupplyDelayMul or 1) * (stockpiling and 2.12 or 1)
-					pl.StowageCaches = (pl.StowageCaches or 0) + (stockpiling and 2 or 1)
-
-					net.Start("zs_nextresupplyuse")
-						net.WriteFloat(pl.NextResupplyUse)
-					net.Send(pl)
-
-					net.Start("zs_stowagecaches")
-						net.WriteInt(pl.StowageCaches, 8)
-					net.Send(pl)
-				end
 			end
 		end
 
@@ -1465,8 +1487,9 @@ function GM:CalculateInfliction(victim, attacker)
 	local humans = 0
 	local wonhumans = 0
 	local hum
+	-- Undead AI bots are not the population. A living human bot is, so the round holds while they stand.
 	for _, pl in pairs(player.GetAllActive()) do
-		if not pl.Disconnecting and not pl.IsRelapseAIBot then
+		if not pl.Disconnecting and not (pl.IsRelapseAIBot and pl:Team() == TEAM_UNDEAD) then
 			if pl:Team() == TEAM_UNDEAD then
 				zombies = zombies + 1
 			elseif pl:HasWon() then
@@ -1840,7 +1863,7 @@ function GM:RestartLua()
 	hook.Remove("PlayerCanHearPlayersVoice", "EndRoundCanHearPlayersVoice")
 
 	self:RevertZombieClasses()
-	self:ClearItemStocks(true)
+	self:ClearItemStocks()
 end
 
 -- I don't know.
@@ -1855,6 +1878,7 @@ end
 
 function GM:DoRestartGame()
 	self.RoundEnded = nil
+	self.EndDelaySkipped = nil
 
 	for _, ent in pairs(ents.FindByClass("prop_weapon")) do
 		ent:Remove()
@@ -1885,6 +1909,12 @@ function GM:DoRestartGame()
 	timer.Create("CheckBroken", 10, 1, CheckBroken)
 
 	game.CleanUpMap(false, self.CleanupFilter)
+	self.ResupplyCharges = 0
+	self.ResupplyNext = 0
+	self.ResupplyClock = false
+	if self.BroadcastResupplyStock then
+		self:BroadcastResupplyStock()
+	end
 	gamemode.Call("InitPostEntityMap")
 
 	for _, pl in pairs(player.GetAll()) do
@@ -2036,6 +2066,7 @@ end
 function GM:EndRound(winner)
 	if self.RoundEnded then return end
 	self.RoundEnded = true
+	self.MapVoteFinished = nil
 	self.RoundEndedTime = CurTime()
 	ROUNDWINNER = winner
 
@@ -2050,11 +2081,29 @@ function GM:EndRound(winner)
 		hook.Add("SetupPlayerVisibility", "EndRoundSetupPlayerVisibility", EndRoundSetupPlayerVisibility)
 	end
 
+	local wait = self.EndGameTime or 0
 	if self:ShouldRestartRound() then
-		timer.Simple(self.EndGameTime - 3, function() gamemode.Call("PreRestartRound") end)
-		timer.Simple(self.EndGameTime, function() gamemode.Call("RestartRound") end)
+		timer.Create("RelapseEndPreRestart", math.max(0, wait - 3), 1, function()
+			gamemode.Call("PreRestartRound")
+		end)
+		timer.Create("RelapseEndRestart", wait, 1, function()
+			gamemode.Call("RestartRound")
+		end)
 	else
-		timer.Simple(self.EndGameTime, function() gamemode.Call("LoadNextMap") end)
+		if self.MapVote then
+			self:SendMapVote()
+		end
+		local openAt = math.min(5, math.max(0, wait - 1))
+		timer.Create("RelapseEndMapVote", openAt, 1, function()
+			if GAMEMODE.RoundEnded then
+				GAMEMODE:OpenMapVote(true)
+			end
+		end)
+		timer.Create("RelapseEndMapVoteFinish", wait, 1, function()
+			if GAMEMODE.RoundEnded then
+				GAMEMODE:FinishMapVote()
+			end
+		end)
 	end
 
 	-- Get rid of some lag.
@@ -2118,6 +2167,39 @@ function GM:EndRound(winner)
 	gamemode.Call("PostEndRound", winner)
 
 	self:SetWaveStart(CurTime() + 9999)
+end
+
+function GM:ClearEndDelayTimers()
+	timer.Remove("RelapseEndPreRestart")
+	timer.Remove("RelapseEndRestart")
+	timer.Remove("RelapseEndMapVote")
+	timer.Remove("RelapseEndMapVoteFinish")
+end
+
+-- Cuts the post-round EndGameTime wait. Restart path restarts now; otherwise the map vote closes and the map changes.
+function GM:SkipEndDelay()
+	if not self.RoundEnded then
+		return false, "round is still going"
+	end
+	if self.EndDelaySkipped then
+		return false, "end delay already skipped"
+	end
+
+	self.EndDelaySkipped = true
+	self:ClearEndDelayTimers()
+	game.SetTimeScale(1)
+
+	if self:ShouldRestartRound() then
+		gamemode.Call("PreRestartRound")
+		gamemode.Call("RestartRound")
+		return true, "skipped end delay — round restarts now"
+	end
+
+	if not self.MapVote and not self.MapVoteFinished then
+		self:OpenMapVote()
+	end
+	self:FinishMapVote()
+	return true, "skipped end delay — changing map"
 end
 
 function GM:ScalePlayerDamage(pl, hitgroup, dmginfo)
@@ -2212,6 +2294,9 @@ function GM:PlayerReadyRound(pl)
 	if self.RoundEnded then
 		pl:SendLua("gamemode.Call(\"EndRound\", "..tostring(ROUNDWINNER)..", \""..game.GetMapNext().."\")")
 		gamemode.Call("DoHonorableMentions", pl)
+		if self.SendMapVote then
+			self:SendMapVote(pl)
+		end
 	end
 
 	if pl:GetInfo("zs_noredeem") == "1" then
@@ -2309,6 +2394,10 @@ function GM:PlayerInitialSpawn(pl)
 	pl.m_LastGasHeal = 0
 
 	self:InitializeVault(pl)
+
+	if self.BroadcastResupplyStock then
+		self:BroadcastResupplyStock(pl)
+	end
 
 	gamemode.Call("PlayerInitialSpawnRound", pl)
 
@@ -2916,6 +3005,10 @@ function GM:EntityTakeDamage(ent, dmginfo)
 		ent.m_LastDamaged = CurTime()
 	end
 
+	if self.ApplyUndeadOutgoingDamage then
+		self:ApplyUndeadOutgoingDamage(attacker, ent, dmginfo)
+	end
+
 	if ent.ProcessDamage and ent:ProcessDamage(dmginfo) then return end
 	attacker, inflictor = dmginfo:GetAttacker(), dmginfo:GetInflictor()
 
@@ -3510,7 +3603,7 @@ function GM:PlayerHurt(victim, attacker, healthremaining, damage)
 		end
 
 		if healthremaining < victim:GetMaxHealth() * 0.5 and victim:GetBloodArmor() < victim.MaxBloodArmor + 10 and victim:HasTrinket("bloodpack") then
-			victim:SetBloodArmor(math.min(victim:GetBloodArmor() + (20 * victim.BloodarmorGainMul), victim.MaxBloodArmor + (20 * victim.MaxBloodArmorMul)))
+			victim:SetBloodArmor(math.min(victim:GetBloodArmor() + (20 * GAMEMODE:GetBloodArmorGainMul(victim)), victim.MaxBloodArmor + (20 * victim.MaxBloodArmorMul)))
 			victim:TakeInventoryItem("trinket_bloodpack")
 
 			net.Start("zs_trinketconsumed")
@@ -3535,7 +3628,8 @@ function GM:WeaponDeployed(pl, wep)
 	elseif pl:GetMaxSpeed() < speed then
 		local unbound = pl:IsSkillActive(SKILL_UNBOUND) and 0.4 or 1
 
-		timer.Create(timername, (0.333 / (pl.DeploySpeedMultiplier or 1)) * unbound, 1, function() if pl:IsValid() then pl:SetHumanSpeed(speed) end end)
+		local deployMul = (self.GetDeployPercentMul and self:GetDeployPercentMul(pl)) or (pl.DeploySpeedMultiplier or 1)
+		timer.Create(timername, (0.333 / math.max(deployMul, 0.01)) * unbound, 1, function() if pl:IsValid() then pl:SetHumanSpeed(speed) end end)
 	end
 end
 
@@ -3558,6 +3652,25 @@ function GM:KeyPress(pl, key)
 					local class = IsValid(use) and use:GetClass()
 					if class == "prop_arsenalcrate" or class == "status_arsenalpack" then
 						pl:SendLua("GAMEMODE:OpenArsenalMenu()")
+					end
+
+					local looked = pl:TraceLine(96).Entity
+					local lookedClass = IsValid(looked) and looked:GetClass() or ""
+					if lookedClass ~= "prop_weapon" and lookedClass ~= "prop_ammo" and lookedClass ~= "prop_invitem" then
+						local crate
+						if IsValid(looked) then
+							if IsValid(looked.Crate) and looked.Crate:GetClass() == "prop_resupplybox" then
+								crate = looked.Crate
+							elseif lookedClass == "prop_resupplybox" then
+								crate = looked
+							end
+						end
+						if not IsValid(crate) and self.ResupplyCrateUnderUse then
+							crate = self:ResupplyCrateUnderUse(pl)
+						end
+						if IsValid(crate) then
+							crate:Use(pl, pl)
+						end
 					end
 				end
 			end
@@ -4490,7 +4603,7 @@ function GM:WaveStateChanged(newstate)
 			gamemode.Call("SetWaveEnd", -1)
 			SetGlobalInt("numwaves", -1)
 		else
-			gamemode.Call("SetWaveEnd", self:GetWaveStart() + self:GetWaveOneLength() + (self:GetWave() - 1) * (GetGlobalBool("classicmode") and self.TimeAddedPerWaveClassic or self.TimeAddedPerWave))
+			gamemode.Call("SetWaveEnd", self:GetWaveStart() + self:GetWaveLength(self:GetWave()))
 		end
 
 		for _, pl in pairs(team.GetPlayers(TEAM_UNDEAD)) do

@@ -129,7 +129,7 @@ function ENT:FireTurret(src, dir)
 		local owner = self:GetObjectOwner()
 		local twinvolley = self:GetManualControl() and owner:IsSkillActive(SKILL_TWINVOLLEY)
 		if curammo > (twinvolley and 1 or 0) then
-			self:SetNextFire(CurTime() + self.FireDelay * (twinvolley and 1.5 or 1))
+			self:SetNextFire(CurTime() + GAMEMODE:GetTurretFireDelay(owner, self.FireDelay * (twinvolley and 1.5 or 1)))
 			self:SetAmmo(curammo - (twinvolley and 2 or 1))
 
 			if self:GetAmmo() == 0 then
@@ -156,9 +156,11 @@ function ENT:Think()
 	self:CalculatePoseAngles()
 
 	local owner = self:GetObjectOwner()
+	local engaging = false
 	if owner:IsValid() and self:GetAmmo() > 0 and self:GetMaterial() == "" then
 		if self:GetManualControl() then
 			if owner:KeyDown(IN_ATTACK) then
+				engaging = true
 				if not self:IsFiring() then self:SetFiring(true) end
 				self:FireTurret(self:ShootPos(), self:GetGunAngles():Forward())
 			elseif self:IsFiring() then
@@ -172,6 +174,7 @@ function ENT:Think()
 			local target = self:GetTarget()
 			if target:IsValid() then
 				if self:IsValidTarget(target) and CurTime() < self.LastHitSomething + self.LastHitPeriod then
+					engaging = true
 					self:FireTurret(self:ShootPos(), (self:GetTargetPos(target) - self:ShootPos()):GetNormalized())
 				else
 					self:ClearTarget()
@@ -188,6 +191,10 @@ function ENT:Think()
 		end
 	elseif self:IsFiring() then
 		self:SetFiring(false)
+	end
+
+	if GAMEMODE.ApplyTurretForcedWear then
+		GAMEMODE:ApplyTurretForcedWear(self, owner, engaging)
 	end
 
 	self:NextThink(CurTime())

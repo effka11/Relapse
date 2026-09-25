@@ -18,7 +18,7 @@ end
 
 function GM:RefreshItemStocks(pl)
 	for k in pairs(self.ItemStocks) do
-		self:SendItemStocks(pl)
+		self:SendItemStocks(k, pl)
 	end
 end
 
@@ -36,7 +36,10 @@ end
 function GM:ClearItemStocks(nosend)
 	self.ItemStocks = {}
 
-	if not nosend then
-		self:RefreshItemStocks()
-	end
+	if nosend then return end
+
+	net.Start("zs_itemstock")
+		net.WriteString("*")
+		net.WriteInt(0, 16)
+	net.Send(player.GetAll())
 end

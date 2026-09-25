@@ -11,20 +11,41 @@ hook.Add("PlayerDisconnected", "ResupplyBox.PlayerDisconnected", RefreshCrateOwn
 hook.Add("OnPlayerChangedTeam", "ResupplyBox.OnPlayerChangedTeam", RefreshCrateOwners)
 
 function ENT:Initialize()
-	self:SetModel("models/Items/ammocrate_ar2.mdl")
-	self:PhysicsInit(SOLID_VPHYSICS)
+	self:SetModel("models/ammo/fas2/ammocrate.mdl")
+	self:SetModelScale(self.CrateScale or 1, 0)
 	self:SetUseType(SIMPLE_USE)
-	self:SetPlaybackRate(1)
-
-	self:CollisionRulesChanged()
-
-	local phys = self:GetPhysicsObject()
-	if phys:IsValid() then
-		phys:EnableMotion(false)
-	end
+	self:SetCollisionGroup(COLLISION_GROUP_NONE)
+	self:ApplyOpenCrate()
+	self:KillModelCollision()
+	self:SpawnCrateHit()
 
 	self:SetMaxObjectHealth(400)
 	self:SetObjectHealth(self:GetMaxObjectHealth())
+
+	if GAMEMODE.BeginResupplyClock then
+		GAMEMODE:BeginResupplyClock()
+	end
+end
+
+function ENT:SpawnCrateHit()
+	if self.HitBox and self.HitBox:IsValid() then return end
+
+	local box = ents.Create("prop_resupplybox_hit")
+	if not box:IsValid() then return end
+
+	box.Crate = self
+	box:SetPos(self:GetPos())
+	box:SetAngles(self:GetAngles())
+	box:Spawn()
+	self:DeleteOnRemove(box)
+	self.HitBox = box
+	box:GhostAllPlayersInMe(5)
+end
+
+function ENT:OnRemove()
+	if GAMEMODE.StopResupplyClockIfEmpty then
+		GAMEMODE:StopResupplyClockIfEmpty()
+	end
 end
 
 function ENT:KeyValue(key, value)
@@ -89,6 +110,9 @@ function ENT:OnTakeDamage(dmginfo)
 end
 
 function ENT:AltUse(activator, tr)
+	if activator:Crouching() and GAMEMODE.BeginSupplySell and GAMEMODE:BeginSupplySell(activator, self) then
+		return
+	end
 	self:PackUp(activator)
 end
 
@@ -101,18 +125,55 @@ function ENT:OnPackedUp(pl)
 	self:Remove()
 end
 
+-- The ammo mesh is not solid, so the use line falls through to the floor.
+-- Take the crate the crosshair is on, the same way a dropped gun is taken.
+function GAMEMODE:ResupplyCrateUnderUse(pl)
+	local shoot = pl:GetShootPos()
+	local aim = pl:GetAimVector()
+	local best, bestDot
+
+	for _, box in ipairs(ents.FindByClass("prop_resupplybox")) do
+		if box:IsValid() then
+			local point = box:NearestPoint(shoot)
+			local delta = point - shoot
+			local len = delta:Length()
+			if len > 1 and len <= 128 then
+				local dot = delta:Dot(aim) / len
+				if dot >= 0.45 and (not bestDot or dot > bestDot) then
+					local tr = util.TraceLine({
+						start = shoot,
+						endpos = point,
+						mask = MASK_SOLID_BRUSHONLY,
+						filter = pl,
+					})
+					if not tr.Hit then
+						best, bestDot = box, dot
+					end
+				end
+			end
+		end
+	end
+
+	return best
+end
+
 function ENT:Think()
 	if self.Destroyed then
 		self:Remove()
-	elseif self.Close and CurTime() >= self.Close then
-		self.Close = nil
-		self:ResetSequence("open")
-		self:EmitSound("items/ammocrate_close.wav")
+		return
 	end
+
+	self:ApplyOpenCrate()
+	self:KillModelCollision()
+	self:NextThink(CurTime())
+	return true
 end
 
 function ENT:Use(activator, caller)
-	if activator:Team() ~= TEAM_HUMAN or not activator:Alive() or GAMEMODE:GetWave() <= 0 then return end
+	if not activator:IsValid() or not activator:IsPlayer() then return end
+	if activator:Team() ~= TEAM_HUMAN or not activator:Alive() then return end
+	if activator.RelapseResupplyTick == engine.TickCount() then return end
+	activator.RelapseResupplyTick = engine.TickCount()
 
 	if not self:GetObjectOwner():IsValid() then
 		self:SetObjectOwner(activator)
@@ -122,9 +183,7 @@ function ENT:Use(activator, caller)
 	local owner = self:GetObjectOwner()
 	local resup = activator:Resupply(owner, self)
 
-	if resup and not self.Close then
-		self:ResetSequence("close")
+	if resup then
 		self:EmitSound("items/ammocrate_open.wav")
 	end
-	self.Close = CurTime() + 3
 end

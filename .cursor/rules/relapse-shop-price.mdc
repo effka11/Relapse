@@ -12,13 +12,13 @@ alwaysApply: true
 
 | Тир | Шоп | Шаг | Соло 225 HP |
 |---|---:|---:|---:|
-| T1 | **15** | — | ~2.5 |
-| T2 | **45** | +30 | ~8 |
-| T3 | **75** | +30 | ~13 |
-| T4 | **115** | +40 | ~19 |
-| T5 | **175** | +60 | ~29 |
+| T1 | **40** | — | ~7 |
+| T2 | **70** | +30 | ~12 |
+| T3 | **110** | +40 | ~18 |
+| T4 | **170** | +60 | ~28 |
+| T5 | **270** | +100 | ~45 |
 
-Worth T1 = те же **15**. `LockItemTiers` выключен: запирает цена.
+Worth T1 — те же **40** (`AddStartingItem`). В старте только T1. Якорь `U_point` остаётся **15** (`ShopT1Price` / `WorthT1Price`). `LockItemTiers` выключен: запирает цена.
 
 ```lua
 -- ❌ цена из U, разная внутри тира, T5 как чужой «готовый» ствол
@@ -27,11 +27,11 @@ GM:AddPointShopItem("m19",  ITEMCAT_GUNS, 20, "mg_p320", ...)
 GM:AddPointShopItem("scar", ITEMCAT_GUNS, 200, "mg_scharlie", ...)
 
 -- ✅ одна полка на тир
-GM:AddPointShopItem("mp5",  ITEMCAT_GUNS, 45, "mg_mpapa5", ...)
-GM:AddPointShopItem("m19",  ITEMCAT_GUNS, 45, "mg_p320", ...)
-GM:AddPointShopItem("scar", ITEMCAT_GUNS, 175, "mg_scharlie", ...)
+GM:AddPointShopItem("mp5",  ITEMCAT_GUNS, 70, "mg_mpapa5", ...)
+GM:AddPointShopItem("m19",  ITEMCAT_GUNS, 70, "mg_p320", ...)
+GM:AddPointShopItem("scar", ITEMCAT_GUNS, 270, "mg_scharlie", ...)
 ```
 
-Не 200 на T5: это TCO после гильзы и обвеса. 175 — голый ствол. Скип T2→T5 = **175**, не сумма полок.
+270 — голый ствол. Гильза и обвес в полку не закладывать. Скип в T5 = **270**, не сумма полок.
 
 Не трогать, если не просили: `U_point`, урон за пулю, HP зомби, `HumanoidZombiePointRatio`, цены ящиков, `ScrapVals`. Урон не поднимать «потому что ствол дороже». Патроны и ремантлер — другие кошельки.

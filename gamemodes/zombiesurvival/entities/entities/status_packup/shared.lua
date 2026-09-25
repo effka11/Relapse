@@ -52,3 +52,11 @@ end
 function ENT:GetNotOwner()
 	return self:GetDTBool(0)
 end
+
+function ENT:SetSupplySell(sell)
+	self:SetDTBool(1, sell and true or false)
+end
+
+function ENT:GetSupplySell()
+	return self:GetDTBool(1)
+end

@@ -546,9 +546,9 @@ function GM:OpenRemantlerMenu(remantler)
 	local topspace = vgui.Create("DPanel", frame)
 	topspace:SetWide(wid - 16)
 
-	local title = EasyLabel(topspace, "Weapon Remantler", "ZSHUDFontSmall", COLOR_WHITE)
+	local title = EasyLabel(topspace, translate.Get("weapon_remantler"), "ZSHUDFontSmall", COLOR_WHITE)
 	title:CenterHorizontal()
-	local subtitle = EasyLabel(topspace, "Dismantle weapons into scrap and use scrap to upgrade weapons!", "ZSHUDFontTiny", COLOR_WHITE)
+	local subtitle = EasyLabel(topspace, translate.Get("wep_remantler_desc"), "ZSHUDFontTiny", COLOR_WHITE)
 	subtitle:CenterHorizontal()
 	subtitle:MoveBelow(title, 4)
 

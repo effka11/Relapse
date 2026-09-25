@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 *.pyo
+tools/hearing_curves/cache/
 Thumbs.db
 Desktop.ini
 .DS_Store

@@ -19,7 +19,13 @@ Mesh.Building = Mesh.Building or false
 -- still loads (bots walk it meanwhile) and a repaint follows once the map is up.
 -- v2: hull lifted to step height (ramps, stair runs). v3: bounds from the map,
 -- not a +-2048 x -256..512 box (pits and high stairs were cut off).
-Mesh.PaintVersion = 3
+-- v4: a column that lands on a stair nosing steps uphill onto the flatter
+-- tread, staying in its raster bucket. The nosing never linked, so a 16u
+-- stair stayed an island cut.
+-- v5: a puddle shallower than a step is a floor. The stand test used to drop
+-- any hit whose point is in water, so the hall under a few units of water
+-- never painted and the room past it stayed another island.
+Mesh.PaintVersion = 5
 
 -- 32u: a 48u-wide stair still gets a column (the clearance hull needs 12u to each
 -- wall, so a 40u raster could miss it entirely).
@@ -163,12 +169,28 @@ local function PlayableBounds()
 	return mins, maxs, "playable"
 end
 
+-- Water over the hit, but the surface is within a step of the floor. The stand
+-- hull starts a step up, so the body is in air and this bottom is walked.
+-- Deeper than a step is a swim: still not a floor.
+local function Puddle(x, y, z)
+	local top = z + STEP_HEIGHT
+	local wz = z + 1
+	while wz < top do
+		wz = wz + 4
+		probePos:SetUnpacked(x, y, wz)
+		if bit.band(util.PointContents(probePos), CONTENTS_WATER) == 0 then
+			return true
+		end
+	end
+	return false
+end
+
 -- Room over a surface hit: "stand", "crouch" or nil. Vertical only: an offset
 -- along the normal moves the column off its raster on slopes.
 local function CanStand(pos)
 	startPos:Set(pos)
 	startPos.z = startPos.z + 1
-	if bit.band(util.PointContents(startPos), CONTENTS_WATER) ~= 0 then
+	if bit.band(util.PointContents(startPos), CONTENTS_WATER) ~= 0 and not Puddle(pos.x, pos.y, pos.z) then
 		return nil
 	end
 	upTr.start = startPos
@@ -182,6 +204,46 @@ local function CanStand(pos)
 	util.TraceHull(upTr)
 	if not upRes.StartSolid then
 		return "crouch"
+	end
+	return nil
+end
+
+-- A 32u column often hits the sloped nosing of a stair, not the tread. The
+-- nosing is still walkable, so it is stored, the tread between columns is
+-- never stored, and the step does not link. A short step uphill onto a flatter
+-- floor within one step is that tread. The sample stays in its raster bucket:
+-- leaving it puts the tread two buckets from the step below, and a walk link
+-- is only searched one bucket out. A uniform ramp keeps its own normal.
+local function PreferTread(hitPos, normal)
+	local hx, hy = normal.x, normal.y
+	local horiz = math.sqrt(hx * hx + hy * hy)
+	if horiz < 0.2 or normal.z > 0.97 then
+		return nil
+	end
+	local ux, uy = -hx / horiz, -hy / horiz
+	local cell = Mesh.CellSize or 32
+	local gx, gy = math.floor(hitPos.x / cell), math.floor(hitPos.y / cell)
+	local reach = {cell * 0.25, cell * 0.5}
+	for i = 1, #reach do
+		local x = hitPos.x + ux * reach[i]
+		local y = hitPos.y + uy * reach[i]
+		if math.floor(x / cell) == gx and math.floor(y / cell) == gy then
+			startPos:SetUnpacked(x, y, hitPos.z + STEP_HEIGHT + 8)
+			endPos:SetUnpacked(x, y, hitPos.z - 8)
+			downTr.start = startPos
+			downTr.endpos = endPos
+			util.TraceLine(downTr)
+			if not downRes.StartSolid and downRes.Hit and not downRes.HitSky then
+				local n = downRes.HitNormal
+				local dz = downRes.HitPos.z - hitPos.z
+				if n.z >= normal.z + 0.05 and dz >= -2 and dz <= STEP_HEIGHT then
+					local room = CanStand(downRes.HitPos)
+					if room then
+						return Vector(downRes.HitPos.x, downRes.HitPos.y, downRes.HitPos.z), Vector(n.x, n.y, n.z), room
+					end
+				end
+			end
+		end
 	end
 	return nil
 end
@@ -223,11 +285,17 @@ local function SampleColumn(x, y, zmax, zmin, cells)
 				z = hitz - MIN_FLOOR_GAP
 			else
 				local n = downRes.HitNormal
-				local room = n.z >= WALKABLE_Z and CanStand(downRes.HitPos) or nil
+				local hit = Vector(downRes.HitPos.x, downRes.HitPos.y, downRes.HitPos.z)
+				local nrm = Vector(n.x, n.y, n.z)
+				local room = nrm.z >= WALKABLE_Z and CanStand(hit) or nil
 				if room then
+					local treadPos, treadN, treadRoom = PreferTread(hit, nrm)
+					if treadRoom then
+						hit, nrm, room = treadPos, treadN, treadRoom
+					end
 					cells[#cells + 1] = {
-						pos = Vector(downRes.HitPos.x, downRes.HitPos.y, downRes.HitPos.z) + SAMPLE_LIFT,
-						n = Vector(n.x, n.y, n.z),
+						pos = hit + SAMPLE_LIFT,
+						n = nrm,
 						crouch = room == "crouch" or nil,
 					}
 					floors = floors + 1
@@ -306,6 +374,18 @@ local function LadderOverlayBox(ladder, ends)
 		maxs = Vector(cx + w, cy + w, math.max(b.z, t.z))
 	end
 	mins, maxs = PadLadderBox(mins, maxs)
+	local gm = GAMEMODE or GM
+	if gm and gm.RelapseLadderModelColumns then
+		local cols = gm:RelapseLadderModelColumns()
+		for i = 1, cols and #cols or 0 do
+			local col = cols[i]
+			if col.maxs.x >= mins.x - 64 and col.mins.x <= maxs.x + 64
+				and col.maxs.y >= mins.y - 64 and col.mins.y <= maxs.y + 64 then
+				if col.maxs.z > maxs.z then maxs.z = col.maxs.z end
+				if col.mins.z < mins.z then mins.z = col.mins.z end
+			end
+		end
+	end
 	local bot, top
 	if istable(ends) and ends.bot and ends.top then
 		bot, top = ends.bot, ends.top

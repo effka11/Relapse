@@ -1,0 +1,5 @@
+"VertexLitGeneric"
+{
+	"$baseTexture" "models\ammo\fas2\smallammobox"
+	"$basealphaenvmapmask" 1
+}

@@ -14,8 +14,13 @@ function SWEP:Eat()
 
 	if owner:IsSkillActive(SKILL_GLUTTON) then
 		local healing = self.FoodHealth * (owner.FoodRecoveryMul or 1)
+		local mul = GAMEMODE.GetFoodBloodArmorMul and GAMEMODE:GetFoodBloodArmorMul(owner) or GAMEMODE:GetBloodArmorGainMul(owner)
+		local gained = math.min(30, healing) * mul
+		if GAMEMODE.GetUpgradePercent and GAMEMODE:GetUpgradePercent(owner, "FoodBlood") > 0 then
+			gained = math.floor(gained + 0.5)
+		end
 
-		owner:SetBloodArmor(math.min(owner:GetBloodArmor() + (math.min(30, healing) * owner.BloodarmorGainMul), owner.MaxBloodArmor + (40 * owner.MaxBloodArmorMul)))
+		owner:SetBloodArmor(math.min(owner:GetBloodArmor() + gained, owner.MaxBloodArmor + (40 * owner.MaxBloodArmorMul)))
 	else
 		local rec = GAMEMODE.GetHealReceivedPercentMul and GAMEMODE:GetHealReceivedPercentMul(owner) or (owner.HealingReceived or 1)
 		local food = (owner.FoodRecoveryMul or 1) - 1
@@ -23,6 +28,13 @@ function SWEP:Eat()
 
 		owner:SetHealth(math.min(owner:Health() + healing, max))
 		owner:SetPhantomHealth(math.max(0, math.floor(owner:GetPhantomHealth() - healing)))
+
+		local meal = self.FoodHealth * (owner.FoodRecoveryMul or 1)
+		local blood = GAMEMODE.GetNormalFoodBloodAmount and GAMEMODE:GetNormalFoodBloodAmount(owner, meal) or 0
+		if blood > 0 then
+			local cap = owner.MaxBloodArmor or GAMEMODE.HumanBloodArmor or 15
+			owner:SetBloodArmor(math.min(owner:GetBloodArmor() + blood, cap))
+		end
 	end
 
 	self:TakePrimaryAmmo(1)

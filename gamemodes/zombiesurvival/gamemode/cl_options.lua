@@ -3,8 +3,8 @@ GM.BeatSetZombieDefault = "defaultzombiev2"
 
 GM.ItemCategoryIcons = {
 	[ITEMCAT_GUNS] = "icon16/gun.png",
-	[ITEMCAT_AMMO] = "icon16/box.png",
 	[ITEMCAT_MELEE] = "icon16/cog.png",
+	[ITEMCAT_AMMO] = "icon16/box.png",
 	[ITEMCAT_TOOLS] = "icon16/wrench.png",
 	[ITEMCAT_DEPLOYABLES] = "icon16/package.png",
 	[ITEMCAT_OTHER] = "icon16/world.png",

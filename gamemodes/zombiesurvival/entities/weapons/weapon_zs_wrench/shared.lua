@@ -19,6 +19,12 @@ SWEP.RelapsePreviewAngle = Angle(0, 0, 0)
 SWEP.RelapsePreviewLocalAng = Angle(45, 0, 45)
 SWEP.RelapsePreviewLift = 0.7
 SWEP.RelapsePreviewCamScale = 1.6
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_wrench2.png"
+
+if CLIENT then
+	killicon.Add("weapon_zs_wrench", "zombiesurvival/killicons/weapon_zs_wrench2.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_wrench2.png")
+end
 
 SWEP.HoldType = "melee"
 

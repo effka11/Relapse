@@ -1,8 +1,11 @@
 -- Shop card icon editor. `relapse_iconsdev` toggles; sliders are live deltas.
--- Kind `shop` writes CardIcon*; `inv` writes InvSlotIcon*.
+-- Kind `shop` writes CardIcon*; `inv` writes InvSlotIcon*; `view` writes ViewerAmmo*.
+-- Kind `scar` writes ScarIcon*. With the command on, the scars tab sits the window on the left.
 
 RelapseUI.IconsDevDelta = RelapseUI.IconsDevDelta or {}
 RelapseUI.IconsDevInvDelta = RelapseUI.IconsDevInvDelta or {}
+RelapseUI.IconsDevViewDelta = RelapseUI.IconsDevViewDelta or {}
+RelapseUI.IconsDevScarDelta = RelapseUI.IconsDevScarDelta or {}
 RelapseUI.IconsDevKind = RelapseUI.IconsDevKind or "shop"
 
 local function Enabled()
@@ -13,13 +16,42 @@ local function IsInv()
 	return RelapseUI.IconsDevKind == "inv"
 end
 
+local function IsView()
+	return RelapseUI.IconsDevKind == "view"
+end
+
+local function IsScar()
+	return RelapseUI.IconsDevKind == "scar"
+end
+
+local function Shown()
+	return Enabled()
+end
+
 local function DeltaStore()
+	if IsScar() then
+		RelapseUI.IconsDevScarDelta = RelapseUI.IconsDevScarDelta or {}
+		return RelapseUI.IconsDevScarDelta
+	end
+	if IsView() then
+		RelapseUI.IconsDevViewDelta = RelapseUI.IconsDevViewDelta or {}
+		return RelapseUI.IconsDevViewDelta
+	end
 	if IsInv() then
 		RelapseUI.IconsDevInvDelta = RelapseUI.IconsDevInvDelta or {}
 		return RelapseUI.IconsDevInvDelta
 	end
 	RelapseUI.IconsDevDelta = RelapseUI.IconsDevDelta or {}
 	return RelapseUI.IconsDevDelta
+end
+
+-- Weapon selection edits that gun's cartridge. An ammo id edits itself.
+local function EditClass()
+	local class = RelapseUI.IconsDevClass
+	if IsView() then
+		return RelapseUI.ViewerAmmoEditClass(class)
+	end
+	return class
 end
 
 local ActiveShop
@@ -57,6 +89,14 @@ local function EnsureDelta(class)
 end
 
 local function LiveValues(class)
+	if IsScar() then
+		local x, y = RelapseUI.ScarIconPosValue(class)
+		return RelapseUI.ScarIconZoomValue(class), RelapseUI.ScarIconAngValue(class), x, y
+	end
+	if IsView() then
+		local x, y = RelapseUI.ViewerAmmoPosValue(class)
+		return RelapseUI.ViewerAmmoZoomValue(class), 0, x, y
+	end
 	if IsInv() then
 		local x, y = RelapseUI.InvSlotIconShiftValue(class)
 		return RelapseUI.InvSlotIconZoomValue(class), RelapseUI.InvSlotIconTiltValue(class), x, y
@@ -68,6 +108,9 @@ end
 function RelapseUI.IconsDevItemName(class)
 	if not class or class == "" then
 		return ""
+	end
+	if IsScar() then
+		return RelapseUI.T("scar_" .. class, class)
 	end
 	local wep = weapons.GetStored(class)
 	if wep then
@@ -105,8 +148,11 @@ function RelapseUI.IconsDevCollect()
 			continue
 		end
 		local z, a, px, py = LiveValues(class)
-		local gap = RelapseUI.AmmoIconGapValue and RelapseUI.AmmoIconGapValue(class, IsInv()) or nil
-		local count = RelapseUI.AmmoIconCountValue and RelapseUI.AmmoIconCountValue(class, IsInv()) or nil
+		local gap, count
+		if not IsView() then
+			gap = RelapseUI.AmmoIconGapValue and RelapseUI.AmmoIconGapValue(class, IsInv()) or nil
+			count = RelapseUI.AmmoIconCountValue and RelapseUI.AmmoIconCountValue(class, IsInv()) or nil
+		end
 		rows[#rows + 1] = {
 			class = class,
 			name = RelapseUI.IconsDevItemName(class),
@@ -129,9 +175,9 @@ end
 
 function RelapseUI.IconsDevDumpText()
 	local rows = RelapseUI.IconsDevCollect()
-	local zoomKey = IsInv() and "RelapseUI.InvSlotIconZoom" or "RelapseUI.CardIconZoom"
-	local angKey = IsInv() and "RelapseUI.InvSlotIconTilt" or "RelapseUI.CardIconAng"
-	local posKey = IsInv() and "RelapseUI.InvSlotIconShift" or "RelapseUI.CardIconPos"
+	local zoomKey = (IsScar() and "RelapseUI.ScarIconZoom") or (IsView() and "RelapseUI.ViewerAmmoZoom") or (IsInv() and "RelapseUI.InvSlotIconZoom") or "RelapseUI.CardIconZoom"
+	local angKey = (IsScar() and "RelapseUI.ScarIconAng") or (IsInv() and "RelapseUI.InvSlotIconTilt") or "RelapseUI.CardIconAng"
+	local posKey = (IsScar() and "RelapseUI.ScarIconPos") or (IsView() and "RelapseUI.ViewerAmmoPos") or (IsInv() and "RelapseUI.InvSlotIconShift") or "RelapseUI.CardIconPos"
 	local lines = {}
 	lines[#lines + 1] = "Имя\tРазмер\tУгол\tX\tY"
 	for _, r in ipairs(rows) do
@@ -145,6 +191,17 @@ function RelapseUI.IconsDevDumpText()
 		end
 	end
 	lines[#lines + 1] = "}"
+	if IsView() then
+		lines[#lines + 1] = ""
+		lines[#lines + 1] = posKey .. " = {"
+		for _, r in ipairs(rows) do
+			if math.abs(r.x) >= 1 or math.abs(r.y) >= 1 then
+				lines[#lines + 1] = string.format("\t%s = { %s, %s }, -- %s", LuaKey(r.class), LuaNum(r.x, 0), LuaNum(r.y, 0), r.name)
+			end
+		end
+		lines[#lines + 1] = "}"
+		return table.concat(lines, "\n"), rows
+	end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = angKey .. " = {"
 	for _, r in ipairs(rows) do
@@ -162,6 +219,9 @@ function RelapseUI.IconsDevDumpText()
 		end
 	end
 	lines[#lines + 1] = "}"
+	if IsScar() then
+		return table.concat(lines, "\n"), rows
+	end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "RelapseUI.AmmoIconGap = {"
 	for _, r in ipairs(rows) do
@@ -195,12 +255,20 @@ local function CopyDump()
 	RelapseUI.IconsDevLastDump = text
 	SetClipboardText(text)
 	print(text)
-	file.Write(IsInv() and "relapse_invicons.lua" or "relapse_cardicons.lua", text)
+	local dumpFile = "relapse_cardicons.lua"
+	if IsScar() then
+		dumpFile = "relapse_scaricons.lua"
+	elseif IsInv() then
+		dumpFile = "relapse_invicons.lua"
+	elseif IsView() then
+		dumpFile = "relapse_viewericons.lua"
+	end
+	file.Write(dumpFile, text)
 	return text
 end
 
 local function ResetCurrent()
-	local class = RelapseUI.IconsDevClass
+	local class = EditClass()
 	if not class then return end
 	DeltaStore()[class] = nil
 end
@@ -294,13 +362,23 @@ end
 
 local function SyncSliders(panel)
 	if not IsValid(panel) then return end
-	local class = RelapseUI.IconsDevClass
+	local class = EditClass()
 	local d = class and EnsureDelta(class)
 	SetSliderSilent(panel.ZoomSlider, d and d.zoom or 0)
 	SetSliderSilent(panel.AngSlider, d and d.ang or 0)
 	SetSliderSilent(panel.XSlider, d and d.x or 0)
 	SetSliderSilent(panel.YSlider, d and d.y or 0)
-	local ammo = class and RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[class]
+	local ammo = (not IsView()) and class and RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[class]
+	local showAng = not IsView()
+	if IsValid(panel.AngLab) then
+		panel.AngLab:SetVisible(showAng)
+		panel.AngLab:SetTall(showAng and RelapseUI.sPx(18) or 0)
+	end
+	if IsValid(panel.AngSlider) then
+		panel.AngSlider:SetVisible(showAng)
+		panel.AngSlider:SetTall(showAng and RelapseUI.Grid15(3) or 0)
+		panel.AngSlider:DockMargin(0, 0, 0, showAng and RelapseUI.Grid15() or 0)
+	end
 	if IsValid(panel.GapLab) then
 		panel.GapLab:SetVisible(ammo and true or false)
 		panel.GapLab:SetTall(ammo and RelapseUI.sPx(18) or 0)
@@ -353,7 +431,7 @@ local function SyncSliders(panel)
 		panel.ResetBtn:SetEnabled(has)
 	end
 	if IsValid(panel.Note) then
-		if not class then
+		if IsScar() or not class then
 			panel.Note:SetText("")
 		elseif RelapseUI.CardIconSmooth and RelapseUI.CardIconSmooth[class] then
 			panel.Note:SetText("Иконка сглажена")
@@ -377,7 +455,21 @@ local function VisibleInv()
 	end
 end
 
+local function VisibleChar()
+	local frame = RelapseUI.IconsDevChar
+	if IsValid(frame) and frame:IsVisible() and not frame._RelapseClosing then
+		return frame
+	end
+end
+
 local function ResolveAnchor()
+	if IsScar() then
+		local char = VisibleChar()
+		if char then
+			return char, false, true
+		end
+		return
+	end
 	if IsInv() then
 		local inv = VisibleInv()
 		if inv then
@@ -420,7 +512,7 @@ local function AttachPanel(panel, host, invRoot)
 	end
 end
 
-local function PlaceBeside(panel, anchor, invRoot)
+local function PlaceBeside(panel, anchor, invRoot, left)
 	local gap = RelapseUI.Grid15()
 	local x, y = anchor:GetPos()
 	local aw = anchor:GetWide()
@@ -440,9 +532,17 @@ local function PlaceBeside(panel, anchor, invRoot)
 	if IsValid(parent) and parent ~= WorldParent() then
 		sw, sh = parent:GetWide(), parent:GetTall()
 	end
-	local px = x + aw + gap
-	if px + pw > sw - gap then
-		px = math.max(gap, sw - pw - gap)
+	local px
+	if left then
+		px = x - pw - gap
+		if px < gap then
+			px = gap
+		end
+	else
+		px = x + aw + gap
+		if px + pw > sw - gap then
+			px = math.max(gap, sw - pw - gap)
+		end
 	end
 	local py = math.Clamp(y, gap, math.max(gap, sh - ph - gap))
 	panel:SetPos(px, py)
@@ -459,7 +559,7 @@ local function EnsurePanel(host)
 	local pad = RelapseUI.Grid15()
 	local headerh = RelapseUI.Grid15(4)
 	panel = vgui.Create("DFrame", IsValid(host) and host or nil)
-	panel:SetSize(RelapseUI.Grid15(24), RelapseUI.Grid15(58))
+	panel:SetSize(RelapseUI.Grid15(28), RelapseUI.Grid15(58))
 	panel:SetDeleteOnClose(false)
 	panel:SetKeyboardInputEnabled(false)
 	panel:SetTitle("")
@@ -530,15 +630,36 @@ local function EnsurePanel(host)
 	invMode._RelapseKind = "inv"
 	panel.InvModeBtn = invMode
 
+	local viewMode = MakeBtn(modes, "Карточка", ModePaint, function()
+		RelapseUI.IconsDevSetKind("view")
+	end)
+	viewMode._RelapseKind = "view"
+	panel.ViewModeBtn = viewMode
+
+	local scarMode = MakeBtn(modes, "Шрамы", ModePaint, function()
+		RelapseUI.IconsDevSetKind("scar")
+	end)
+	scarMode._RelapseKind = "scar"
+	panel.ScarModeBtn = scarMode
+	shopMode:SetFont("Relapse15")
+	invMode:SetFont("Relapse15")
+	viewMode:SetFont("Relapse15")
+	scarMode:SetFont("Relapse15")
+
 	modes.PerformLayout = function(me, w, h)
 		w = w or me:GetWide()
 		h = h or me:GetTall()
 		local gap = RelapseUI.Grid5()
-		local bw = math.floor((w - gap) * 0.5)
-		shopMode:SetSize(bw, h)
-		shopMode:SetPos(0, 0)
-		invMode:SetSize(math.max(1, w - bw - gap), h)
-		invMode:SetPos(bw + gap, 0)
+		local n = 4
+		local bw = math.floor((w - gap * (n - 1)) / n)
+		local row = { shopMode, invMode, viewMode, scarMode }
+		local x = 0
+		for i, btn in ipairs(row) do
+			local wide = (i == n) and math.max(1, w - x) or bw
+			btn:SetSize(wide, h)
+			btn:SetPos(x, 0)
+			x = x + wide + gap
+		end
 	end
 
 	local item = EasyLabel(body, "Предмет не выбран", "Relapse20", RelapseUI.Col.Text)
@@ -555,7 +676,7 @@ local function EnsurePanel(host)
 	zoom:DockMargin(0, 0, 0, pad)
 	zoom.OnValueChanged = function(me, val)
 		if me._RelapseSilent then return end
-		local class = RelapseUI.IconsDevClass
+		local class = EditClass()
 		if not class then return end
 		EnsureDelta(class).zoom = tonumber(val) or 0
 		RefreshDumpPanel(panel)
@@ -564,14 +685,15 @@ local function EnsurePanel(host)
 
 	local angLab = EasyLabel(body, "Угол", "Relapse15", RelapseUI.Col.Muted)
 	angLab:Dock(TOP)
+	panel.AngLab = angLab
 	local ang = MakeSlider(body, -180, 180, 1)
 	ang:SetTall(RelapseUI.Grid15(3))
 	ang:Dock(TOP)
 	ang:DockMargin(0, 0, 0, pad)
 	ang.OnValueChanged = function(me, val)
 		if me._RelapseSilent then return end
-		local class = RelapseUI.IconsDevClass
-		if not class then return end
+		local class = EditClass()
+		if not class or IsView() then return end
 		EnsureDelta(class).ang = tonumber(val) or 0
 		RefreshDumpPanel(panel)
 	end
@@ -585,7 +707,7 @@ local function EnsurePanel(host)
 	xSlider:DockMargin(0, 0, 0, pad)
 	xSlider.OnValueChanged = function(me, val)
 		if me._RelapseSilent then return end
-		local class = RelapseUI.IconsDevClass
+		local class = EditClass()
 		if not class then return end
 		EnsureDelta(class).x = tonumber(val) or 0
 		RefreshDumpPanel(panel)
@@ -600,7 +722,7 @@ local function EnsurePanel(host)
 	ySlider:DockMargin(0, 0, 0, pad)
 	ySlider.OnValueChanged = function(me, val)
 		if me._RelapseSilent then return end
-		local class = RelapseUI.IconsDevClass
+		local class = EditClass()
 		if not class then return end
 		EnsureDelta(class).y = tonumber(val) or 0
 		RefreshDumpPanel(panel)
@@ -618,8 +740,8 @@ local function EnsurePanel(host)
 	gapSlider:SetVisible(false)
 	gapSlider.OnValueChanged = function(me, val)
 		if me._RelapseSilent then return end
-		local class = RelapseUI.IconsDevClass
-		if not class then return end
+		local class = EditClass()
+		if not class or IsView() then return end
 		local base = (RelapseUI.AmmoIconGap and RelapseUI.AmmoIconGap[class]) or RelapseUI.AmmoIconGapDefault or 18
 		EnsureDelta(class).gap = (tonumber(val) or base) - base
 		RefreshDumpPanel(panel)
@@ -637,8 +759,8 @@ local function EnsurePanel(host)
 	countSlider:SetVisible(false)
 	countSlider.OnValueChanged = function(me, val)
 		if me._RelapseSilent then return end
-		local class = RelapseUI.IconsDevClass
-		if not class then return end
+		local class = EditClass()
+		if not class or IsView() then return end
 		local base = (RelapseUI.AmmoIconCount and RelapseUI.AmmoIconCount[class]) or RelapseUI.AmmoIconCountDefault or 3
 		EnsureDelta(class).count = (tonumber(val) or base) - base
 		RefreshDumpPanel(panel)
@@ -753,17 +875,17 @@ end
 function RelapseUI.IconsDevLayout()
 	local panel = RelapseUI.IconsDevPanel
 	if not IsValid(panel) then return end
-	if not Enabled() then
+	if not Shown() then
 		panel:SetVisible(false)
 		return
 	end
 
-	local anchor, invRoot = ResolveAnchor()
+	local anchor, invRoot, placeLeft = ResolveAnchor()
 	if not IsValid(anchor) then
 		panel:SetVisible(false)
 		return
 	end
-	if not invRoot then
+	if not invRoot and not placeLeft then
 		RelapseUI.IconsDevShop = anchor
 	end
 
@@ -772,7 +894,7 @@ function RelapseUI.IconsDevLayout()
 
 	if panel._RelapseNeedPlace then
 		panel._RelapseNeedPlace = nil
-		PlaceBeside(panel, anchor, invRoot)
+		PlaceBeside(panel, anchor, invRoot, placeLeft)
 	end
 	panel:SetAlpha(255)
 	panel:SetVisible(true)
@@ -787,20 +909,20 @@ function RelapseUI.IconsDevRaise()
 end
 
 function RelapseUI.IconsDevRefresh()
-	if not Enabled() then
+	if not Shown() then
 		if IsValid(RelapseUI.IconsDevPanel) then
 			RelapseUI.IconsDevPanel:SetVisible(false)
 		end
 		return
 	end
-	local anchor, invRoot = ResolveAnchor()
+	local anchor, invRoot, placeLeft = ResolveAnchor()
 	if not IsValid(anchor) then
 		if IsValid(RelapseUI.IconsDevPanel) then
 			RelapseUI.IconsDevPanel:SetVisible(false)
 		end
 		return
 	end
-	if not invRoot then
+	if not invRoot and not placeLeft then
 		RelapseUI.IconsDevShop = anchor
 	end
 	local host = invRoot and nil or RelapseUI.MenuHost(anchor)
@@ -815,7 +937,7 @@ function RelapseUI.IconsDevRefresh()
 end
 
 function RelapseUI.IconsDevSetKind(kind)
-	if kind ~= "inv" then
+	if kind ~= "inv" and kind ~= "view" and kind ~= "scar" then
 		kind = "shop"
 	end
 	RelapseUI.IconsDevKind = kind
@@ -824,6 +946,8 @@ function RelapseUI.IconsDevSetKind(kind)
 	end
 	if Enabled() then
 		RelapseUI.IconsDevRefresh()
+	elseif IsValid(RelapseUI.IconsDevPanel) then
+		RelapseUI.IconsDevPanel:SetVisible(false)
 	end
 end
 
@@ -853,8 +977,58 @@ function RelapseUI.IconsDevBindInv(frame)
 	end
 end
 
+function RelapseUI.IconsDevBindScar(frame)
+	if not IsValid(frame) then return end
+	if RelapseUI.IconsDevKind ~= "scar" then
+		RelapseUI.IconsDevKindPrev = RelapseUI.IconsDevKind
+	end
+	RelapseUI.IconsDevChar = frame
+	RelapseUI.IconsDevKind = "scar"
+	if IsValid(RelapseUI.IconsDevPanel) then
+		RelapseUI.IconsDevPanel._RelapseNeedPlace = true
+	end
+	if Enabled() then
+		RelapseUI.IconsDevRefresh()
+	elseif IsValid(RelapseUI.IconsDevPanel) then
+		RelapseUI.IconsDevPanel:SetVisible(false)
+	end
+end
+
+function RelapseUI.IconsDevUnbindScar()
+	if RelapseUI.IconsDevKind ~= "scar" then
+		return
+	end
+	local prev = RelapseUI.IconsDevKindPrev
+	if prev ~= "shop" and prev ~= "inv" and prev ~= "view" then
+		prev = "shop"
+	end
+	RelapseUI.IconsDevKind = prev
+	RelapseUI.IconsDevKindPrev = nil
+	if IsValid(RelapseUI.IconsDevPanel) then
+		RelapseUI.IconsDevPanel._RelapseNeedPlace = true
+	end
+	if Enabled() then
+		RelapseUI.IconsDevRefresh()
+	elseif IsValid(RelapseUI.IconsDevPanel) then
+		RelapseUI.IconsDevPanel:SetVisible(false)
+	end
+end
+
 function RelapseUI.IconsDevSelect(tab, kind)
-	if kind == "inv" or kind == "shop" then
+	if kind == "scar" then
+		if RelapseUI.IconsDevKind ~= "scar" then
+			RelapseUI.IconsDevKind = "scar"
+			if IsValid(RelapseUI.IconsDevPanel) then
+				RelapseUI.IconsDevPanel._RelapseNeedPlace = true
+			end
+		end
+		RelapseUI.IconsDevClass = isstring(tab) and tab ~= "" and tab or nil
+		if Enabled() then
+			RelapseUI.IconsDevRefresh()
+		end
+		return
+	end
+	if (kind == "inv" or kind == "shop") and RelapseUI.IconsDevKind ~= "view" then
 		if RelapseUI.IconsDevKind ~= kind then
 			RelapseUI.IconsDevKind = kind
 			if IsValid(RelapseUI.IconsDevPanel) then

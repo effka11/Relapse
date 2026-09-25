@@ -44,7 +44,7 @@ function SWEP:PrimaryAttack()
 	local pos, ang = status:RecalculateValidity()
 	if not pos or not ang then return end
 
-	self:SetNextPrimaryAttack(CurTime() + self.Primary.Delay)
+	self:SetNextPrimaryAttack(CurTime() + GAMEMODE:GetDevicePlaceDelay(owner, self, self.Primary.Delay))
 
 	local ent = ents.Create(self.DeployClass)
 	if ent:IsValid() then

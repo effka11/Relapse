@@ -253,7 +253,7 @@ function GM:ComputeWeaponPayback(swep)
 	return combat / (combat + uAmmo)
 end
 
--- T1 price of the ranged stick. Same unit in worth and points: two wallets, one number.
+-- U per 1 point and per 1 worth. Shelf prices are separate: T1 shop and worth are 40.
 U.ShopT1Price = 15
 U.WorthT1Price = U.ShopT1Price
 
@@ -1254,6 +1254,7 @@ GM.RelapseWeapons = {
 		PreviewLocalAng = Angle(45, 0, 45),
 		PreviewLift = 0.7,
 		PreviewCamScale = 1.6,
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_hammer3.png",
 	},
 	weapon_zs_wrench = {
 		PreviewParts = {
@@ -1263,6 +1264,7 @@ GM.RelapseWeapons = {
 		PreviewLocalAng = Angle(45, 0, 45),
 		PreviewLift = 0.7,
 		PreviewCamScale = 1.6,
+		PreviewIcon = "zombiesurvival/killicons/weapon_zs_wrench2.png",
 	},
 }
 

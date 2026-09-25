@@ -1,0 +1,67 @@
+﻿==== zs_oxygen_b4_rec_20260922_205523_1.txt
+HEAD t=0 abs=149.27273172140121 map=zs_oxygen_b4 mesh={'ver': 4, 'code': 4, 'cells': 4074, 'comps': 27, 'big': 2520, 'bigid': 4049}
+hopeless t=8.36 name=Gena why=hopeless p=[1204, 263, -96] reach=0 endp=[1193, 338, -94] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 208, 'cls': 'player', 'dz': 32, 'p': [1318, 434, -64]} door=None comp=2120 gcomp=None len=538
+bug t=8.36 name=Gena why=hopeless p=[1204, 263, -96] reach=0 endp=[1193, 338, -94] goal={'cls': 'player', 'tol': 34, 'id': 1, 'd': 208, 'dz': 32, 'name': '╤ìffka', 'p': [1318, 434, -64]} door=None comp=2120 gcomp=None len=538
+note t=9.42 name=Oleg why=break:prop_door_rotating p=[1483, 479, -64] reach=1 endp=[1318, 434, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 171, 'cls': 'player', 'dz': 0, 'p': [1318, 434, -64]} door=None comp=4049 gcomp=None len=364
+note t=9.52 name=Ruslan why=break:prop_door_rotating p=[1478, 467, -64] reach=1 endp=[1318, 434, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 164, 'cls': 'player', 'dz': 0, 'p': [1318, 434, -64]} door=None comp=4049 gcomp=None len=369
+note t=9.55 name=Oleg why=door:use p=[1473, 468, -64] reach=1 endp=[1318, 434, -64] goal={'d': 11, 'dz': 0, 'tol': 29, 'p': [1462, 468, -64]} door=None comp=4049 gcomp=None len=364
+note t=9.58 name=Roma why=break:prop_door_rotating p=[1478, 467, -64] reach=1 endp=[1318, 434, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 164, 'cls': 'player', 'dz': 0, 'p': [1318, 434, -64]} door=None comp=4049 gcomp=None len=369
+note t=9.64 name=Ruslan why=door:use p=[1473, 469, -64] reach=1 endp=[1318, 434, -64] goal={'d': 11, 'dz': 0, 'tol': 29, 'p': [1462, 469, -64]} door=None comp=4049 gcomp=None len=369
+note t=9.70 name=Roma why=door:use p=[1473, 469, -64] reach=1 endp=[1318, 434, -64] goal={'d': 11, 'dz': 0, 'tol': 29, 'p': [1462, 469, -64]} door=None comp=4049 gcomp=None len=369
+note t=9.91 name=Oleg why=door:clear p=[1476, 468, -64] reach=1 endp=[1318, 434, -64] goal={'d': 14, 'dz': 0, 'tol': 29, 'p': [1462, 468, -64]} door=None comp=4049 gcomp=None len=364
+note t=9.94 name=Roma why=door:clear p=[1478, 470, -64] reach=1 endp=[1318, 434, -64] goal={'d': 16, 'dz': 0, 'tol': 29, 'p': [1462, 469, -64]} door=None comp=4049 gcomp=None len=369
+note t=10.00 name=Ruslan why=door:clear p=[1483, 470, -64] reach=1 endp=[1318, 434, -64] goal={'d': 21, 'dz': 0, 'tol': 29, 'p': [1462, 469, -64]} door=None comp=4049 gcomp=None len=369
+note t=11.39 name=Gena why=prop:around p=[1199, 25, -96] reach=1 endp=[1129, -78, -94] goal={'d': 124, 'dz': 2, 'tol': 48, 'p': [1129, -78, -94]} door=None comp=2120 gcomp=None len=425
+note t=11.61 name=Oleg why=stuck:crowd p=[1488, 515, -64] reach=1 endp=[1318, 434, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 143, 'cls': 'player', 'dz': 0, 'p': [1368, 437, -64]} door=None comp=4049 gcomp=None len=181
+note t=11.64 name=Roma why=stuck:crowd p=[1488, 515, -64] reach=1 endp=[1318, 434, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 143, 'cls': 'player', 'dz': 0, 'p': [1368, 437, -64]} door=None comp=4049 gcomp=None len=181
+note t=11.70 name=Ruslan why=stuck:crowd p=[1488, 515, -64] reach=1 endp=[1318, 434, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 143, 'cls': 'player', 'dz': 0, 'p': [1368, 437, -64]} door=None comp=4049 gcomp=None len=183
+==== zs_oxygen_b4_rec_20260922_205535_2.txt
+HEAD t=0 abs=161.27273207902908 map=zs_oxygen_b4 mesh={'ver': 4, 'code': 4, 'cells': 4074, 'comps': 27, 'big': 2520, 'bigid': 4049}
+note t=0.73 name=Gena why=prop:around p=[1159, -62, -96] reach=1 endp=[1161, 178, -94] goal={'d': 240, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=0.91 name=Ruslan why=break:prop_physics p=[1470, 471, -64] reach=1 endp=[1368, 437, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 108, 'cls': 'player', 'dz': 0, 'p': [1368, 437, -64]} door=None comp=4049 gcomp=None len=203
+note t=1.33 name=Gena why=prop:around p=[1196, -44, -96] reach=1 endp=[1161, 178, -94] goal={'d': 225, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=1.55 name=Oleg why=stuck:crowd p=[1509, 516, -64] reach=1 endp=[1368, 437, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 161, 'cls': 'player', 'dz': 0, 'p': [1369, 437, -64]} door=None comp=4049 gcomp=None len=235
+note t=1.58 name=Roma why=stuck:crowd p=[1509, 516, -64] reach=1 endp=[1368, 437, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 159, 'cls': 'player', 'dz': 0, 'p': [1370, 438, -64]} door=None comp=4049 gcomp=None len=235
+note t=1.94 name=Gena why=prop:around p=[1174, -84, -96] reach=1 endp=[1161, 178, -94] goal={'d': 262, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=2.55 name=Gena why=prop:around p=[1210, -56, -96] reach=1 endp=[1161, 178, -94] goal={'d': 239, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=2.88 name=Oleg why=break:prop_physics p=[1461, 471, -64] reach=1 endp=[1368, 437, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 100, 'cls': 'player', 'dz': 0, 'p': [1368, 435, -64]} door=None comp=4049 gcomp=None len=235
+note t=2.91 name=Roma why=break:prop_physics p=[1461, 471, -64] reach=1 endp=[1368, 437, -64] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 98, 'cls': 'player', 'dz': 0, 'p': [1370, 435, -64]} door=None comp=4049 gcomp=None len=235
+note t=3.15 name=Gena why=prop:around p=[1183, -93, -96] reach=1 endp=[1161, 178, -94] goal={'d': 272, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=3.88 name=Gena why=prop:around p=[1128, -86, -96] reach=1 endp=[1161, 178, -94] goal={'d': 266, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=4.48 name=Gena why=prop:around p=[1179, -93, -96] reach=1 endp=[1161, 178, -94] goal={'d': 271, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+death t=4.76 name=Roma p=[1455, 482, -64]
+note t=5.09 name=Gena why=prop:around p=[1133, -94, -96] reach=1 endp=[1161, 178, -94] goal={'d': 273, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=5.82 name=Gena why=prop:around p=[1181, -94, -96] reach=1 endp=[1161, 178, -94] goal={'d': 273, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=6.42 name=Gena why=prop:around p=[1129, -87, -96] reach=1 endp=[1161, 178, -94] goal={'d': 266, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=7.15 name=Gena why=prop:around p=[1176, -92, -96] reach=1 endp=[1161, 178, -94] goal={'d': 270, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+note t=7.76 name=Gena why=prop:around p=[1126, -80, -96] reach=1 endp=[1161, 178, -94] goal={'d': 260, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+spawn t=7.88 name=Roma p=[1432, -844, -95]
+note t=8.36 name=Gena why=prop:around p=[1168, -98, -96] reach=1 endp=[1161, 178, -94] goal={'d': 276, 'dz': 2, 'tol': 48, 'p': [1161, 178, -94]} door=None comp=2120 gcomp=None len=338
+death t=8.73 name=Ruslan p=[1445, 482, -64]
+spawn t=11.82 name=Ruslan p=[1432, -892, -95]
+==== zs_oxygen_b4_rec_20260922_205547_3.txt
+HEAD t=0 abs=173.27273243665695 map=zs_oxygen_b4 mesh={'ver': 4, 'code': 4, 'cells': 4074, 'comps': 27, 'big': 2520, 'bigid': 4049}
+hopeless t=2.91 name=Roma why=hopeless p=[1285, 197, -96] reach=0 endp=[1289, 274, -94] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 244, 'cls': 'player', 'dz': 32, 'p': [1379, 420, -64]} door=None comp=2120 gcomp=None len=320
+bug t=2.91 name=Roma why=hopeless p=[1285, 197, -96] reach=0 endp=[1289, 274, -94] goal={'cls': 'player', 'tol': 34, 'id': 1, 'd': 244, 'dz': 32, 'name': '╤ìffka', 'p': [1379, 420, -64]} door=None comp=2120 gcomp=None len=320
+death t=4.97 name=Oleg p=[1456, 482, -64]
+note t=5.21 name=Roma why=prop:around p=[1197, 23, -96] reach=1 endp=[1161, -46, -94] goal={'d': 78, 'dz': 2, 'tol': 48, 'p': [1161, -46, -94]} door=None comp=2120 gcomp=None len=300
+note t=5.82 name=Roma why=prop:around p=[1208, -30, -96] reach=1 endp=[1161, -46, -94] goal={'d': 49, 'dz': 2, 'tol': 48, 'p': [1161, -46, -94]} door=None comp=2120 gcomp=None len=300
+hopeless t=6.97 name=Ruslan why=hopeless p=[1287, 206, -96] reach=0 endp=[1289, 274, -94] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 234, 'cls': 'player', 'dz': 32, 'p': [1379, 420, -64]} door=None comp=2120 gcomp=None len=422
+bug t=6.97 name=Ruslan why=hopeless p=[1287, 206, -96] reach=0 endp=[1289, 274, -94] goal={'cls': 'player', 'tol': 34, 'id': 1, 'd': 234, 'dz': 32, 'name': '╤ìffka', 'p': [1379, 420, -64]} door=None comp=2120 gcomp=None len=422
+spawn t=8.12 name=Oleg p=[1432, -844, -95]
+note t=11.09 name=Ruslan why=stuck1:wall p=[1157, 52, -96] reach=1 endp=[1065, 50, -94] goal={'d': 92, 'dz': 2, 'tol': 48, 'p': [1065, 50, -94]} door=None comp=2120 gcomp=None len=346
+bug t=11.09 name=Ruslan why=stuck p=[1157, 52, -96] reach=1 endp=[1065, 50, -94] goal={'d': 92, 'tol': 48, 'dz': 2, 'p': [1065, 50, -94]} door=None comp=2120 gcomp=None len=346
+note t=11.82 name=Ruslan why=prop:around p=[1159, 44, -96] reach=1 endp=[1129, -302, -94] goal={'d': 58, 'dz': 2, 'tol': 48, 'p': [1161, -14, -94]} door=None comp=2120 gcomp=None len=363
+==== zs_oxygen_b4_rec_20260922_205559_4.txt
+HEAD t=0 abs=185.27273279428482 map=zs_oxygen_b4 mesh={'ver': 4, 'code': 4, 'cells': 4074, 'comps': 27, 'big': 2520, 'bigid': 4049}
+hopeless t=3.24 name=Oleg why=hopeless p=[1291, 210, -96] reach=0 endp=[1289, 274, -94] goal={'name': '╤ìffka', 'tol': 34, 'id': 1, 'd': 229, 'cls': 'player', 'dz': 32, 'p': [1379, 420, -64]} door=None comp=2120 gcomp=None len=407
+bug t=3.24 name=Oleg why=hopeless p=[1291, 210, -96] reach=0 endp=[1289, 274, -94] goal={'cls': 'player', 'tol': 34, 'id': 1, 'd': 229, 'dz': 32, 'name': '╤ìffka', 'p': [1379, 420, -64]} door=None comp=2120 gcomp=None len=407
+note t=5.70 name=Gena why=prop:around p=[1254, 46, -96] reach=1 endp=[1097, -558, -94] goal={'d': 624, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+note t=6.42 name=Gena why=prop:around p=[1288, 7, -96] reach=1 endp=[1097, -558, -94] goal={'d': 596, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+note t=7.03 name=Gena why=prop:around p=[1237, 22, -96] reach=1 endp=[1097, -558, -94] goal={'d': 597, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+note t=7.64 name=Gena why=prop:around p=[1281, 32, -96] reach=1 endp=[1097, -558, -94] goal={'d': 618, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+note t=8.36 name=Gena why=prop:around p=[1236, 37, -96] reach=1 endp=[1097, -558, -94] goal={'d': 611, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+note t=9.21 name=Gena why=prop:around p=[1277, 14, -96] reach=1 endp=[1097, -558, -94] goal={'d': 600, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+note t=9.82 name=Gena why=prop:around p=[1223, 11, -96] reach=1 endp=[1097, -558, -94] goal={'d': 583, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+note t=10.42 name=Gena why=prop:around p=[1257, 43, -96] reach=1 endp=[1097, -558, -94] goal={'d': 622, 'dz': 2, 'tol': 48, 'p': [1097, -558, -94]} door=None comp=2120 gcomp=None len=733
+---TOTAL LINES 66

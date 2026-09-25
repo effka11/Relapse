@@ -144,7 +144,11 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 	end
 	sender:PrintTranslatedMessage(HUD_PRINTTALK, usescrap and "created_x_for_y_scrap" or "purchased_x_for_y_points", itemtab.Name, cost)
 
-	GAMEMODE:AddItemStocks(id, -1)
+	if GAMEMODE:RelapseShopUnlimited(itemtab) then
+		GAMEMODE:AddItemStocks(id, 1)
+	else
+		GAMEMODE:AddItemStocks(id, -1)
+	end
 	GAMEMODE:UpdateTabClassDisplay(sender)
 
 	if usescrap then
@@ -789,4 +793,11 @@ concommand.Add("relapse_addpoints", function(pl, _, args)
 	if target ~= pl then
 		target:ChatPrint(string.format("[Relapse] you received %d points (now %d)", n, target:GetPoints()))
 	end
+end)
+
+concommand.Add("relapse_skipend", function(pl)
+	if not RelapseAddPointsAllowed(pl) then return end
+
+	local _, why = GAMEMODE:SkipEndDelay()
+	RelapseAddPointsReply(pl, "[Relapse] " .. why)
 end)

@@ -73,6 +73,7 @@ include("skillweb/sh_skillweb.lua")
 include("sh_relapse_ammo.lua")
 include("sh_reconnect.lua")
 include("sh_options.lua")
+include("sh_mapvote.lua")
 include("sh_zombieclasses.lua")
 include("sh_animations.lua")
 include("sh_sigils.lua")
@@ -88,6 +89,8 @@ include("sh_relapse_scars.lua")
 include("sh_cycle_grid.lua")
 include("sh_relapse_percent.lua")
 include("sh_relapse_stamina.lua")
+include("sh_relapse_hearing.lua")
+include("sh_relapse_hearing_peaks.lua")
 include("sh_relapse_wmpose.lua")
 
 include("noxapi/noxapi.lua")
@@ -544,7 +547,18 @@ end
 function GM:DoChangeDeploySpeed(wep)
 	if wep:IsValid() and wep.SetDeploySpeed and not wep.NoDeploySpeedChange then
 		local owner = wep:GetOwner()
-		wep:SetDeploySpeed(self.BaseDeploySpeed * (owner:IsValid() and owner.DeploySpeedMultiplier or 1) * (owner:IsValid() and owner:GetStatus("frost") and 0.7 or 1))
+		local mul = 1
+		if owner:IsValid() then
+			if self.GetDeployPercentMul then
+				mul = self:GetDeployPercentMul(owner)
+			else
+				mul = owner.DeploySpeedMultiplier or 1
+			end
+			if owner:GetStatus("frost") then
+				mul = mul * 0.7
+			end
+		end
+		wep:SetDeploySpeed(self.BaseDeploySpeed * mul)
 	end
 end
 

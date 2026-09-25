@@ -86,11 +86,12 @@ function RelapseUI.ScrollBarW()
 end
 
 function RelapseUI.ScrollBarDrawW()
-	return RelapseUI.Grid5()
+	-- Screen pixels. Overlay only: canvas width does not change when the bar appears.
+	return 10
 end
 
 function RelapseUI.ScrollBarHitW()
-	return RelapseUI.Grid15(2)
+	return RelapseUI.ScrollBarDrawW()
 end
 
 function RelapseUI.ScrollGap()
@@ -260,7 +261,13 @@ RelapseUI.CardIconZoom = {
 	mg_pkilo = 1.95,
 	mg_falima = 1.82,
 	mg_alpha50 = 1.96,
-	weapon_zs_aloe = 1.88,
+	weapon_zs_aloe = 2.01,
+	weapon_zs_resupplybox = 1.71,
+	weapon_zs_arsenalcrate = 1.4,
+	weapon_zs_remantler = 1.43,
+	weapon_zs_hammer = 1.36,
+	weapon_zs_wrench = 1.54,
+	weapon_zs_medicalkit = 1.8,
 	["3030win"] = 0.78,
 	["357mag"] = 0.63,
 	["45acp"] = 0.71,
@@ -273,6 +280,8 @@ RelapseUI.CardIconZoom = {
 	["9x18"] = 0.64,
 	["9x19"] = 0.64,
 	["9x39"] = 0.65,
+	["gaussenergy"] = 0.81,
+	["battery"] = 1.02,
 }
 
 RelapseUI.CardIconAng = {
@@ -298,19 +307,24 @@ RelapseUI.CardIconPos = {
 	mg_pkilo = { -1, 0 },
 	mg_falima = { 2, 1 },
 	mg_alpha50 = { -2, 0 },
-	weapon_zs_aloe = { 0, -5 },
+	weapon_zs_aloe = { 2, -7 },
+	weapon_zs_resupplybox = { -1, -2 },
+	weapon_zs_remantler = { 0, 1 },
+	weapon_zs_medicalkit = { 0, -2 },
+	weapon_zs_wrench = { 0, 1 },
 	["3030win"] = { 0, 1 },
 	["357mag"] = { 0, 4 },
 	["45acp"] = { 0, 9 },
 	["50bmg"] = { 0, -7 },
 	["12ga"] = { 0, 5 },
-	["556x45"] = { 0, -8 },
+	["556x45"] = { 0, -7 },
 	["762x39"] = { 0, -4 },
 	["762x51"] = { 0, -6 },
 	["762x54r"] = { 0, -6 },
 	["9x18"] = { 0, 6 },
 	["9x19"] = { 0, 4 },
-	["9x39"] = { 0, 5 },
+	["9x39"] = { 0, 3 },
+	["gaussenergy"] = { 0, -2 },
 }
 
 -- PNG silhouettes with alpha AA. Same pass as the T1 shop guns.
@@ -336,6 +350,12 @@ RelapseUI.CardIconSmooth = {
 	mg_falima = true,
 	mg_alpha50 = true,
 	weapon_zs_aloe = true,
+	weapon_zs_resupplybox = true,
+	weapon_zs_arsenalcrate = true,
+	weapon_zs_remantler = true,
+	weapon_zs_hammer = true,
+	weapon_zs_wrench = true,
+	weapon_zs_medicalkit = true,
 }
 
 do
@@ -344,6 +364,13 @@ do
 		"9x39", "556x45", "762x39", "762x51", "762x54r", "50bmg",
 	}
 	for _, id in ipairs(ammoIds) do
+		RelapseUI.CardIconSmooth[id] = true
+		RelapseUI.CardIconSmooth["ammo_" .. id] = true
+		RelapseUI.CardIconSmooth["ps_ammo_" .. id] = true
+		RelapseUI.CardIconSmooth["2ammo_" .. id] = true
+		RelapseUI.CardIconSmooth["3ammo_" .. id] = true
+	end
+	for _, id in ipairs({ "battery", "gaussenergy" }) do
 		RelapseUI.CardIconSmooth[id] = true
 		RelapseUI.CardIconSmooth["ammo_" .. id] = true
 		RelapseUI.CardIconSmooth["ps_ammo_" .. id] = true
@@ -372,6 +399,49 @@ function RelapseUI.CardIconPosValue(class)
 	end
 	local d = class and RelapseUI.IconsDevDelta and RelapseUI.IconsDevDelta[class]
 	return x + (d and d.x or 0), y + (d and d.y or 0)
+end
+
+RelapseUI.ScarIconZoom = {
+	mercenary = 0.88,
+}
+RelapseUI.ScarIconAng = {
+}
+RelapseUI.ScarIconPos = {
+	mercenary = { 0, 2 },
+}
+
+function RelapseUI.ScarIconZoomValue(id)
+	local z = (id and RelapseUI.ScarIconZoom[id]) or 1
+	local d = id and RelapseUI.IconsDevScarDelta and RelapseUI.IconsDevScarDelta[id]
+	return math.max(0.05, z + (d and d.zoom or 0))
+end
+
+function RelapseUI.ScarIconAngValue(id)
+	local a = (id and RelapseUI.ScarIconAng[id]) or 0
+	local d = id and RelapseUI.IconsDevScarDelta and RelapseUI.IconsDevScarDelta[id]
+	return a + (d and d.ang or 0)
+end
+
+function RelapseUI.ScarIconPosValue(id)
+	local p = id and RelapseUI.ScarIconPos[id]
+	local x, y = 0, 0
+	if istable(p) then
+		x, y = p[1] or 0, p[2] or 0
+	end
+	local d = id and RelapseUI.IconsDevScarDelta and RelapseUI.IconsDevScarDelta[id]
+	return x + (d and d.x or 0), y + (d and d.y or 0)
+end
+
+function RelapseUI.ScarIconMaterial(path)
+	if not isstring(path) or path == "" then return end
+	RelapseUI.ScarIconMats = RelapseUI.ScarIconMats or {}
+	local mat = RelapseUI.ScarIconMats[path]
+	if not mat or mat:IsError() then
+		mat = Material(path, "smooth")
+		RelapseUI.ScarIconMats[path] = mat
+	end
+	if not mat or mat:IsError() then return end
+	return mat
 end
 
 function RelapseUI.FitIconDims(iw, ih, maxx, maxy)
@@ -427,6 +497,7 @@ RelapseUI.AmmoIconCount = {
 	["50bmg"] = 1,
 	["12ga"] = 2,
 	["9x18"] = 2,
+	["gaussenergy"] = 4,
 }
 RelapseUI.AmmoIconRound = {
 	["9x18"] = { w = 68, h = 183, path = "zombiesurvival/killicons/ammo_9x18_round.png" },
@@ -441,6 +512,7 @@ RelapseUI.AmmoIconRound = {
 	["762x51"] = { w = 36, h = 220, path = "zombiesurvival/killicons/ammo_762x51_round.png" },
 	["762x54r"] = { w = 41, h = 220, path = "zombiesurvival/killicons/ammo_762x54r_round.png" },
 	["50bmg"] = { w = 36, h = 220, path = "zombiesurvival/killicons/ammo_50bmg_round.png" },
+	["gaussenergy"] = { w = 54, h = 220, path = "zombiesurvival/killicons/ammo_nail_round.png" },
 }
 
 function RelapseUI.AmmoRoundMat(class)
@@ -461,6 +533,20 @@ function RelapseUI.AmmoIconGapValue(class, inv)
 	local store = inv and RelapseUI.IconsDevInvDelta or RelapseUI.IconsDevDelta
 	local d = store and class and store[class]
 	return math.max(0, g + (d and d.gap or 0))
+end
+
+-- Ink size of the row inside a square `box` (the 256-fit frame), after zoom, gap and count.
+function RelapseUI.AmmoIconInkSize(class, box, zoom)
+	local def = class and RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[class]
+	if not def then return 0, 0 end
+	zoom = zoom or 1
+	box = box or 256
+	local zx = (box / 256) * zoom
+	local n = RelapseUI.AmmoIconCountValue(class, false)
+	local gap = RelapseUI.AmmoIconGapValue(class, false) * zx
+	local rw, rh = def.w * zx, def.h * zx
+	local groupW = rw * n + gap * math.max(0, n - 1)
+	return groupW, rh
 end
 
 function RelapseUI.AmmoIconCountValue(class, inv)
@@ -497,6 +583,44 @@ function RelapseUI.DrawAmmoTrio(class, cx, cy, boxW, boxH, zoom, angDeg, col, in
 		local lx = -groupW * 0.5 + rw * 0.5 + i * (rw + gap)
 		surface.DrawTexturedRectRotated(cx + lx * c, cy + lx * s, rw, rh, angDeg or 0)
 	end
+	return true
+end
+
+-- Medications are one medkit in the preview ammo chip. Not a cartridge row, so they stay out of AmmoIconRound.
+function RelapseUI.ViewerAmmoSingle(id)
+	return id == "battery"
+end
+
+RelapseUI.AmmoMarkMat = RelapseUI.AmmoMarkMat or {}
+
+function RelapseUI.AmmoMarkMaterial(id)
+	if not RelapseUI.ViewerAmmoSingle(id) then return end
+	local path = RelapseUI.AmmoIconPath(id)
+	if not path then return end
+	local mat = RelapseUI.AmmoMarkMat[path]
+	if not mat or mat:IsError() then
+		mat = Material(path, "smooth")
+		RelapseUI.AmmoMarkMat[path] = mat
+	end
+	if not mat or mat:IsError() then return end
+	return mat
+end
+
+function RelapseUI.DrawViewerAmmoMark(class, cx, cy, boxW, boxH, zoom, col, alpha)
+	if not RelapseUI.ViewerAmmoSingle(class) then return false end
+	local mat = RelapseUI.AmmoMarkMaterial(class)
+	if not mat then return false end
+	zoom = zoom or 1
+	boxW = boxW or 256
+	boxH = boxH or boxW
+	local tw, th = mat:Width(), mat:Height()
+	if tw < 1 then tw = 256 end
+	if th < 1 then th = 256 end
+	local fw, fh = RelapseUI.FitIconDims(tw, th, boxW, boxH)
+	col = col or RelapseUI.Col.Text
+	surface.SetMaterial(mat)
+	surface.SetDrawColor(col.r, col.g, col.b, alpha or col.a or 255)
+	surface.DrawTexturedRectRotated(cx, cy, fw * zoom, fh * zoom, 0)
 	return true
 end
 
@@ -560,11 +684,29 @@ RelapseUI.InvSlotIconZoom = {
 	mg_sbeta = 1.35,
 	mg_mpapa5 = 1.32,
 	mg_smgolf45 = 1.19,
-	weapon_zs_hammer = 0.8,
-	weapon_zs_wrench = 0.90,
+	weapon_zs_hammer = 1.1,
+	weapon_zs_wrench = 1.2,
 	weapon_zs_aloe = 0.88,
+	weapon_zs_resupplybox = 0.88,
+	weapon_zs_arsenalcrate = 0.88,
+	weapon_zs_remantler = 0.88,
+	weapon_zs_medicalkit = 0.88,
 	mg_me_t9cane = 1.4,
 	mg_mike4 = 1.2,
+	["3030win"] = 0.57,
+	["357mag"] = 0.54,
+	["45acp"] = 0.6,
+	["50bmg"] = 0.62,
+	["12ga"] = 0.55,
+	["556x45"] = 0.63,
+	["762x39"] = 0.54,
+	["762x51"] = 0.64,
+	["762x54r"] = 0.65,
+	["9x18"] = 0.49,
+	["9x19"] = 0.48,
+	["9x39"] = 0.45,
+	["gaussenergy"] = 0.54,
+	["battery"] = 0.6,
 }
 -- Extra-grid px, +x is right, +y is down.
 RelapseUI.InvSlotIconShift = {
@@ -582,11 +724,26 @@ RelapseUI.InvSlotIconShift = {
 	weapon_zs_wrench = { -1, 0 },
 	mg_me_t9cane = { -1, 2 },
 	mg_mike4 = { -4, 1 },
+	["3030win"] = { 0, -2 },
+	["357mag"] = { 0, -1 },
+	["45acp"] = { 0, 1 },
+	["50bmg"] = { 0, -3 },
+	["556x45"] = { 0, -3 },
+	["762x39"] = { 0, -1 },
+	["762x51"] = { 0, -3 },
+	["762x54r"] = { 0, -3 },
+	["9x18"] = { 0, 2 },
+	["9x39"] = { 0, 1 },
+	["gaussenergy"] = { 0, -1 },
 }
 
 -- Degrees. Guns stay 45 (muzzle up-left). Upright marks skip the tilt.
 RelapseUI.InvSlotIconTilt = {
 	weapon_zs_aloe = 0,
+	weapon_zs_resupplybox = 0,
+	weapon_zs_arsenalcrate = 0,
+	weapon_zs_remantler = 0,
+	weapon_zs_medicalkit = 0,
 	["9x18"] = 0,
 	["9x19"] = 0,
 	["45acp"] = 0,
@@ -599,6 +756,8 @@ RelapseUI.InvSlotIconTilt = {
 	["762x51"] = 0,
 	["762x54r"] = 0,
 	["50bmg"] = 0,
+	["battery"] = 0,
+	["gaussenergy"] = 0,
 	mg_uzulu = 47.8,
 	mg_357 = 43.6,
 	mg_sksierra = 46.4,
@@ -1090,16 +1249,17 @@ function RelapseUI.LayoutViewerAmmo(viewer)
 	if not IsValid(title) or not IsValid(icon) or not IsValid(lab) then return end
 
 	local left = viewer.RelapseDescLeft or RelapseUI.sPx(10)
-	local iconS = RelapseUI.Grid15(2)
+	local card = RelapseUI.Grid15(2)
 	local y = title:GetY() + title:GetTall() + RelapseUI.sPx(15)
-	icon:SetSize(iconS, iconS)
+	icon.AmmoBox = card
+	icon:SetSize(card, card)
 	icon:SetPos(left, y)
 
 	lab:SetFont("Relapse15")
 	lab:SetContentAlignment(4)
 	lab:SizeToContents()
-	local ly = y + math.floor((iconS - lab:GetTall()) * 0.5 + 0.5)
-	lab:SetPos(left + iconS + RelapseUI.Grid15(), ly)
+	local ly = y + math.floor((card - lab:GetTall()) * 0.5 + 0.5)
+	lab:SetPos(left + card + RelapseUI.Grid15(), ly)
 	local hasText = (lab:GetText() or "") ~= ""
 	lab:SetVisible(hasText)
 	if hasText then
@@ -1111,16 +1271,65 @@ function RelapseUI.LayoutViewerAmmo(viewer)
 	RelapseUI.LayoutViewerModel(viewer)
 end
 
+RelapseUI.ViewerAmmoZoom = {
+	["3030win"] = 1.39,
+	["357mag"] = 1.4,
+	["45acp"] = 1.47,
+	["50bmg"] = 1.21,
+	["12ga"] = 1.58,
+	["556x45"] = 1.16,
+	["762x39"] = 1.18,
+	["9x18"] = 1.58,
+	["9x19"] = 1.34,
+	["9x39"] = 1.27,
+}
+RelapseUI.ViewerAmmoPos = {
+	["50bmg"] = { 0, -1 },
+	["12ga"] = { 0, 1 },
+}
+
+function RelapseUI.ViewerAmmoEditClass(class)
+	if not isstring(class) or class == "" then return nil end
+	local lower = string.lower(class)
+	if (RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[lower]) or RelapseUI.ViewerAmmoSingle(lower) then
+		return lower
+	end
+	local wep = weapons.GetStored(class)
+	if not wep and weapons.Get then
+		wep = weapons.Get(class)
+	end
+	if wep and GAMEMODE and GAMEMODE.GetWeaponAmmoType then
+		local ammo = GAMEMODE:GetWeaponAmmoType(wep)
+		if ammo and ((RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[ammo]) or RelapseUI.ViewerAmmoSingle(ammo)) then
+			return ammo
+		end
+	end
+	return nil
+end
+
+function RelapseUI.ViewerAmmoZoomValue(class)
+	local z = (class and RelapseUI.ViewerAmmoZoom and RelapseUI.ViewerAmmoZoom[class]) or 1
+	local d = class and RelapseUI.IconsDevViewDelta and RelapseUI.IconsDevViewDelta[class]
+	return math.max(0.05, z + (d and d.zoom or 0))
+end
+
+function RelapseUI.ViewerAmmoPosValue(class)
+	local p = class and RelapseUI.ViewerAmmoPos and RelapseUI.ViewerAmmoPos[class]
+	local x, y = 0, 0
+	if istable(p) then
+		x, y = p[1] or 0, p[2] or 0
+	end
+	local d = class and RelapseUI.IconsDevViewDelta and RelapseUI.IconsDevViewDelta[class]
+	return x + (d and d.x or 0), y + (d and d.y or 0)
+end
+
 function RelapseUI.SetViewerAmmoIcon(viewer, ammoId)
 	if not IsValid(viewer) or not IsValid(viewer.m_AmmoIcon) then return end
-	local path = RelapseUI.AmmoIconPath(ammoId)
-	if path then
-		viewer.m_AmmoIcon:SetImage(path)
-		viewer.m_AmmoIcon:SetImageColor(RelapseUI.Col.Text)
-		viewer.m_AmmoIcon:SetVisible(true)
-	else
-		viewer.m_AmmoIcon:SetVisible(false)
-	end
+	local id = isstring(ammoId) and string.lower(ammoId) or nil
+	if id == "" then id = nil end
+	local show = id and ((RelapseUI.AmmoIconRound and RelapseUI.AmmoIconRound[id]) or RelapseUI.ViewerAmmoSingle(id))
+	viewer.m_AmmoIcon.AmmoId = show and id or nil
+	viewer.m_AmmoIcon:SetVisible(show and true or false)
 end
 
 function RelapseUI.ShopPreviewParts(sweptable)
@@ -1409,6 +1618,8 @@ end
 function RelapseUI.DrawShopPreviewGun(pnl, ent)
 	if not IsValid(pnl) or not IsValid(ent) then return end
 
+	RelapseUI.ApplyShopPreviewPose(ent)
+
 	local extras = pnl.RelapsePreviewEnts
 
 	if pnl.RelapsePreviewBoneMerge then
@@ -1494,6 +1705,25 @@ function RelapseUI.PrepShopPreview(ent)
 	end
 	if istable(ent.RelapsePreviewBodygroups) then
 		RelapseUI.ApplyShopPreviewBodygroups(ent, ent.RelapsePreviewBodygroups)
+	end
+
+	RelapseUI.ApplyShopPreviewPose(ent)
+end
+
+function RelapseUI.ApplyShopPreviewPose(ent)
+	if not IsValid(ent) or not isstring(ent.RelapsePreviewSequence) then return end
+
+	local seq = ent:LookupSequence(ent.RelapsePreviewSequence)
+	if not seq or seq < 0 then return end
+
+	if ent:GetSequence() ~= seq then
+		ent:ResetSequence(seq)
+	end
+	if ent.SetPlaybackRate then
+		ent:SetPlaybackRate(0)
+	end
+	if ent.SetCycle then
+		ent:SetCycle(ent.RelapsePreviewCycle or 1)
 	end
 end
 
@@ -2025,7 +2255,13 @@ function RelapseUI.SetShopPreview(pnl, sweptable, viewer)
 	pnl:SetAnimated(false)
 	if IsValid(pnl.Entity) then
 		pnl.Entity.RelapsePreviewBodygroups = RelapseUI.ShopPreviewBodygroups(sweptable)
+		pnl.Entity.RelapsePreviewSequence = sweptable.RelapsePreviewSequence
+		pnl.Entity.RelapsePreviewCycle = sweptable.RelapsePreviewCycle
+		if isnumber(sweptable.RelapsePreviewScale) then
+			pnl.Entity:SetModelScale(sweptable.RelapsePreviewScale, 0)
+		end
 		RelapseUI.ApplyShopPreviewBodygroups(pnl.Entity, pnl.Entity.RelapsePreviewBodygroups)
+		RelapseUI.ApplyShopPreviewPose(pnl.Entity)
 	end
 	RelapseUI.AttachShopPreviewParts(pnl, sweptable)
 	RelapseUI.FrameModelPanel(pnl)
@@ -3396,11 +3632,39 @@ function RelapseUI.StyleScroll(pnl)
 	local bar = pnl.GetVBar and pnl:GetVBar() or pnl.VBar
 	if not IsValid(bar) then return end
 
-	local hit = RelapseUI.ScrollBarHitW()
-	bar:SetWide(hit)
-	bar:DockMargin(RelapseUI.ScrollGap() + RelapseUI.ScrollBarW() - hit, 0, 0, 0)
+	bar:SetWide(RelapseUI.ScrollBarDrawW())
 	if bar.SetHideButtons then
 		bar:SetHideButtons(true)
+	end
+	if not pnl._RelapseScrollOverlay then
+		pnl._RelapseScrollOverlay = true
+		local internal = pnl.PerformLayoutInternal
+		pnl.PerformLayoutInternal = function(me)
+			if me._RelapseScrollLock then
+				if internal then
+					return internal(me)
+				end
+				return
+			end
+			me._RelapseScrollLock = true
+			local b = me:GetVBar()
+			if IsValid(b) then
+				b:SetWide(0)
+			end
+			if internal then
+				internal(me)
+			end
+			if IsValid(b) then
+				local bw = RelapseUI.ScrollBarDrawW()
+				local _, top, _, bot = b:GetDockMargin()
+				top = top or 0
+				bot = bot or 0
+				b:SetWide(bw)
+				b:SetPos(me:GetWide() - bw, top)
+				b:SetTall(math.max(bw, me:GetTall() - top - bot))
+			end
+			me._RelapseScrollLock = false
+		end
 	end
 
 	bar.Paint = function()
@@ -3408,9 +3672,9 @@ function RelapseUI.StyleScroll(pnl)
 	end
 	if IsValid(bar.btnGrip) then
 		bar.btnGrip.Paint = function(me, w, h)
-			local ink = RelapseUI.ScrollBarDrawW()
-			local x = math.max(0, w - ink)
-			RelapseUI.RoundFill(ink * 0.5, x, 0, ink, h, RelapseUI.CopyCol(RelapseUI.Col.Muted, 40))
+			local ink = math.min(w, RelapseUI.ScrollBarDrawW())
+			local rad = math.min(ink * 0.5, h * 0.5)
+			RelapseUI.RoundFill(rad, 0, 0, ink, h, RelapseUI.CopyCol(RelapseUI.Col.Muted, 40))
 		end
 	end
 	if IsValid(bar.btnUp) then
@@ -4468,7 +4732,7 @@ function RelapseUI.MakeOptionsScroll(sheet)
 	end
 	local bar = scroll:GetVBar()
 	if IsValid(bar) then
-		bar:DockMargin(RelapseUI.ScrollBarW() - RelapseUI.ScrollBarHitW(), top, 0, RelapseUI.Grid15())
+		bar:DockMargin(0, top, 0, RelapseUI.Grid15())
 	end
 	return scroll
 end
@@ -4527,7 +4791,7 @@ function RelapseUI.PadCreditsScroll(scroll, frame, L)
 	end
 	local bar = scroll:GetVBar()
 	if IsValid(bar) then
-		bar:DockMargin(RelapseUI.ScrollBarW() - RelapseUI.ScrollBarHitW(), top, 0, RelapseUI.Grid15())
+		bar:DockMargin(0, top, 0, RelapseUI.Grid15())
 	end
 end
 

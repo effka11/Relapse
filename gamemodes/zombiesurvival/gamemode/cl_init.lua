@@ -42,6 +42,7 @@ include("vgui/poptions.lua")
 include("vgui/phelp.lua")
 include("vgui/pclassselect.lua")
 include("vgui/pendboard.lua")
+include("vgui/pmapvote.lua")
 include("vgui/relapse_ui.lua")
 include("vgui/pworth.lua")
 include("vgui/parsenal.lua")
@@ -76,6 +77,9 @@ include("cl_relapse_inventory.lua")
 include("cl_relapse_loadout.lua")
 include("cl_relapse_breath.lua")
 include("cl_relapse_iconsdev.lua")
+include("cl_relapse_viewmodel_dev.lua")
+include("cl_relapse_hitboxes.lua")
+include("cl_relapse_hearing.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -748,7 +752,7 @@ end
 
 local colPackUp = Color(20, 255, 20, 220)
 local colPackUpNotOwner = Color(255, 240, 10, 220)
-function GM:DrawPackUpBar(x, y, fraction, notowner, screenscale)
+function GM:DrawPackUpBar(x, y, fraction, notowner, screenscale, selling)
 	local col = notowner and colPackUpNotOwner or colPackUp
 
 	local maxbarwidth = 270 * screenscale
@@ -762,7 +766,13 @@ function GM:DrawPackUpBar(x, y, fraction, notowner, screenscale)
 	surface_DrawRect(startx + 3, y + 3, barwidth - 6, barheight - 6)
 	surface_DrawOutlinedRect(startx, y, maxbarwidth, barheight)
 
-	draw_SimpleText(notowner and CurTime() % 2 < 1 and translate.Format("requires_x_people", 4) or notowner and translate.Get("packing_others_object") or translate.Get("packing"), "ZSHUDFontSmall", x, y - draw_GetFontHeight("ZSHUDFontSmall") - 2, col, TEXT_ALIGN_CENTER)
+	local label = translate.Get("packing")
+	if notowner then
+		label = CurTime() % 2 < 1 and translate.Format("requires_x_people", 4) or translate.Get("packing_others_object")
+	elseif selling then
+		label = translate.Get("selling")
+	end
+	draw_SimpleText(label, "ZSHUDFontSmall", x, y - draw_GetFontHeight("ZSHUDFontSmall") - 2, col, TEXT_ALIGN_CENTER)
 end
 
 function GM:DrawSigilTeleportBar(x, y, fraction, target, screenscale)
@@ -793,7 +803,7 @@ function GM:HumanHUD(screenscale)
 	local packup = MySelf.PackUp
 	local sigiltp = MySelf.SigilTeleport
 	if packup and packup:IsValid() then
-		self:DrawPackUpBar(w * 0.5, h * 0.55, 1 - packup:GetTimeRemaining() / packup:GetMaxTime(), packup:GetNotOwner(), screenscale)
+		self:DrawPackUpBar(w * 0.5, h * 0.55, 1 - packup:GetTimeRemaining() / packup:GetMaxTime(), packup:GetNotOwner(), screenscale, packup.GetSupplySell and packup:GetSupplySell())
 	elseif sigiltp and sigiltp:IsValid() then
 		self:DrawSigilTeleportBar(w * 0.5, h * 0.55, 1 - sigiltp:GetTimeRemaining() / sigiltp:GetMaxTime(), sigiltp:GetTargetSigil(), screenscale)
 	end
@@ -951,7 +961,7 @@ function GM:_PostDrawTranslucentRenderables()
 		self:DrawCrateIndicators()
 		self:DrawResupplyIndicators()
 		self:DrawRemantlerIndicators()
-		self:DrawHumanIndicators()
+		self:DrawHeardHumans()
 		self:DrawNestIndicators()
 	end
 end
@@ -1020,8 +1030,8 @@ function GM:DrawResupplyIndicators()
 			surface_SetDrawColor(255, 255, 255, alpha)
 			surface_DrawTexturedRect(-128, -128, 256, 256)
 
-			local timeremain = math.ceil(math.max(0, (MySelf.NextUse or 0) - CurTime()))
-			local txt = not MySelf.NextUse and translate.Get("ready") or timeremain > 0 and timeremain or translate.Get("ready")
+			local timeremain = math.ceil(math.max(0, (GAMEMODE.ResupplyNext or 0) - CurTime()))
+			local txt = string.format("%d:%02d", math.floor(timeremain / 60), timeremain % 60)
 			draw_SimpleTextBlurry(txt, "ZS3D2DFont2Big", 0, 128, COLOR_GRAY, TEXT_ALIGN_CENTER)
 
 			cam_End3D2D()
@@ -1058,7 +1068,7 @@ function GM:DrawRemantlerIndicators()
 			surface_SetDrawColor(255, 255, 255, alpha)
 			surface_DrawTexturedRect(-128, -128, 256, 256)
 
-			draw_SimpleTextBlurry("Weapon Remantler", "ZS3D2DFont2Big", 0, 128, COLOR_GRAY, TEXT_ALIGN_CENTER)
+			draw_SimpleTextBlurry(translate.Get("weapon_remantler"), "ZS3D2DFont2Big", 0, 128, COLOR_GRAY, TEXT_ALIGN_CENTER)
 
 			cam_End3D2D()
 			cam_IgnoreZ(false)
@@ -1337,9 +1347,23 @@ function GM:RestartRound()
 	LASTHUMAN = nil
 	self.AmmoPackPointsSession = nil
 
+	self.AwardsDismissed = nil
+	if self.AwardsMenuOpen and self:AwardsMenuOpen() then
+		gui.EnableScreenClicker(false)
+	end
+
 	if pEndBoard and pEndBoard:IsValid() then
 		pEndBoard:Remove()
 		pEndBoard = nil
+	end
+
+	self.MapVoteDismissed = nil
+	if self.MapVoteMenuOpen and self:MapVoteMenuOpen() then
+		gui.EnableScreenClicker(false)
+	end
+	if pMapVote and pMapVote:IsValid() then
+		pMapVote:Remove()
+		pMapVote = nil
 	end
 
 	self:ClearItemStocks()
@@ -1916,6 +1940,8 @@ function GM:PlayerBindPress(pl, bind, wasin)
 		self:CloseHelpMenu(true)
 		or self:CloseShopOverlays(true)
 		or (self.CloseScoreboard and self:CloseScoreboard(true))
+		or (self.CloseAwardsMenu and self:CloseAwardsMenu(true))
+		or (self.CloseMapVote and self:CloseMapVote(true))
 	) then
 		return true
 	end
@@ -1927,10 +1953,6 @@ function GM:PlayerBindPress(pl, bind, wasin)
 			self.ZombieThirdPerson = not self.ZombieThirdPerson
 		elseif P_Team(pl) == TEAM_HUMAN then
 			self:ToggleOTSCamera()
-		end
-	elseif bind == "impulse 100" then
-		if P_Team(pl) == TEAM_UNDEAD and pl:Alive() then
-			self:ToggleZombieVision()
 		end
 	end
 end
@@ -2090,8 +2112,6 @@ end
 
 local undo = false
 local matWhite = Material("models/debug/debugwhite")
-local lowhealthcolor = GM.AuraColorEmpty
-local fullhealthcolor = GM.AuraColorFull
 function GM:_PrePlayerDraw(pl)
 	local shadowman = false
 
@@ -2130,24 +2150,6 @@ function GM:_PrePlayerDraw(pl)
 		render_SetBlend(0.02 + (CurTime() + pl:EntIndex() * 0.2) % 0.05)
 		render_SetColorModulation(0, 0.3, 0)
 		render_SuppressEngineLighting(true)
-	end
-
-	if self.m_ZombieVision and myteam == TEAM_UNDEAD and theirteam == TEAM_HUMAN then
-		local dist = pl:GetPos():DistToSqr(EyePos())
-		if dist <= pl:GetAuraRangeSqr() and (not pl:GetDTBool(DT_PLAYER_BOOL_NECRO) or dist >= 27500) then
-			undo = true
-			local healthfrac = pl:Health() / pl:GetMaxHealth()
-
-			render_SetBlend(1)
-			render_ModelMaterialOverride(matWhite)
-			render_SetColorModulation(
-				Lerp(healthfrac, lowhealthcolor.r, fullhealthcolor.r) / 255,
-				Lerp(healthfrac, lowhealthcolor.g, fullhealthcolor.g) / 255,
-				Lerp(healthfrac, lowhealthcolor.b, fullhealthcolor.b) / 255
-			)
-			render_SuppressEngineLighting(true)
-			cam_IgnoreZ(true)
-		end
 	end
 end
 
@@ -2258,11 +2260,9 @@ function GM:EndRound(winner, nextmap)
 		hook.Add("ShouldDrawLocalPlayer", "EndRoundShouldDrawLocalPlayer", EndRoundShouldDrawLocalPlayer)
 	end
 
-	local dvar = winner == TEAM_UNDEAD and self.AllLoseSound or self.HumanWinSound
-	local snd = GetGlobalString(winner == TEAM_UNDEAD and "losemusic" or "winmusic", dvar)
-	if snd == "default" then
-		snd = dvar
-	elseif snd == "none" then
+	-- Stock ZS win/lose cues stay quiet. A map can still set its own via logic_winlose.
+	local snd = GetGlobalString(winner == TEAM_UNDEAD and "losemusic" or "winmusic", "")
+	if snd == "" or snd == "default" or snd == "none" then
 		snd = nil
 	end
 	if snd then
@@ -2270,6 +2270,7 @@ function GM:EndRound(winner, nextmap)
 	end
 
 	timer.Simple(5, function()
+		if not GAMEMODE.ShowAwards then return end
 		if not (pEndBoard and pEndBoard:IsValid()) then
 			MakepEndBoard(winner)
 		end
@@ -2409,6 +2410,10 @@ function GM:PlayerFootstep(pl, vFootPos, iFoot, strSoundName, fVolume)
 	if self.Stride and self.Stride:UsesStride(pl) then
 		if self.Stride.AllowFootstepSound and not self.Stride:AllowFootstepSound(pl, iFoot) then
 			return true
+		end
+
+		if pl == LocalPlayer() and self.StartHearingFootstep then
+			self:StartHearingFootstep(pl, strSoundName)
 		end
 
 		return

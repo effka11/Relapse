@@ -177,6 +177,19 @@ local function Outward(clip)
 	return Vector(-inward.x, -inward.y, 0):GetNormalized()
 end
 
+-- Face normal points into the wall when the slab was built on the back of the
+-- volume. The player pressed E from the open side: seat that way.
+local function SideDir(clip, pl)
+	local out = Outward(clip)
+	if out:LengthSqr() < 0.01 or not IsValid(pl) then return out end
+	local pos = clip:GetPos()
+	local p = pl:GetPos()
+	if (p.x - pos.x) * out.x + (p.y - pos.y) * out.y < 0 then
+		return Vector(-out.x, -out.y, 0)
+	end
+	return out
+end
+
 local function ClipWorldBox(clip)
 	local wm, wx = clip:WorldSpaceAABB()
 	if wm and wx and (wx.z - wm.z) > 8 then
@@ -211,15 +224,15 @@ local function ClipZRange(clip)
 	return zmin, zmax
 end
 
-local function SeatXY(clip, extra)
+local function SeatXY(clip, extra, pl)
 	local pos = clip:GetPos()
-	local out = Outward(clip)
+	local out = SideDir(clip, pl)
 	local off = STAND_OFF + (extra or 0)
 	return pos.x + out.x * off, pos.y + out.y * off
 end
 
-local function SeatFromClip(clip, z, extra)
-	local x, y = SeatXY(clip, extra)
+local function SeatFromClip(clip, z, extra, pl)
+	local x, y = SeatXY(clip, extra, pl)
 	local zmin, zmax = ClipZRange(clip)
 	return Vector(x, y, math.Clamp(z, zmin, zmax)), zmin, zmax
 end
@@ -606,7 +619,7 @@ local function DepenetrateOutward(pl, origin, clip, ghost, mins, maxs)
 	tr, ghost = SweepTo(pl, origin, origin, ghost, mins, maxs)
 	if not tr.StartSolid then return origin, ghost end
 	if not IsValid(clip) then return origin, ghost end
-	local out = Outward(clip)
+	local out = SideDir(clip, pl)
 	if out:LengthSqr() < 0.01 then return origin, ghost end
 	for d = 2, 16, 2 do
 		local try = Vector(origin.x + out.x * d, origin.y + out.y * d, origin.z)
@@ -623,23 +636,57 @@ local function ClimbSqueeze(pl, clip, origin, destZ, ghost)
 	return Vector(origin.x, origin.y, destZ), ghost
 end
 
+local function BrushOnlyFilter(ent)
+	return not (IsValid(ent) and ent.RelapseLadderClip)
+end
+
+-- A rung lip ends beside the wall. A real floor still exists a step further
+-- out into the room.
+local function ShelfContinues(hitPos, out)
+	local ahead = Vector(hitPos.x + out.x * 28, hitPos.y + out.y * 28, hitPos.z + 12)
+	local tr = util.TraceLine({
+		start = ahead,
+		endpos = Vector(ahead.x, ahead.y, hitPos.z - 16),
+		mask = MASK_SOLID_BRUSHONLY,
+		filter = BrushOnlyFilter,
+	})
+	if tr.StartSolid then return true end
+	if not tr.Hit or tr.HitSky then return false end
+	if math.abs(tr.HitNormal.z or 0) <= 0.5 then return false end
+	return math.abs(tr.HitPos.z - hitPos.z) <= 12
+end
+
 -- NOCLIP hold ignores world. Stop Z only if a brush line from air hits a
--- floor/ceiling. Vertical rim and StartSolid in the slab do not stop.
-local function ClimbWorldStop(origin, dest, hullZ)
+-- floor/ceiling. A narrow lip on the wall is a step, not that floor.
+-- Vertical rim and StartSolid in the slab do not stop.
+local function ClimbWorldStop(origin, dest, hullZ, pl, clip)
 	if not origin or not dest or dest.z == origin.z then return dest end
 	local h = dest.z > origin.z and (hullZ or 72) or 0
 	local tr = util.TraceLine({
 		start = Vector(origin.x, origin.y, origin.z + h),
 		endpos = Vector(dest.x, dest.y, dest.z + h),
 		mask = MASK_SOLID_BRUSHONLY,
-		filter = function(ent)
-			return not (IsValid(ent) and ent.RelapseLadderClip)
-		end,
+		filter = BrushOnlyFilter,
 	})
 	if tr.StartSolid then return dest end
 	if not tr.Hit or tr.HitSky then return dest end
 	local n = tr.HitNormal
 	if not n or math.abs(n.z) <= 0.5 then return dest end
+	-- The ladder model keeps going through the navmesh landing. That lip is
+	-- not an exit. The floor under the column still stops a descent, or the
+	-- hold walks into the ground.
+	if IsValid(clip) then
+		local zBot, zTop = ClipZRange(clip)
+		if dest.z > origin.z then
+			if tr.HitPos.z < zTop - 16 then return dest end
+		elseif tr.HitPos.z > zBot + 16 then
+			return dest
+		end
+	end
+	local out = IsValid(clip) and SideDir(clip, pl) or nil
+	if out and out:LengthSqr() > 0.01 and not ShelfContinues(tr.HitPos, out) then
+		return dest
+	end
 	return Vector(dest.x, dest.y, origin.z)
 end
 
@@ -652,7 +699,7 @@ local function UnstickForLeave(pl, origin, clip)
 	if not HullTrace(pl, origin, origin, true, dm, dx).StartSolid then return origin end
 	if not IsValid(clip) then return origin end
 	for _, extra in ipairs({0, 8, 16}) do
-		local x, y = SeatXY(clip, extra)
+		local x, y = SeatXY(clip, extra, pl)
 		local try = Vector(x, y, origin.z)
 		local tr = HullTrace(pl, try, try, true, sm, sx)
 		if not tr.StartSolid then return try end
@@ -744,22 +791,40 @@ end
 
 local function TrySeat(pl, clip, z)
 	local sm, sx, dm, dx = PlayerHulls(pl)
+	local clipPos = clip:GetPos()
+	local dir = SideDir(clip, pl)
+	local p = pl:GetPos()
+	local along = (p.x - clipPos.x) * dir.x + (p.y - clipPos.y) * dir.y
 	local function try(extra, mins, maxs)
-		local seat = SeatFromClip(clip, z, extra)
-		local tr = HullTrace(pl, seat, seat, true, mins, maxs)
-		if not tr.StartSolid then
-			pl.RelapseLadderSeatExtra = extra ~= 0 and extra or nil
-			return seat
-		end
+		local seat = SeatFromClip(clip, z, extra, pl)
+		if HullTrace(pl, seat, seat, true, mins, maxs).StartSolid then return end
+		pl.RelapseLadderSeatExtra = extra ~= 0 and extra or nil
+		return seat
 	end
-	local extras = {0, 8, 16}
-	for i = 1, #extras do
-		local extra = extras[i]
+	-- 0/8/16 stay on the face. Further steps only toward the player, and only
+	-- while the face point is still inside the wall. Never keep a solid seat.
+	local maxExtra = 16
+	if along > STAND_OFF + maxExtra then
+		maxExtra = along - STAND_OFF
+	end
+	local extra = 0
+	while extra <= maxExtra + 0.01 do
 		local seat = try(extra, sm, sx) or try(extra, dm, dx)
 		if seat then return seat end
+		if extra >= maxExtra - 0.01 then break end
+		local nextExtra = extra + 8
+		if nextExtra > maxExtra then nextExtra = maxExtra end
+		if nextExtra <= extra then break end
+		extra = nextExtra
 	end
-	pl.RelapseLadderSeatExtra = 16
-	return SeatFromClip(clip, z, 16)
+	local stay = Vector(p.x, p.y, z)
+	local zmin, zmax = ClipZRange(clip)
+	stay.z = math.Clamp(stay.z, zmin, zmax)
+	if not HullTrace(pl, stay, stay, true, sm, sx).StartSolid
+		or not HullTrace(pl, stay, stay, true, dm, dx).StartSolid then
+		pl.RelapseLadderSeatExtra = nil
+		return stay
+	end
 end
 
 -- Player is at/slightly above a landing: E steps onto it. Side first, then back.
@@ -815,6 +880,39 @@ local function PropBlocks(pl, dest)
 	return false
 end
 
+-- Body corridor, not the full stand hull. Feet at z+0 catch an 8u lip and a
+-- full-height trace asks for headroom the landing does not owe. Railings sit
+-- in this band. Ladder slabs are not a wall.
+local function StepPathClear(pl, from, dest, clip)
+	local hm, hx = pl:GetHull()
+	local mins = Vector(hm.x, hm.y, 8)
+	local maxs = Vector(hx.x, hx.y, 48)
+	local function sweep(start)
+		return util.TraceHull({
+			start = start,
+			endpos = dest,
+			mins = mins,
+			maxs = maxs,
+			filter = function(ent)
+				if ent == pl then return false end
+				if IsValid(ent) and ent.RelapseLadderClip then return false end
+				return true
+			end,
+			mask = MASK_PLAYERSOLID,
+		})
+	end
+	local tr = sweep(from)
+	if tr.StartSolid and IsValid(clip) then
+		local out = SideDir(clip, pl)
+		if out:LengthSqr() > 0.01 then
+			tr = sweep(from + out * 8)
+		end
+	end
+	if tr.StartSolid then return false end
+	if not tr.Hit then return true end
+	return dest:DistToSqr(tr.HitPos) <= 64 and (tr.HitNormal.z or 0) >= 0.6
+end
+
 local function PlatformAt(pl, x, y, z)
 	local tr = util.TraceHull({
 		start = Vector(x, y, z + 16),
@@ -839,7 +937,7 @@ end
 
 local function FindPlatformStep(pl, clip, pos)
 	if not IsValid(clip) then return end
-	local out = Outward(clip)
+	local out = SideDir(clip, pl)
 	if out:LengthSqr() < 0.01 then return end
 	local side = Vector(-out.y, out.x, 0)
 	local z = pos.z
@@ -852,7 +950,7 @@ local function FindPlatformStep(pl, clip, pos)
 		local d2 = dx * dx + dy * dy
 		if d2 < STEP_MIN * STEP_MIN or d2 > maxSqr then return end
 		local dest = PlatformAt(pl, x, y, z)
-		if not dest then return end
+		if not dest or not StepPathClear(pl, pos, dest, clip) then return end
 		local dist = dest:DistToSqr(pos)
 		if dist > maxSqr then return end
 		local near = 24 * 24
@@ -886,13 +984,13 @@ local function FindPlatformStep(pl, clip, pos)
 	return best
 end
 
---[[ Landing dest if E would step off this climb. Nil if no nearby platform.
-function GM:RelapseLadderStepOff(pl)
+-- Landing dest if E would step off this climb. Nil if no nearby platform
+-- or the body corridor to it is blocked.
+function GM:RelapseLadderStepOff(pl, pos)
 	if not IsValid(pl) or not Holding(pl) then return end
-	local pos = pl:GetPos()
+	pos = pos or pl:GetPos()
 	return FindPlatformStep(pl, GetClip(pl) or NearestClimbClip(pl, pos), pos)
 end
-]]
 
 hook.Add("Initialize", "RelapseLadder", function()
 	if SERVER then
@@ -1037,52 +1135,44 @@ hook.Add("SetupMove", "RelapseLadder", function(pl, mv, cmd)
 
 	-- Humans: E is pickup on the server (TryHumanPickup is server-only).
 	-- Predicting mount here yanks the holder every tick until
-	-- status_human_holding replicates. Jump-off (space and E) is predicted.
-	if pressed and not (CLIENT and pl:Team() == TEAM_HUMAN) then
+	-- status_human_holding replicates. Jump-off and step-off are predicted.
+	if pressed and not hold and not (CLIENT and pl:Team() == TEAM_HUMAN) then
 		local gm = GAMEMODE or GM
 		local blocked = gm.RelapseLadderUseBlocked and gm:RelapseLadderUseBlocked(pl)
 		if not blocked then
-			if hold then
-				--[[ E step-off onto a landing. Leave is jump toward the camera.
-				local dest = FindPlatformStep(pl, GetClip(pl) or NearestClimbClip(pl, pos), pos)
-				Release(pl)
-				if dest then
-					mv:SetOrigin(dest)
-					mv:SetVelocity(vector_origin)
+			local clip = NearestClimbClip(pl, pos)
+			local seat = clip and TrySeat(pl, clip, pos.z)
+			if seat then
+				SetHold(pl, true)
+				SetClip(pl, clip)
+				pl.RelapseLadderMountedAt = now
+				mv:SetOrigin(seat)
+				mv:SetVelocity(vector_origin)
+				SetClimbing(pl, true)
+				if pl:Team() == TEAM_HUMAN and HullTouchesGhostable(pl, seat) then
+					EnableLadderGhost(pl)
 				end
 				SwallowUse(pl, mv, cmd)
-				return
-				]]
-			else
-				local clip = NearestClimbClip(pl, pos)
-				if clip then
-					local seat = TrySeat(pl, clip, pos.z)
-					SetHold(pl, true)
-					SetClip(pl, clip)
-					pl.RelapseLadderMountedAt = now
-					mv:SetOrigin(seat)
-					mv:SetVelocity(vector_origin)
-					SetClimbing(pl, true)
-					if pl:Team() == TEAM_HUMAN and HullTouchesGhostable(pl, seat) then
-						EnableLadderGhost(pl)
-					end
-					SwallowUse(pl, mv, cmd)
-				end
 			end
 		end
 	end
 
-	local leave = jumped
-	if hold and pressed then
+	-- E steps onto a landing. No landing: stay on the ladder. Space hops off.
+	if hold and now > (pl.RelapseLadderMountedAt or 0) + 0.15 then
 		local gm = GAMEMODE or GM
-		if not (gm.RelapseLadderUseBlocked and gm:RelapseLadderUseBlocked(pl)) then
-			leave = true
+		local blocked = gm.RelapseLadderUseBlocked and gm:RelapseLadderUseBlocked(pl)
+		if pressed and not blocked then
+			local dest = gm.RelapseLadderStepOff and gm:RelapseLadderStepOff(pl, pos)
+			if dest then
+				Release(pl)
+				mv:SetOrigin(dest)
+				mv:SetVelocity(vector_origin)
+				SwallowUse(pl, mv, cmd)
+				return
+			end
 		end
-	end
-	if hold and leave and now > (pl.RelapseLadderMountedAt or 0) + 0.15 then
-		JumpOff(pl, mv, cmd)
-		if pressed then
-			SwallowUse(pl, mv, cmd)
+		if jumped then
+			JumpOff(pl, mv, cmd)
 		end
 	end
 end)
@@ -1106,7 +1196,6 @@ function GM:RelapseLadderClimb(pl, mv)
 	SetClimbing(pl, true)
 
 	local pos = mv:GetOrigin()
-	--[[ Step-off hint: E onto a nearby landing.
 	if SERVER then
 		local now = CurTime()
 		if now >= (pl.RelapseLadderCanStepAt or 0) then
@@ -1118,7 +1207,6 @@ function GM:RelapseLadderClimb(pl, mv)
 			end
 		end
 	end
-	]]
 	local zmin, zmax = ClimbZRange(clip)
 	local pitch = (mv.GetAngles and mv:GetAngles().p) or (pl.EyeAngles and pl:EyeAngles().p) or 0
 	local wish = pl.RelapseLadderWish or 0
@@ -1147,10 +1235,11 @@ function GM:RelapseLadderClimb(pl, mv)
 	local z = math.Clamp(pos.z + wish * speed * dt, zmin - pad, zmax + pad)
 	local ghost = LadderGhostOn(pl)
 	local dest = ClimbSqueeze(pl, clip, pos, z, ghost)
-	dest = ClimbWorldStop(pos, dest, hx and hx.z)
+	dest = ClimbWorldStop(pos, dest, hx and hx.z, pl, clip)
 
 	if CurTime() > (pl.RelapseLadderMountedAt or 0) + 0.15 then
-		local atEnd = (wish > 0 and dest.z >= zmax - 0.5) or (wish < 0 and dest.z <= zmin + 0.5)
+		local onBottom = wish < 0 and dest.z == pos.z and pos.z <= zmin + 24
+		local atEnd = (wish > 0 and dest.z >= zmax - 0.5) or (wish < 0 and dest.z <= zmin + 0.5) or onBottom
 		if atEnd and not HullTrace(pl, dest, dest, ghost).StartSolid then
 			Release(pl)
 		end
@@ -1300,6 +1389,525 @@ local function OpenFaceSlabs(mins, maxs)
 	return {MakeSlab(mins, maxs, d, fu0, fu1, mins.z, maxs.z)}
 end
 
+-- Props too: rungs are often a model, not a brush. World still blocks BrushLine.
+local function SolidLine(x0, y0, z0, x1, y1, z1)
+	return util.TraceLine({
+		start = Vector(x0, y0, z0),
+		endpos = Vector(x1, y1, z1),
+		mask = MASK_SOLID,
+		filter = function(ent)
+			if not IsValid(ent) then return true end
+			if ent.RelapseLadderClip or ent:IsPlayer() then return false end
+			return true
+		end,
+	})
+end
+
+-- Thin thing in front of a deeper wall: rail or rung, not the flat wall.
+local function RungAt(x, y, z, ix, iy)
+	local ox, oy = -ix, -iy
+	local sx, sy = x + ox * 36, y + oy * 36
+	local tr = SolidLine(sx, sy, z, sx + ix * 96, sy + iy * 96, z)
+	if not tr.Hit or tr.HitSky or tr.StartSolid then return false end
+	if math.abs(tr.HitNormal.z or 0) > 0.45 then return false end
+	local hx, hy, hz = tr.HitPos.x, tr.HitPos.y, tr.HitPos.z
+	for _, dist in ipairs({6, 12, 18}) do
+		local x0, y0 = hx + ix * dist, hy + iy * dist
+		local tr2 = SolidLine(x0, y0, hz, x0 + ix * 40, y0 + iy * 40, hz)
+		if not tr2.StartSolid and tr2.Hit and not tr2.HitSky and math.abs(tr2.HitNormal.z or 0) <= 0.45 then
+			local dx, dy = tr2.HitPos.x - hx, tr2.HitPos.y - hy
+			local gap = math.sqrt(dx * dx + dy * dy)
+			if gap >= 4 and gap <= 32 then return true end
+		end
+	end
+	return false
+end
+
+local function BandHasRung(x, y, z0, z1, ix, iy)
+	local sx, sy = -iy, ix
+	local zs = {z0 + 8, (z0 + z1) * 0.5, z1 - 8}
+	for i = 1, #zs do
+		local z = zs[i]
+		if z > z0 and z < z1 then
+			for _, side in ipairs({0, 14, -14}) do
+				if RungAt(x + sx * side, y + sy * side, z, ix, iy) then return true end
+			end
+		end
+	end
+	return false
+end
+
+-- "wall" behind the face, "solid" inside a lip, "open" if the shaft has no wall.
+local function BehindFace(x, y, z, ix, iy)
+	local tr = BrushLine(x - ix * 4, y - iy * 4, z, x + ix * (CLIP_BEHIND + 8), y + iy * (CLIP_BEHIND + 8), z)
+	if tr.StartSolid then return "solid" end
+	if tr.Hit and not tr.HitSky and math.abs(tr.HitNormal.z or 0) <= 0.5 and tr.Fraction < 0.95 then
+		return "wall"
+	end
+	return "open"
+end
+
+local function SameClimbFace(a, b)
+	local dot = a.inward.x * b.inward.x + a.inward.y * b.inward.y
+	if dot < 0.9 then return false end
+	if a.maxs.x < b.mins.x - 8 or b.maxs.x < a.mins.x - 8 then return false end
+	if a.maxs.y < b.mins.y - 8 or b.maxs.y < a.mins.y - 8 then return false end
+	return true
+end
+
+-- Top of a face keeps going while rails or rungs sit in front of the wall.
+-- One or two empty bands stay in the column so a lip does not cut it into steps.
+-- No wall: stop. That hole stays walk-through.
+local function ExtendTopSlabs(slabs)
+	for i = 1, #slabs do
+		local slab = slabs[i]
+		local topped = false
+		for j = 1, #slabs do
+			local other = slabs[j]
+			if other ~= slab and SameClimbFace(slab, other) and other.maxs.z > slab.maxs.z + 8 then
+				topped = true
+				break
+			end
+		end
+		if not topped then
+			local ix, iy = slab.inward.x, slab.inward.y
+			local len = math.sqrt(ix * ix + iy * iy)
+			if len > 0.01 then
+				ix, iy = ix / len, iy / len
+				local x = (slab.mins.x + slab.maxs.x) * 0.5
+				local y = (slab.mins.y + slab.maxs.y) * 0.5
+				local z = slab.maxs.z
+				local limit = z + 640
+				local pending = 0
+				while z < limit - 1 do
+					local z1 = math.min(z + CLIP_BAND, limit)
+					local kind = BehindFace(x, y, (z + z1) * 0.5, ix, iy)
+					if kind == "open" then break end
+					if kind == "wall" and BandHasRung(x, y, z, z1, ix, iy) then
+						slab.maxs.z = z1
+						pending = 0
+					else
+						pending = pending + 1
+						if pending > 2 then break end
+					end
+					z = z1
+				end
+			end
+		end
+	end
+end
+
+local WELD_XY = 96
+local WELD_GAP = 192
+
+local function SlabCenter(slab)
+	return (slab.mins + slab.maxs) * 0.5
+end
+
+local function FaceOut(inward)
+	local o = Vector(-inward.x, -inward.y, 0)
+	if o:LengthSqr() < 0.01 then return o end
+	return o:GetNormalized()
+end
+
+-- Stepped rungs sit on one wall but their slabs are shifted outward, so the
+-- face test cuts a column into separate climbs. Weld a stack into one sheet
+-- on the outermost plane. A gap with no wall behind stays a hole.
+local function WeldColumns(slabs)
+	local n = #slabs
+	if n == 0 then return slabs end
+	local parent = {}
+	for i = 1, n do parent[i] = i end
+	local function find(i)
+		while parent[i] ~= i do
+			parent[i] = parent[parent[i]]
+			i = parent[i]
+		end
+		return i
+	end
+	local function join(a, b)
+		a, b = find(a), find(b)
+		if a ~= b then parent[b] = a end
+	end
+	for i = 1, n do
+		local a = slabs[i]
+		local ca = SlabCenter(a)
+		for j = i + 1, n do
+			local b = slabs[j]
+			local dot = a.inward.x * b.inward.x + a.inward.y * b.inward.y
+			if dot >= 0.9 then
+				local cb = SlabCenter(b)
+				local dx, dy = ca.x - cb.x, ca.y - cb.y
+				local zGap = 0
+				if a.maxs.z < b.mins.z then
+					zGap = b.mins.z - a.maxs.z
+				elseif b.maxs.z < a.mins.z then
+					zGap = a.mins.z - b.maxs.z
+				end
+				if dx * dx + dy * dy <= WELD_XY * WELD_XY and zGap <= WELD_GAP then
+					join(i, j)
+				end
+			end
+		end
+	end
+	local groups = {}
+	for i = 1, n do
+		local r = find(i)
+		local g = groups[r]
+		if not g then
+			g = {}
+			groups[r] = g
+		end
+		g[#g + 1] = slabs[i]
+	end
+	local out = {}
+	for _, group in pairs(groups) do
+		table.sort(group, function(a, b) return a.mins.z < b.mins.z end)
+		local run = {group[1]}
+		local function flush()
+			local inward = run[1].inward
+			local face = FaceOut(inward)
+			local front = run[1]
+			local best = SlabCenter(front).x * face.x + SlabCenter(front).y * face.y
+			local z0, z1 = front.mins.z, front.maxs.z
+			local mins = Vector(front.mins)
+			local maxs = Vector(front.maxs)
+			for i = 1, #run do
+				local s = run[i]
+				local c = SlabCenter(s)
+				local along = c.x * face.x + c.y * face.y
+				if along > best then
+					best = along
+					front = s
+				end
+				if s.mins.z < z0 then z0 = s.mins.z end
+				if s.maxs.z > z1 then z1 = s.maxs.z end
+				if math.abs(face.x) > 0.5 then
+					if s.mins.y < mins.y then mins.y = s.mins.y end
+					if s.maxs.y > maxs.y then maxs.y = s.maxs.y end
+				else
+					if s.mins.x < mins.x then mins.x = s.mins.x end
+					if s.maxs.x > maxs.x then maxs.x = s.maxs.x end
+				end
+			end
+			if math.abs(face.x) > 0.5 then
+				mins.x, maxs.x = front.mins.x, front.maxs.x
+			else
+				mins.y, maxs.y = front.mins.y, front.maxs.y
+			end
+			mins.z, maxs.z = z0, z1
+			out[#out + 1] = {mins = mins, maxs = maxs, inward = inward}
+		end
+		for i = 2, #group do
+			local prev = run[#run]
+			local nxt = group[i]
+			local gap = nxt.mins.z - prev.maxs.z
+			local open = false
+			if gap > 4 then
+				local c = SlabCenter(prev)
+				local ix, iy = prev.inward.x, prev.inward.y
+				local len = math.sqrt(ix * ix + iy * iy)
+				if len > 0.01 then
+					ix, iy = ix / len, iy / len
+					-- 36 misses a recessed step and leaves the column in pieces.
+					-- A real opening still has no wall within this reach.
+					local tr = BrushLine(
+						c.x - ix * 4, c.y - iy * 4, prev.maxs.z + gap * 0.5,
+						c.x + ix * 100, c.y + iy * 100, prev.maxs.z + gap * 0.5
+					)
+					local recessed = tr.StartSolid or (tr.Hit and not tr.HitSky and math.abs(tr.HitNormal.z or 0) <= 0.5)
+					open = not recessed
+				end
+			end
+			if gap > WELD_GAP or open then
+				flush()
+				run = {nxt}
+			else
+				run[#run + 1] = nxt
+			end
+		end
+		flush()
+	end
+	return out
+end
+
+-- prop_static never becomes an entity, so FindInBox cannot see the rungs.
+-- Segments of one column (same XY, small Z gap) are one climb.
+local PROP_BYTES = {
+	[4] = 56, [5] = 60, [6] = 64, [7] = 68, [8] = 72, [9] = 72, [10] = 76, [11] = 80,
+}
+local COLUMN_XY = 48
+local COLUMN_GAP = 32
+
+local function DecodeFloat(data, pos)
+	local b1, b2, b3, b4 = string.byte(data, pos, pos + 3)
+	if not b4 then return 0 end
+	local sign = b4 >= 128 and -1 or 1
+	local expo = (b4 % 128) * 2 + math.floor(b3 / 128)
+	local mant = ((b3 % 128) * 256 + b2) * 256 + b1
+	if expo == 0 or expo == 255 then return 0 end
+	return sign * math.ldexp(mant / 8388608 + 1, expo - 127)
+end
+
+local function CString(data, pos, len)
+	local last = pos + len - 1
+	for i = pos, last do
+		if string.byte(data, i) == 0 then
+			if i == pos then return "" end
+			return string.sub(data, pos, i - 1)
+		end
+	end
+	return string.sub(data, pos, last)
+end
+
+-- Dedicated server has no util.GetModelBounds. The studio hull is at byte 104.
+local function ModelBounds(mdl)
+	local f = file.Open(mdl, "rb", "GAME")
+	if f then
+		local id = f:Read(4)
+		if id == "IDST" then
+			f:Seek(104)
+			local function r()
+				return f:ReadFloat() or 0
+			end
+			local mins = Vector(r(), r(), r())
+			local maxs = Vector(r(), r(), r())
+			f:Close()
+			if maxs.z - mins.z >= 32 then return mins, maxs end
+		else
+			f:Close()
+		end
+	end
+	local ent = ents.Create("prop_dynamic")
+	if not IsValid(ent) then return end
+	ent:SetModel(mdl)
+	local mins, maxs = ent:OBBMins(), ent:OBBMaxs()
+	ent:Remove()
+	if not mins or not maxs or maxs.z - mins.z < 32 then return end
+	return mins, maxs
+end
+
+local function ModelWorldBox(mdl, origin, ang)
+	local mins, maxs = ModelBounds(mdl)
+	if not mins then return end
+	local xs = {mins.x, maxs.x}
+	local ys = {mins.y, maxs.y}
+	local zs = {mins.z, maxs.z}
+	local wmins = Vector(math.huge, math.huge, math.huge)
+	local wmaxs = Vector(-math.huge, -math.huge, -math.huge)
+	for ix = 1, 2 do
+		for iy = 1, 2 do
+			for iz = 1, 2 do
+				local w = LocalToWorld(Vector(xs[ix], ys[iy], zs[iz]), angle_zero, origin, ang)
+				if w.x < wmins.x then wmins.x = w.x end
+				if w.y < wmins.y then wmins.y = w.y end
+				if w.z < wmins.z then wmins.z = w.z end
+				if w.x > wmaxs.x then wmaxs.x = w.x end
+				if w.y > wmaxs.y then wmaxs.y = w.y end
+				if w.z > wmaxs.z then wmaxs.z = w.z end
+			end
+		end
+	end
+	return wmins, wmaxs
+end
+
+local function ReadStaticLadders()
+	local f = file.Open("maps/" .. game.GetMap() .. ".bsp", "rb", "GAME")
+	if not f then return {} end
+	f:Seek(8 + 35 * 16)
+	local lumpOfs = f:ReadLong()
+	local lumpLen = f:ReadLong()
+	if not lumpOfs or not lumpLen or lumpOfs <= 0 or lumpLen < 4 then
+		f:Close()
+		return {}
+	end
+	f:Seek(lumpOfs)
+	local count = f:ReadLong()
+	local sprpOfs, sprpLen, sprpVer
+	for _ = 1, count or 0 do
+		local id = f:Read(4)
+		if not id or #id < 4 then break end
+		f:ReadByte()
+		f:ReadByte()
+		local ver = f:ReadByte() + f:ReadByte() * 256
+		local fileofs = f:ReadLong()
+		local filelen = f:ReadLong()
+		if id == "prps" then
+			sprpOfs, sprpLen, sprpVer = fileofs, filelen, ver
+		end
+	end
+	if not sprpOfs or not sprpLen or sprpLen < 8 then
+		f:Close()
+		return {}
+	end
+	f:Seek(sprpOfs)
+	local blob = f:Read(sprpLen)
+	f:Close()
+	if not blob or #blob < 8 then return {} end
+
+	local pos = 1
+	local nnames = string.byte(blob, pos) + string.byte(blob, pos + 1) * 256
+		+ string.byte(blob, pos + 2) * 65536 + string.byte(blob, pos + 3) * 16777216
+	pos = pos + 4
+	if nnames < 0 or nnames > 4096 then return {} end
+	local names = {}
+	for i = 1, nnames do
+		names[i] = CString(blob, pos, 128)
+		pos = pos + 128
+	end
+	if pos + 4 > #blob then return {} end
+	local nleaf = string.byte(blob, pos) + string.byte(blob, pos + 1) * 256
+		+ string.byte(blob, pos + 2) * 65536 + string.byte(blob, pos + 3) * 16777216
+	pos = pos + 4 + math.max(nleaf, 0) * 2
+	if pos + 4 > #blob then return {} end
+	local nprop = string.byte(blob, pos) + string.byte(blob, pos + 1) * 256
+		+ string.byte(blob, pos + 2) * 65536 + string.byte(blob, pos + 3) * 16777216
+	pos = pos + 4
+	if nprop <= 0 or nprop > 65536 then return {} end
+	local size = PROP_BYTES[sprpVer]
+	local remain = #blob - pos + 1
+	if not size or nprop * size > remain then
+		size = nil
+		for _, candidate in ipairs({56, 60, 64, 68, 72, 76, 80}) do
+			if nprop * candidate <= remain and (remain - nprop * candidate) < 16 then
+				size = candidate
+				break
+			end
+		end
+	end
+	if not size then return {} end
+
+	local props = {}
+	local waiting = false
+	for i = 0, nprop - 1 do
+		local base = pos + i * size
+		if base + 26 > #blob then break end
+		local ptype = string.byte(blob, base + 24) + string.byte(blob, base + 25) * 256
+		local mdl = names[ptype + 1]
+		if mdl and string.find(string.lower(mdl), "ladder", 1, true) then
+			local origin = Vector(
+				DecodeFloat(blob, base),
+				DecodeFloat(blob, base + 4),
+				DecodeFloat(blob, base + 8)
+			)
+			local ang = Angle(
+				DecodeFloat(blob, base + 12),
+				DecodeFloat(blob, base + 16),
+				DecodeFloat(blob, base + 20)
+			)
+			local wmins, wmaxs = ModelWorldBox(mdl, origin, ang)
+			if wmins then
+				props[#props + 1] = {mins = wmins, maxs = wmaxs}
+			else
+				waiting = true
+			end
+		end
+	end
+	return props, waiting
+end
+
+local function StackColumns(props)
+	local n = #props
+	local parent = {}
+	for i = 1, n do parent[i] = i end
+	local function find(i)
+		while parent[i] ~= i do
+			parent[i] = parent[parent[i]]
+			i = parent[i]
+		end
+		return i
+	end
+	for i = 1, n do
+		local a = props[i]
+		local ac = (a.mins + a.maxs) * 0.5
+		for j = i + 1, n do
+			local b = props[j]
+			local bc = (b.mins + b.maxs) * 0.5
+			local dx, dy = ac.x - bc.x, ac.y - bc.y
+			if dx * dx + dy * dy <= COLUMN_XY * COLUMN_XY then
+				local gap = 0
+				if a.maxs.z < b.mins.z then
+					gap = b.mins.z - a.maxs.z
+				elseif b.maxs.z < a.mins.z then
+					gap = a.mins.z - b.maxs.z
+				end
+				if gap <= COLUMN_GAP then
+					parent[find(j)] = find(i)
+				end
+			end
+		end
+	end
+	local groups = {}
+	for i = 1, n do
+		local r = find(i)
+		local g = groups[r]
+		if not g then
+			g = {mins = Vector(props[i].mins), maxs = Vector(props[i].maxs)}
+			groups[r] = g
+		else
+			local p = props[i]
+			if p.mins.x < g.mins.x then g.mins.x = p.mins.x end
+			if p.mins.y < g.mins.y then g.mins.y = p.mins.y end
+			if p.mins.z < g.mins.z then g.mins.z = p.mins.z end
+			if p.maxs.x > g.maxs.x then g.maxs.x = p.maxs.x end
+			if p.maxs.y > g.maxs.y then g.maxs.y = p.maxs.y end
+			if p.maxs.z > g.maxs.z then g.maxs.z = p.maxs.z end
+		end
+	end
+	local cols = {}
+	for _, g in pairs(groups) do
+		cols[#cols + 1] = g
+	end
+	return cols
+end
+
+function GM:RelapseLadderModelColumns()
+	if self.RelapseLadderModelColumnCache then
+		return self.RelapseLadderModelColumnCache
+	end
+	local ok, props, waiting = pcall(ReadStaticLadders)
+	if not ok then
+		print("[Relapse] ladder models failed: " .. tostring(props))
+		return {}
+	end
+	if waiting and #props == 0 then return {} end
+	local cols = StackColumns(props)
+	if #cols == 0 and waiting then return {} end
+	self.RelapseLadderModelColumnCache = cols
+	return cols
+end
+
+local function ColumnHitsBox(col, box)
+	local pad = 64
+	if col.maxs.x < box.mins.x - pad or col.mins.x > box.maxs.x + pad then return false end
+	if col.maxs.y < box.mins.y - pad or col.mins.y > box.maxs.y + pad then return false end
+	if col.maxs.z < box.mins.z - COLUMN_GAP or col.mins.z > box.maxs.z + COLUMN_GAP then return false end
+	return true
+end
+
+-- A func_useableladder line often stops on the first landing while the model
+-- keeps going. Raise that volume to the top of the stacked models. A model
+-- stack with no volume of its own becomes its own column.
+local function AbsorbModelColumns(boxes)
+	local cols = GAMEMODE:RelapseLadderModelColumns()
+	for i = 1, #cols do
+		local col = cols[i]
+		local hit = false
+		for j = 1, #boxes do
+			local box = boxes[j]
+			if box.mins and ColumnHitsBox(col, box) then
+				if col.mins.z < box.mins.z then box.mins.z = col.mins.z end
+				if col.maxs.z > box.maxs.z then box.maxs.z = col.maxs.z end
+				hit = true
+			end
+		end
+		if not hit then
+			boxes[#boxes + 1] = {mins = Vector(col.mins), maxs = Vector(col.maxs)}
+		end
+	end
+	return #cols
+end
+
 local function CollectSpawnBoxes()
 	local boxes = {}
 	local Nav = RelapseAI and RelapseAI.Nav
@@ -1325,35 +1933,89 @@ local function CollectSpawnBoxes()
 	return boxes
 end
 
+-- Parsed brush often stops at the first landing. Rungs above it are a model
+-- (or more CONTENTS_LADDER the entity box missed). Raise the top before the
+-- face test; OpenFaceSlabs still skips cells with no wall behind.
+local function LadderColumnTop(mins, maxs)
+	local top = maxs.z
+	local cx = (mins.x + maxs.x) * 0.5
+	local cy = (mins.y + maxs.y) * 0.5
+	local z = maxs.z
+	for _ = 1, 80 do
+		local nz = z + 16
+		if not PointHasLadder(cx, cy, nz) then break end
+		z = nz
+		top = nz
+	end
+	local pad = 48
+	local list = ents.FindInBox(
+		Vector(mins.x - pad, mins.y - pad, mins.z),
+		Vector(maxs.x + pad, maxs.y + pad, maxs.z + 2048)
+	)
+	for i = 1, #list do
+		local ent = list[i]
+		if IsValid(ent) and not ent.RelapseLadderClip and ent.GetModel then
+			local mdl = ent:GetModel()
+			if mdl and string.find(string.lower(mdl), "ladder", 1, true) then
+				local emins, emaxs = ent:WorldSpaceAABB()
+				if emins and emaxs and emaxs.z > top
+					and emaxs.x >= mins.x - pad and emins.x <= maxs.x + pad
+					and emaxs.y >= mins.y - pad and emins.y <= maxs.y + pad
+					and emins.z <= maxs.z + 96 then
+					top = emaxs.z
+				end
+			end
+		end
+	end
+	return top
+end
+
 local function SpawnClips()
 	for _, ent in ipairs(ents.FindByClass("relapse_ladder_clip")) do
 		if IsValid(ent) then ent:Remove() end
 	end
 	local boxes = CollectSpawnBoxes()
+	local ok, columns = pcall(AbsorbModelColumns, boxes)
+	if not ok then
+		print("[Relapse] ladder columns failed: " .. tostring(columns))
+		columns = 0
+	end
+	print(string.format("[Relapse] ladder volumes %d, model columns %d", #boxes, columns))
+	local all = {}
 	for i = 1, #boxes do
 		local b = boxes[i]
 		if b.mins and b.maxs and not IsRampBox(b.mins, b.maxs) then
-			local slabs = OpenFaceSlabs(b.mins, b.maxs)
-			for j = 1, #slabs do
-				local s = slabs[j]
-				local center = (s.mins + s.maxs) * 0.5
-				local ent = ents.Create("relapse_ladder_clip")
-				if IsValid(ent) then
-					ent:SetPos(center)
-					ent:SetBoxMins(s.mins - center)
-					ent:SetBoxMaxs(s.maxs - center)
-					ent:SetInward(s.inward)
-					local ax = (b.mins.x + b.maxs.x) * 0.5
-					local ay = (b.mins.y + b.maxs.y) * 0.5
-					local hx = (b.maxs.x - b.mins.x) * 0.5
-					local hy = (b.maxs.y - b.mins.y) * 0.5
-					ent:SetAxisCenter(Vector(ax, ay, (b.mins.z + b.maxs.z) * 0.5))
-					ent:SetAxisRadii(Vector(hx, hy, 0))
-					ent:SetAxisRadius(math.max(hx, hy) + 16)
-					ent:Spawn()
-					ent:InitClip()
-				end
+			local maxs = b.maxs
+			local top = LadderColumnTop(b.mins, b.maxs)
+			if top > maxs.z + 1 then
+				maxs = Vector(maxs.x, maxs.y, top)
 			end
+			local slabs = OpenFaceSlabs(b.mins, maxs)
+			for j = 1, #slabs do
+				all[#all + 1] = slabs[j]
+			end
+		end
+	end
+	all = WeldColumns(all)
+	ExtendTopSlabs(all)
+	for j = 1, #all do
+		local s = all[j]
+		local center = (s.mins + s.maxs) * 0.5
+		local ent = ents.Create("relapse_ladder_clip")
+		if IsValid(ent) then
+			ent:SetPos(center)
+			ent:SetBoxMins(s.mins - center)
+			ent:SetBoxMaxs(s.maxs - center)
+			ent:SetInward(s.inward)
+			local ax = (s.mins.x + s.maxs.x) * 0.5
+			local ay = (s.mins.y + s.maxs.y) * 0.5
+			local hx = (s.maxs.x - s.mins.x) * 0.5
+			local hy = (s.maxs.y - s.mins.y) * 0.5
+			ent:SetAxisCenter(Vector(ax, ay, (s.mins.z + s.maxs.z) * 0.5))
+			ent:SetAxisRadii(Vector(hx, hy, 0))
+			ent:SetAxisRadius(math.max(hx, hy) + 16)
+			ent:Spawn()
+			ent:InitClip()
 		end
 	end
 end

@@ -24,29 +24,30 @@ Mgr.MaxCreatePerPass = 8
 -- Creation / removal
 ---------------------------------------------------------------------------
 
-function Mgr.CanCreate()
+function Mgr.CanCreate(needNav)
 	if game.SinglePlayer() then return false, "singleplayer" end
 	if not AI.HasRealPlayer() then return false, "no real players" end
 	if not GAMEMODE or GAMEMODE.RoundEnded then return false, "round ended" end
+	if needNav == false then return true end
 	if not AI.Nav then return false, "nav module missing" end
 	if not AI.Nav.IsReady() then return false, "navmesh " .. AI.Nav.Status() end
 	return true
 end
 
-function Mgr.CreateBot(brainName)
+function Mgr.CreateBot(brainName, needNav)
 	local brain = AI.GetBrain(brainName)
 	if not brain then
 		AI.Warn("no brain '%s'", tostring(brainName))
-		return
+		return nil, "no brain '" .. tostring(brainName) .. "'"
 	end
 
-	local ok, why = Mgr.CanCreate()
+	local ok, why = Mgr.CanCreate(needNav)
 	if not ok then
 		AI.Log("not creating a bot: %s", why)
-		return
+		return nil, why
 	end
 
-	if Mgr.Creating then return end
+	if Mgr.Creating then return nil, "already creating" end
 	Mgr.Creating = true
 
 	local name = AI.PickName()
@@ -57,11 +58,11 @@ function Mgr.CreateBot(brainName)
 
 	if not created then
 		AI.Warn("player.CreateNextBot failed: %s", tostring(pl))
-		return
+		return nil, tostring(pl)
 	end
 	if not IsValid(pl) or not pl:IsBot() then
 		AI.Warn("player.CreateNextBot returned an invalid player (server full?)")
-		return
+		return nil, "invalid player (server full?)"
 	end
 
 	pl.PlayerReady = true
@@ -344,8 +345,62 @@ local function Reply(pl, msg)
 end
 
 local function IsAllowed(pl)
-	return not IsValid(pl) or pl:IsSuperAdmin()
+	if not IsValid(pl) or pl:IsSuperAdmin() then return true end
+	local Mesh = AI.Mesh
+	return Mesh and Mesh.IsOwner and Mesh.IsOwner(pl) or false
 end
+
+local function Say(pl, msg)
+	Reply(pl, msg)
+	if IsValid(pl) then pl:ChatPrint(msg) end
+end
+
+-- Feet on the first solid along the aimer's look. A miss stands a step ahead.
+local function AimStandPos(pl)
+	local eye = pl:GetShootPos()
+	local aim = pl:GetAimVector()
+	local tr = util.TraceLine({
+		start = eye,
+		endpos = eye + aim * 8192,
+		filter = pl,
+		mask = MASK_SOLID,
+	})
+	local pos = (tr.Hit and not tr.HitSky) and (tr.HitPos + tr.HitNormal * 16) or (eye + aim * 96)
+	local down = util.TraceHull({
+		start = pos + Vector(0, 0, 4),
+		endpos = pos - Vector(0, 0, 512),
+		mins = Vector(-16, -16, 0),
+		maxs = Vector(16, 16, 72),
+		filter = pl,
+		mask = MASK_PLAYERSOLID,
+	})
+	if down.Hit and not down.HitSky and not down.StartSolid then
+		return down.HitPos
+	end
+	return pos
+end
+
+concommand.Add("relapse_ai_spawn_human", function(pl)
+	if not IsAllowed(pl) then
+		Say(pl, "[Relapse AI] no access")
+		return
+	end
+	if not IsValid(pl) then
+		Reply(pl, "[Relapse AI] relapse_ai_spawn_human needs a player aim")
+		return
+	end
+
+	local botpl, why = Mgr.CreateBot("human", false)
+	if not IsValid(botpl) then
+		Say(pl, "[Relapse AI] human bot was not created: " .. tostring(why))
+		return
+	end
+
+	botpl:SetPos(AimStandPos(pl))
+	botpl:DropToFloor()
+	botpl:SetLocalVelocity(vector_origin)
+	Say(pl, string.format("[Relapse AI] human bot '%s' at aim (idle, no path)", botpl:Nick()))
+end)
 
 concommand.Add("relapse_ai_add", function(pl, _, args)
 	if not IsAllowed(pl) then return end

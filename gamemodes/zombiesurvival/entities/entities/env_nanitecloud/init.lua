@@ -23,7 +23,8 @@ function ENT:AcceptInput(name, activator, caller, arg)
 	if not owner:IsValidLivingHuman() then owner = self end
 
 	local pos = self:GetPos()
-	local totalheal = self.HealPower * GAMEMODE:GetRepairPercentMul(self:GetOwner())
+	local healer = self:GetOwner()
+	local flatHeal = self.HealPower * GAMEMODE:GetRepairPercentMul(healer)
 
 	for _, hitent in pairs(ents.FindInSphere(pos, self.Radius * (owner.CloudRadius or 1))) do
 		if not hitent:IsValid() or hitent == self or not WorldVisible(pos, hitent:NearestPoint(pos)) then
@@ -36,6 +37,7 @@ function ENT:AcceptInput(name, activator, caller, arg)
 			local oldhealth = hitent:GetBarricadeHealth()
 			if oldhealth <= 0 or oldhealth >= hitent:GetMaxBarricadeHealth() or hitent:GetBarricadeRepairs() <= 0.01 then continue end
 
+			local totalheal = self.HealPower * GAMEMODE:GetPropRepairPercentMul(healer, hitent)
 			hitent:SetBarricadeHealth(math.min(hitent:GetMaxBarricadeHealth(), hitent:GetBarricadeHealth() + math.min(hitent:GetBarricadeRepairs(), totalheal)))
 			healed = hitent:GetBarricadeHealth() - oldhealth
 			hitent:SetBarricadeRepairs(math.max(hitent:GetBarricadeRepairs() - healed, 0))
@@ -47,7 +49,7 @@ function ENT:AcceptInput(name, activator, caller, arg)
 			local oldhealth = hitent:GetObjectHealth()
 			if oldhealth <= 0 or oldhealth >= hitent:GetMaxObjectHealth() or hitent.m_LastDamaged and CurTime() < hitent.m_LastDamaged + 4 then continue end
 
-			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + totalheal/2))
+			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + flatHeal/2))
 			healed = hitent:GetObjectHealth() - oldhealth
 		end
 

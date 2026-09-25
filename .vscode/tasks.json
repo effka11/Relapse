@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Кривые слуха",
+      "type": "shell",
+      "command": "python -u tools/hearing_curves/app.py",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONIOENCODING": "utf-8"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "close": false
+      }
+    }
+  ]
+}

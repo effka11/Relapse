@@ -25,8 +25,8 @@ GM.CartFile = "zscarts.txt"
 GM.SkillLoadoutsFile = "zsskloadouts.txt"
 
 ITEMCAT_GUNS = 1
-ITEMCAT_AMMO = 2
-ITEMCAT_MELEE = 3
+ITEMCAT_MELEE = 2
+ITEMCAT_AMMO = 3
 ITEMCAT_TOOLS = 4
 ITEMCAT_DEPLOYABLES = 5
 ITEMCAT_TRINKETS = 6
@@ -41,8 +41,8 @@ ITEMSUBCAT_TRINKETS_SPECIAL = 6
 
 GM.ItemCategories = {
 	[ITEMCAT_GUNS] = "Guns",
-	[ITEMCAT_AMMO] = "Ammunition",
 	[ITEMCAT_MELEE] = "Melee",
+	[ITEMCAT_AMMO] = "Ammunition",
 	[ITEMCAT_TOOLS] = "Tools",
 	[ITEMCAT_DEPLOYABLES] = "Deployables",
 	[ITEMCAT_TRINKETS] = "Trinkets",
@@ -110,7 +110,7 @@ GM.AmmoCache["sniperpenetratedround"]		= 1			-- Remote Det pack.
 GM.AmmoCache["grenade"]						= 1			-- Grenades.
 GM.AmmoCache["thumper"]						= 1			-- Gun turret.
 GM.AmmoCache["gravity"]						= 1			-- Unused.
-GM.AmmoCache["battery"]						= 23		-- Used with the Medical Kit.
+GM.AmmoCache["battery"]						= 1			-- One medkit charge. Resupply and handing a charge to someone.
 GM.AmmoCache["gaussenergy"]					= 2			-- Nails used with the Carpenter's Hammer.
 GM.AmmoCache["combinecannon"]				= 1			-- Not used.
 GM.AmmoCache["airboatgun"]					= 1			-- Arsenal crates.
@@ -136,14 +136,14 @@ GM:BindRelapseAmmoTables()
 -- Worth --
 -----------
 
-GM:AddStartingItem("makarov",			ITEMCAT_GUNS,			15,				"mg_makarov")
-GM:AddStartingItem("m1911",				ITEMCAT_GUNS,			15,				"mg_m1911")
-GM:AddStartingItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357")
-GM:AddStartingItem("uzi",				ITEMCAT_GUNS,			15,				"mg_uzulu")
-GM:AddStartingItem("m680",				ITEMCAT_GUNS,			15,				"mg_romeo870")
-GM:AddStartingItem("sks",				ITEMCAT_GUNS,			15,				"mg_sksierra")
-GM:AddStartingItem("cwcane",			ITEMCAT_MELEE,			15,				"mg_me_t9cane")
-GM:AddStartingItem("cinderblock",		ITEMCAT_MELEE,			15,				"mg_cinderblock")
+GM:AddStartingItem("makarov",			ITEMCAT_GUNS,			40,				"mg_makarov")
+GM:AddStartingItem("m1911",				ITEMCAT_GUNS,			40,				"mg_m1911")
+GM:AddStartingItem("revolver357",		ITEMCAT_GUNS,			40,				"mg_357")
+GM:AddStartingItem("uzi",				ITEMCAT_GUNS,			40,				"mg_uzulu")
+GM:AddStartingItem("m680",				ITEMCAT_GUNS,			40,				"mg_romeo870")
+GM:AddStartingItem("sks",				ITEMCAT_GUNS,			40,				"mg_sksierra")
+GM:AddStartingItem("cwcane",			ITEMCAT_MELEE,			40,				"mg_me_t9cane")
+GM:AddStartingItem("cinderblock",		ITEMCAT_MELEE,			40,				"mg_cinderblock")
 
 GM:RegisterRelapseAmmoShopItems()
 
@@ -157,6 +157,7 @@ GM:AddStartingItem("remantler",			ITEMCAT_DEPLOYABLES,			50,				"weapon_zs_reman
 item = GM:AddStartingItem("aloe",			ITEMCAT_DEPLOYABLES,			45,				"weapon_zs_aloe")
 item.CycleGridNeed = "medicine_4"
 
+GM:AddStartingItem("medkit",			ITEMCAT_TOOLS,			15,				"weapon_zs_medicalkit", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("weapon_zs_medicalkit") end)
 GM:AddStartingItem("wrench",			ITEMCAT_TOOLS,			20,				"weapon_zs_wrench").NoClassicMode = true
 GM:AddStartingItem("crphmr",			ITEMCAT_TOOLS,			40,				"weapon_zs_hammer").NoClassicMode = true
 
@@ -165,83 +166,97 @@ GM:AddStartingItem("crphmr",			ITEMCAT_TOOLS,			40,				"weapon_zs_hammer").NoCla
 ------------
 
 -- Tier 1
-GM:AddPointShopItem("makarov",			ITEMCAT_GUNS,			15,				"mg_makarov", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_makarov") end)
-GM:AddPointShopItem("m1911",			ITEMCAT_GUNS,			15,				"mg_m1911", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_m1911") end)
-GM:AddPointShopItem("revolver357",		ITEMCAT_GUNS,			15,				"mg_357", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_357") end)
-GM:AddPointShopItem("uzi",				ITEMCAT_GUNS,			15,				"mg_uzulu", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_uzulu") end)
-GM:AddPointShopItem("m680",				ITEMCAT_GUNS,			15,				"mg_romeo870", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_romeo870") end)
-GM:AddPointShopItem("sks",				ITEMCAT_GUNS,			15,				"mg_sksierra", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sksierra") end)
-GM:AddPointShopItem("cwcane",			ITEMCAT_MELEE,			15,				"mg_me_t9cane", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9cane") end)
-GM:AddPointShopItem("cinderblock",		ITEMCAT_MELEE,			15,				"mg_cinderblock", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_cinderblock") end)
+GM:AddPointShopItem("makarov",			ITEMCAT_GUNS,			40,				"mg_makarov", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_makarov") end)
+GM:AddPointShopItem("m1911",			ITEMCAT_GUNS,			40,				"mg_m1911", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_m1911") end)
+GM:AddPointShopItem("revolver357",		ITEMCAT_GUNS,			40,				"mg_357", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_357") end)
+GM:AddPointShopItem("uzi",				ITEMCAT_GUNS,			40,				"mg_uzulu", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_uzulu") end)
+GM:AddPointShopItem("m680",				ITEMCAT_GUNS,			40,				"mg_romeo870", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_romeo870") end)
+GM:AddPointShopItem("sks",				ITEMCAT_GUNS,			40,				"mg_sksierra", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sksierra") end)
+GM:AddPointShopItem("cwcane",			ITEMCAT_MELEE,			40,				"mg_me_t9cane", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9cane") end)
+GM:AddPointShopItem("cinderblock",		ITEMCAT_MELEE,			40,				"mg_cinderblock", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_cinderblock") end)
 -- Tier 2
 item =
-GM:AddPointShopItem("mp5",				ITEMCAT_GUNS,			45,				"mg_mpapa5", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mpapa5") end)
+GM:AddPointShopItem("mp5",				ITEMCAT_GUNS,			70,				"mg_mpapa5", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mpapa5") end)
 item.Tier = 2
 item =
-GM:AddPointShopItem("ump45",			ITEMCAT_GUNS,			45,				"mg_smgolf45", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_smgolf45") end)
+GM:AddPointShopItem("ump45",			ITEMCAT_GUNS,			70,				"mg_smgolf45", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_smgolf45") end)
 item.Tier = 2
 item =
-GM:AddPointShopItem("m19",				ITEMCAT_GUNS,			45,				"mg_p320", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_p320") end)
+GM:AddPointShopItem("m19",				ITEMCAT_GUNS,			70,				"mg_p320", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_p320") end)
 item.Tier = 2
 item =
-GM:AddPointShopItem("mk2",				ITEMCAT_GUNS,			45,				"mg_sbeta", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sbeta") end)
+GM:AddPointShopItem("mk2",				ITEMCAT_GUNS,			70,				"mg_sbeta", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sbeta") end)
 item.Tier = 2
 item =
-GM:AddPointShopItem("cwknife",			ITEMCAT_MELEE,			45,				"mg_me_t9loadout", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9loadout") end)
+GM:AddPointShopItem("cwknife",			ITEMCAT_MELEE,			70,				"mg_me_t9loadout", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9loadout") end)
 item.Tier = 2
 item =
-GM:AddPointShopItem("cwbat",			ITEMCAT_MELEE,			45,				"mg_me_t9bat", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9bat") end)
+GM:AddPointShopItem("cwbat",			ITEMCAT_MELEE,			70,				"mg_me_t9bat", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9bat") end)
 item.Tier = 2
 item =
-GM:AddPointShopItem("cwetool",			ITEMCAT_MELEE,			45,				"mg_me_t9etool", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9etool") end)
+GM:AddPointShopItem("cwetool",			ITEMCAT_MELEE,			70,				"mg_me_t9etool", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9etool") end)
 item.Tier = 2
 -- Tier 3
 item =
-GM:AddPointShopItem("ak47",				ITEMCAT_GUNS,			75,				"mg_akilo47", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_akilo47") end)
+GM:AddPointShopItem("ak47",				ITEMCAT_GUNS,			110,				"mg_akilo47", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_akilo47") end)
 item.Tier = 3
 item =
-GM:AddPointShopItem("origin12",			ITEMCAT_GUNS,			75,				"mg_oscar12", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_oscar12") end)
+GM:AddPointShopItem("origin12",			ITEMCAT_GUNS,			110,				"mg_oscar12", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_oscar12") end)
 item.Tier = 3
 item =
-GM:AddPointShopItem("m4a1",				ITEMCAT_GUNS,			75,				"mg_mike4", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mike4") end)
+GM:AddPointShopItem("m4a1",				ITEMCAT_GUNS,			110,				"mg_mike4", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_mike4") end)
 item.Tier = 3
 item =
-GM:AddPointShopItem("machete",			ITEMCAT_MELEE,			75,				"mg_me_t9machete", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9machete") end)
+GM:AddPointShopItem("machete",			ITEMCAT_MELEE,			110,				"mg_me_t9machete", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9machete") end)
 item.Tier = 3
 -- Tier 4
 item =
-GM:AddPointShopItem("asval",			ITEMCAT_GUNS,			115,				"mg_valpha", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_valpha") end)
+GM:AddPointShopItem("asval",			ITEMCAT_GUNS,			170,				"mg_valpha", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_valpha") end)
 item.Tier = 4
 item =
-GM:AddPointShopItem("finn",				ITEMCAT_GUNS,			115,				"mg_sierrax", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sierrax") end)
+GM:AddPointShopItem("finn",				ITEMCAT_GUNS,			170,				"mg_sierrax", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_sierrax") end)
 item.Tier = 4
 item =
-GM:AddPointShopItem("jak12",			ITEMCAT_GUNS,			115,				"mg_aalpha12", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_aalpha12") end)
+GM:AddPointShopItem("jak12",			ITEMCAT_GUNS,			170,				"mg_aalpha12", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_aalpha12") end)
 item.Tier = 4
 item =
-GM:AddPointShopItem("cwwakizashi",		ITEMCAT_MELEE,			115,				"mg_me_t9wakizashi", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9wakizashi") end)
+GM:AddPointShopItem("cwwakizashi",		ITEMCAT_MELEE,			170,				"mg_me_t9wakizashi", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9wakizashi") end)
 item.Tier = 4
 -- Tier 5
 item =
-GM:AddPointShopItem("scar",				ITEMCAT_GUNS,			175,				"mg_scharlie", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_scharlie") end)
+GM:AddPointShopItem("scar",				ITEMCAT_GUNS,			270,				"mg_scharlie", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_scharlie") end)
 item.Tier = 5
 item =
-GM:AddPointShopItem("pkm",				ITEMCAT_GUNS,			175,				"mg_pkilo", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_pkilo") end)
+GM:AddPointShopItem("pkm",				ITEMCAT_GUNS,			270,				"mg_pkilo", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_pkilo") end)
 item.Tier = 5
 item =
-GM:AddPointShopItem("fal",				ITEMCAT_GUNS,			175,				"mg_falima", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_falima") end)
+GM:AddPointShopItem("fal",				ITEMCAT_GUNS,			270,				"mg_falima", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_falima") end)
 item.Tier = 5
 item =
-GM:AddPointShopItem("ax50",				ITEMCAT_GUNS,			175,				"mg_alpha50", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_alpha50") end)
+GM:AddPointShopItem("ax50",				ITEMCAT_GUNS,			270,				"mg_alpha50", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_alpha50") end)
 item.Tier = 5
 item =
-GM:AddPointShopItem("cwscythe",			ITEMCAT_MELEE,			175,				"mg_me_t9scythe", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9scythe") end)
+GM:AddPointShopItem("cwscythe",			ITEMCAT_MELEE,			270,				"mg_me_t9scythe", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9scythe") end)
 item.Tier = 5
 item =
-GM:AddPointShopItem("cwsledge",			ITEMCAT_MELEE,			175,				"mg_me_t9sledgehammer", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9sledgehammer") end)
+GM:AddPointShopItem("cwsledge",			ITEMCAT_MELEE,			270,				"mg_me_t9sledgehammer", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9sledgehammer") end)
 item.Tier = 5
 
 GM:AddPointShopItem("crphmr",			ITEMCAT_TOOLS,			25,				"weapon_zs_hammer",			nil,							nil,									nil,											function(pl) pl:GiveEmptyWeapon("weapon_zs_hammer") pl:GiveAmmo(5, "GaussEnergy") end)
+GM:AddPointShopItem("medkit",			ITEMCAT_TOOLS,			15,				"weapon_zs_medicalkit", nil, nil, nil, function(pl)
+	if pl:HasWeapon("weapon_zs_medicalkit") then
+		local drop = ents.Create("prop_weapon")
+		if drop:IsValid() then
+			drop:SetPos(pl:GetShootPos())
+			drop:SetAngles(pl:GetAngles())
+			drop:SetWeaponType("weapon_zs_medicalkit")
+			drop:SetShouldRemoveAmmo(true)
+			drop:Spawn()
+		end
+		return
+	end
+	pl:GiveEmptyWeapon("weapon_zs_medicalkit")
+end)
 GM:AddPointShopItem("wrench",			ITEMCAT_TOOLS,			20,				"weapon_zs_wrench").NoClassicMode = true
 GM:AddPointShopItem("arsenalcrate",		ITEMCAT_DEPLOYABLES,			40,				"weapon_zs_arsenalcrate").Countables = "prop_arsenalcrate"
 GM:AddPointShopItem("resupplybox",		ITEMCAT_DEPLOYABLES,			40,				"weapon_zs_resupplybox").Countables = "prop_resupplybox"
@@ -249,32 +264,54 @@ GM:AddPointShopItem("remantler",		ITEMCAT_DEPLOYABLES,			40,				"weapon_zs_reman
 item = GM:AddPointShopItem("aloe",				ITEMCAT_DEPLOYABLES,			45,				"weapon_zs_aloe")
 item.CycleGridNeed = "medicine_4"
 
--- These are the honorable mentions that come at the end of the round.
+-- End-of-round awards. Title/Unit are language keys. Order is the grid, not the net id.
+-- Unit "one|few|many" declines with the number. NoStat cards have a caption and no figure.
+-- Ids without Title stay in the table so the net index does not shift; they are not awarded.
 
 local function genericcallback(pl, magnitude) return pl:Name(), magnitude end
+
+local function hm(name, str, col, title, unit, side, order, nostat)
+	return {
+		Name = name,
+		String = str,
+		Callback = genericcallback,
+		Color = col,
+		Title = title,
+		Unit = unit,
+		Side = side,
+		Order = order,
+		NoStat = nostat
+	}
+end
+
 GM.HonorableMentions = {}
-GM.HonorableMentions[HM_MOSTZOMBIESKILLED] = {Name = "Most zombies killed", String = "by %s, with %d killed zombies.", Callback = genericcallback, Color = COLOR_CYAN}
+GM.HonorableMentions[HM_MOSTZOMBIESKILLED] = hm("Most zombies killed", "by %s, with %d killed zombies.", COLOR_CYAN, "hm_reaper", "hm_reaper_unit", TEAM_HUMAN, 70)
 GM.HonorableMentions[HM_MOSTDAMAGETOUNDEAD] = {Name = "Most damage to undead", String = "goes to %s, with a total of %d damage dealt to the undead.", Callback = genericcallback, Color = COLOR_CYAN}
-GM.HonorableMentions[HM_MOSTHEADSHOTS] = {Name = "Most headshot kills", String = "goes to %s, with a total of %s headshot kills.", Callback = genericcallback, Color = COLOR_CYAN}
+GM.HonorableMentions[HM_MOSTHEADSHOTS] = hm("Most headshot kills", "goes to %s, with a total of %s headshot kills.", COLOR_CYAN, "hm_head", "hm_head_unit", TEAM_HUMAN, 80)
 GM.HonorableMentions[HM_PACIFIST] = {Name = "Pacifist", String = "goes to %s for not killing a single zombie and still surviving!", Callback = genericcallback, Color = COLOR_CYAN}
-GM.HonorableMentions[HM_MOSTHELPFUL] = {Name = "Most helpful", String = "goes to %s for assisting in the disposal of %d zombies.", Callback = genericcallback, Color = COLOR_CYAN}
-GM.HonorableMentions[HM_LASTHUMAN] = {Name = "Last Human", String = "goes to %s for being the last person alive.", Callback = genericcallback, Color = COLOR_CYAN}
+GM.HonorableMentions[HM_MOSTHELPFUL] = hm("Most helpful", "goes to %s for assisting in the disposal of %d zombies.", COLOR_CYAN, "hm_second", "hm_second_unit", TEAM_HUMAN, 140)
+GM.HonorableMentions[HM_LASTHUMAN] = hm("Last Human", "goes to %s for being the last person alive.", COLOR_CYAN, "hm_last", "hm_last_unit", TEAM_HUMAN, 10, true)
 GM.HonorableMentions[HM_OUTLANDER] = {Name = "Outlander", String = "goes to %s for getting killed %d feet away from a zombie spawn.", Callback = genericcallback, Color = COLOR_CYAN}
-GM.HonorableMentions[HM_GOODDOCTOR] = {Name = "Good Doctor", String = "goes to %s for healing their team for %d points of health.", Callback = genericcallback, Color = COLOR_CYAN}
-GM.HonorableMentions[HM_HANDYMAN] = {Name = "Handy Man", String = "goes to %s for getting %d barricade assistance points.", Callback = genericcallback, Color = COLOR_CYAN}
+GM.HonorableMentions[HM_GOODDOCTOR] = hm("Good Doctor", "goes to %s for healing their team for %d points of health.", COLOR_CYAN, "hm_surgeon", "hm_surgeon_unit", TEAM_HUMAN, 120)
+GM.HonorableMentions[HM_HANDYMAN] = hm("Handy Man", "goes to %s for getting %d barricade assistance points.", COLOR_CYAN, "hm_carpenter", "hm_carpenter_unit", TEAM_HUMAN, 130)
 GM.HonorableMentions[HM_SCARECROW] = {Name = "Scarecrow", String = "goes to %s for killing %d poor crows.", Callback = genericcallback, Color = COLOR_WHITE}
-GM.HonorableMentions[HM_MOSTBRAINSEATEN] = {Name = "Most brains eaten", String = "by %s, with %d brains eaten.", Callback = genericcallback, Color = COLOR_LIMEGREEN}
-GM.HonorableMentions[HM_MOSTDAMAGETOHUMANS] = {Name = "Most damage to humans", String = "goes to %s, with a total of %d damage given to living players.", Callback = genericcallback, Color = COLOR_LIMEGREEN}
-GM.HonorableMentions[HM_LASTBITE] = {Name = "Last Bite", String = "goes to %s for ending the round.", Callback = genericcallback, Color = COLOR_LIMEGREEN}
+GM.HonorableMentions[HM_MOSTBRAINSEATEN] = hm("Most brains eaten", "by %s, with %d brains eaten.", COLOR_LIMEGREEN, "hm_feast", "hm_feast_unit", TEAM_UNDEAD, 90)
+GM.HonorableMentions[HM_MOSTDAMAGETOHUMANS] = hm("Most damage to humans", "goes to %s, with a total of %d damage given to living players.", COLOR_LIMEGREEN, "hm_butcher", "hm_butcher_unit", TEAM_UNDEAD, 100)
+GM.HonorableMentions[HM_LASTBITE] = hm("Last Bite", "goes to %s for ending the round.", COLOR_LIMEGREEN, "hm_bite", "hm_bite_unit", TEAM_UNDEAD, 20, true)
 GM.HonorableMentions[HM_USEFULTOOPPOSITE] = {Name = "Most useful to opposite team", String = "goes to %s for giving up a whopping %d kills!", Callback = genericcallback, Color = COLOR_RED}
 GM.HonorableMentions[HM_STUPID] = {Name = "Stupid", String = "is what %s is for getting killed %d feet away from a zombie spawn.", Callback = genericcallback, Color = COLOR_RED}
-GM.HonorableMentions[HM_SALESMAN] = {Name = "Salesman", String = "is what %s is for having %d points worth of items taken from their arsenal crate.", Callback = genericcallback, Color = COLOR_CYAN}
-GM.HonorableMentions[HM_WAREHOUSE] = {Name = "Warehouse", String = "describes %s well since they had their resupply boxes used %d times.", Callback = genericcallback, Color = COLOR_CYAN}
+GM.HonorableMentions[HM_SALESMAN] = hm("Salesman", "is what %s is for having %d points worth of items taken from their arsenal crate.", COLOR_CYAN, "hm_quarter", "hm_quarter_unit", TEAM_HUMAN, 150)
+GM.HonorableMentions[HM_WAREHOUSE] = hm("Warehouse", "describes %s well since they had their resupply boxes used %d times.", COLOR_CYAN, "hm_cache", "hm_cache_unit", TEAM_HUMAN, 160)
 GM.HonorableMentions[HM_DEFENCEDMG] = {Name = "Defender", String = "goes to %s for protecting humans from %d damage with defence boosts.", Callback = genericcallback, Color = COLOR_WHITE}
 GM.HonorableMentions[HM_STRENGTHDMG] = {Name = "Alchemist", String = "is what %s is for boosting players with an additional %d damage.", Callback = genericcallback, Color = COLOR_CYAN}
-GM.HonorableMentions[HM_BARRICADEDESTROYER] = {Name = "Barricade Destroyer", String = "goes to %s for doing %d damage to barricades.", Callback = genericcallback, Color = COLOR_LIMEGREEN}
-GM.HonorableMentions[HM_NESTDESTROYER] = {Name = "Nest Destroyer", String = "goes to %s for destroying %d nests.", Callback = genericcallback, Color = COLOR_LIMEGREEN}
-GM.HonorableMentions[HM_NESTMASTER] = {Name = "Nest Master", String = "goes to %s for having %d zombies spawn through their nest.", Callback = genericcallback, Color = COLOR_LIMEGREEN}
+GM.HonorableMentions[HM_BARRICADEDESTROYER] = hm("Barricade Destroyer", "goes to %s for doing %d damage to barricades.", COLOR_LIMEGREEN, "hm_ram", "hm_ram_unit", TEAM_UNDEAD, 110)
+GM.HonorableMentions[HM_NESTDESTROYER] = hm("Nest Destroyer", "goes to %s for destroying %d nests.", COLOR_LIMEGREEN, "hm_nests", "hm_nests_unit", TEAM_HUMAN, 170)
+GM.HonorableMentions[HM_NESTMASTER] = hm("Nest Master", "goes to %s for having %d zombies spawn through their nest.", COLOR_LIMEGREEN, "hm_brood", "hm_brood_unit", TEAM_UNDEAD, 180)
+GM.HonorableMentions[HM_SIGILCORRUPT] = hm("Sigil", "goes to %s for corrupting %d sigils.", COLOR_LIMEGREEN, "hm_seal", "hm_seal_unit", TEAM_UNDEAD, 30)
+GM.HonorableMentions[HM_SIGILRESTORE] = hm("Cleanse", "goes to %s for restoring %d sigils.", COLOR_CYAN, "hm_cleanse", "hm_cleanse_unit", TEAM_HUMAN, 40)
+GM.HonorableMentions[HM_BOSSKILL] = hm("Boss", "goes to %s for killing %d bosses.", COLOR_CYAN, "hm_boss", "hm_boss_unit", TEAM_HUMAN, 50)
+GM.HonorableMentions[HM_MELEEKILLS] = hm("Up close", "goes to %s for %d melee kills.", COLOR_CYAN, "hm_melee", "hm_melee_unit", TEAM_HUMAN, 85)
+GM.HonorableMentions[HM_REDEEMED] = hm("Return", "goes to %s for redeeming and still standing.", COLOR_CYAN, "hm_return", "hm_return_unit", TEAM_HUMAN, 60, true)
 
 -- Don't let humans use these models because they look like undead models. Must be lower case.
 GM.RestrictedModels = {
@@ -312,7 +349,7 @@ function GM:AddDeployableInfo(class, name, wepclass)
 end
 GM:AddDeployableInfo("prop_arsenalcrate", 		"Arsenal Crate", 		"weapon_zs_arsenalcrate")
 GM:AddDeployableInfo("prop_resupplybox", 		"Resupply Box", 		"weapon_zs_resupplybox")
-GM:AddDeployableInfo("prop_remantler", 			"Weapon Remantler", 	"weapon_zs_remantler")
+GM:AddDeployableInfo("prop_remantler", 			"Machine", 	"weapon_zs_remantler")
 GM:AddDeployableInfo("prop_messagebeacon", 		"Message Beacon", 		"weapon_zs_messagebeacon")
 GM:AddDeployableInfo("prop_camera", 			"Camera",	 			"weapon_zs_camera")
 GM:AddDeployableInfo("prop_gunturret", 			"Gun Turret",	 		"weapon_zs_gunturret")
@@ -369,11 +406,30 @@ end)
 
 -- Static values that don't need convars...
 
--- Initial length for wave 1.
-GM.WaveOneLength = 220
+-- Survival wave lengths in seconds: 3:30, 4:00, 4:00, 4:30, 5:00.
+GM.WaveLengths = {210, 240, 240, 270, 300}
 
--- Add this many seconds for each additional wave.
+-- Wave 1. The prep clock's preview of the first wave end uses this.
+GM.WaveOneLength = GM.WaveLengths[1]
+
+-- Fallback when a wave is past WaveLengths. Classic mode has its own adder.
 GM.TimeAddedPerWave = 15
+
+function GM:GetWaveLength(wave)
+	wave = math.max(1, wave or 1)
+	if GetGlobalBool("classicmode") then
+		return self.WaveOneLengthClassic + (wave - 1) * self.TimeAddedPerWaveClassic
+	end
+
+	local lengths = self.WaveLengths
+	if lengths and lengths[wave] then
+		return lengths[wave]
+	end
+	if lengths and lengths[#lengths] then
+		return lengths[#lengths]
+	end
+	return self.WaveOneLength + (wave - 1) * self.TimeAddedPerWave
+end
 
 -- New players are put on the zombie team if the current wave is this or higher. Do not put it lower than 1 or you'll break the game.
 GM.NoNewHumansWave = 2
@@ -382,10 +438,10 @@ GM.NoNewHumansWave = 2
 GM.NoSuicideWave = 1
 
 -- How long 'wave 0' should last in seconds. This is the time you should give for new players to join and get ready.
-GM.WaveZeroLength = 150
+GM.WaveZeroLength = 240
 
 -- Time humans have between waves to do stuff without NEW zombies spawning. Any dead zombies will be in spectator (crow) view and any living ones will still be living.
-GM.WaveIntermissionLength = 60
+GM.WaveIntermissionLength = 180
 
 -- Time in seconds between end round and next map.
 GM.EndGameTime = 45

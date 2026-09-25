@@ -133,7 +133,7 @@ end
 function GM:CloseOtherOverlays(keep)
 	local glass = keep == "shop" or keep == "options" or keep == "credits"
 		or keep == "inventory" or keep == "scoreboard" or keep == "helpguide"
-		or keep == "character"
+		or keep == "character" or keep == "awards" or keep == "mapvote"
 	if glass and RelapseUI.PinScrim then
 		RelapseUI.PinScrim()
 	end
@@ -167,6 +167,12 @@ function GM:CloseOtherOverlays(keep)
 	end
 	if keep ~= "scoreboard" and self.CloseScoreboard then
 		self:CloseScoreboard(false, instant)
+	end
+	if keep ~= "awards" and self.CloseAwardsMenu then
+		self:CloseAwardsMenu(false, instant)
+	end
+	if keep ~= "mapvote" and self.CloseMapVote then
+		self:CloseMapVote(false, instant)
 	end
 end
 
@@ -288,6 +294,16 @@ function GM:OnPauseMenuShow()
 	end
 	if (self.CloseScoreboard and self:CloseScoreboard(true)) or self.ScoreboardBlockPause then
 		self.ScoreboardBlockPause = nil
+		gui.HideGameUI()
+		return false
+	end
+	if (self.CloseAwardsMenu and self:CloseAwardsMenu(true)) or self.AwardsMenuBlockPause then
+		self.AwardsMenuBlockPause = nil
+		gui.HideGameUI()
+		return false
+	end
+	if (self.CloseMapVote and self:CloseMapVote(true)) or self.MapVoteBlockPause then
+		self.MapVoteBlockPause = nil
 		gui.HideGameUI()
 		return false
 	end

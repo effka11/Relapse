@@ -140,7 +140,8 @@ function ENT:Think()
 	local pos = self:LocalToWorld(Vector(0, 0, 30))
 	local count = 0
 
-	local totalheal = self.HealValue * GAMEMODE:GetRepairPercentMul(self:GetObjectOwner())
+	local owner = self:GetObjectOwner()
+	local flatHeal = self.HealValue * GAMEMODE:GetRepairPercentMul(owner)
 
 	for _, hitent in pairs(ents.FindInSphere(pos, self.MaxDistance * (self:GetObjectOwner().FieldRangeMul or 1))) do
 		if not hitent:IsValid() or hitent == self or not WorldVisible(pos, hitent:NearestPoint(pos)) then
@@ -153,6 +154,7 @@ function ENT:Think()
 			local oldhealth = hitent:GetBarricadeHealth()
 			if oldhealth <= 0 or oldhealth >= hitent:GetMaxBarricadeHealth() or hitent:GetBarricadeRepairs() <= 0.01 then continue end
 
+			local totalheal = self.HealValue * GAMEMODE:GetPropRepairPercentMul(owner, hitent)
 			hitent:SetBarricadeHealth(math.min(hitent:GetMaxBarricadeHealth(), hitent:GetBarricadeHealth() + math.min(hitent:GetBarricadeRepairs(), totalheal)))
 			healed = hitent:GetBarricadeHealth() - oldhealth
 			hitent:SetBarricadeRepairs(math.max(hitent:GetBarricadeRepairs() - healed, 0))
@@ -164,7 +166,7 @@ function ENT:Think()
 			local oldhealth = hitent:GetObjectHealth()
 			if oldhealth <= 0 or oldhealth >= hitent:GetMaxObjectHealth() or hitent.m_LastDamaged and CurTime() < hitent.m_LastDamaged + 4 then continue end
 
-			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + totalheal/2))
+			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + flatHeal/2))
 			healed = hitent:GetObjectHealth() - oldhealth
 		end
 

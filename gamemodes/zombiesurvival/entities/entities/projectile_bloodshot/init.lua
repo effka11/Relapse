@@ -45,7 +45,7 @@ function ENT:Explode(hitpos, hitnormal)
 	if owner:IsValidLivingHuman() then
 		for _, ent in pairs(ents.FindInSphere(hitpos, self.Radius * (owner.CloudRadius or 1))) do
 			if ent and ent:IsValidLivingHuman() and WorldVisible(hitpos, ent:NearestPoint(hitpos)) then
-				ent:SetBloodArmor(math.min(ent:GetBloodArmor() + 10 * ent.BloodarmorGainMul, ent.MaxBloodArmor))
+				ent:SetBloodArmor(math.min(ent:GetBloodArmor() + 10 * GAMEMODE:GetBloodArmorGainMul(ent), ent.MaxBloodArmor))
 
 				local strstatus = ent:GiveStatus("strengthdartboost", 8 * (owner.CloudTime or 1))
 				strstatus.Applier = owner

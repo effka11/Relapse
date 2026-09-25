@@ -309,6 +309,7 @@ local function WrapMWSelect(wep)
 end
 
 -- MW reload duration is seq.Fps / 30 via GetAnimation (task timer + VM).
+-- Rechamber (bolt, lever, pump) uses that same Fps for GunFire.
 local function IsReloadAnim(seqIndex)
 	if not isstring(seqIndex) then
 		return false
@@ -331,14 +332,21 @@ local function WrapReloadAnim(wep)
 	local old = wep.GetAnimation
 	wep.GetAnimation = function(self, seqIndex)
 		local seq = old(self, seqIndex)
-		if not seq or not IsReloadAnim(seqIndex) then
+		if not seq then
 			return seq
 		end
 		local gm = GAMEMODE or GM
 		local owner = self.GetOwner and self:GetOwner()
 		local mul = 1
-		if gm and gm.GetReloadPercentMul and IsValid(owner) then
-			mul = gm:GetReloadPercentMul(owner)
+		local rechamber = isstring(seqIndex) and string.lower(seqIndex) == "rechamber"
+		if IsReloadAnim(seqIndex) then
+			if gm and gm.GetReloadPercentMul and IsValid(owner) then
+				mul = gm:GetReloadPercentMul(owner)
+			end
+		elseif rechamber and not (self.Melee or self.IsMelee or (istable(self.Relapse) and self.Relapse.Melee)) then
+			if gm and gm.GetUpgradePercentMul and IsValid(owner) then
+				mul = gm:GetUpgradePercentMul(owner, "GunFire")
+			end
 		end
 		if mul == 1 then
 			return seq
@@ -358,6 +366,29 @@ local function IsMWMelee(self)
 	end
 	local R = self.Relapse
 	return istable(R) and R.Melee
+end
+
+local function WrapFireRate(wep)
+	if not istable(wep) or wep.RelapseFireRateWrap then
+		return
+	end
+	if not isfunction(wep.GetPrimaryDelay) then
+		return
+	end
+	wep.RelapseFireRateWrap = true
+	local old = wep.GetPrimaryDelay
+	wep.GetPrimaryDelay = function(self)
+		local delay = old(self)
+		if IsMWMelee(self) then
+			return delay
+		end
+		local gm = GAMEMODE or GM
+		local owner = self.GetOwner and self:GetOwner()
+		if gm and gm.GetGunFireDelay and IsValid(owner) then
+			return gm:GetGunFireDelay(owner, delay)
+		end
+		return delay
+	end
 end
 
 -- MW punch is CalculateRecoil * GetRecoilMultiplier (bipod 0.1, else 1).
@@ -391,6 +422,7 @@ local function WrapMWHitgroups()
 	WrapMWDrop(weapons.GetStored("mg_base"))
 	WrapReloadAnim(weapons.GetStored("mg_base"))
 	WrapRecoilMul(weapons.GetStored("mg_base"))
+	WrapFireRate(weapons.GetStored("mg_base"))
 	local list = weapons.GetList()
 	if not list then return end
 	for i = 1, #list do
@@ -404,6 +436,7 @@ local function WrapMWHitgroups()
 				WrapMWDrop(stored)
 				WrapReloadAnim(stored)
 				WrapRecoilMul(stored)
+				WrapFireRate(stored)
 			end
 		end
 	end

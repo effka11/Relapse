@@ -35,5 +35,12 @@ function ENT:Draw()
 			draw.SimpleText("("..owner:ClippedName()..")", "ZS3D2DFont2Small", 0, 120, owner == MySelf and COLOR_LBLUE or COLOR_GRAY, TEXT_ALIGN_CENTER)
 		end
 
+		if owner == MySelf and GAMEMODE.GetSupplySellHint then
+			local hint = GAMEMODE:GetSupplySellHint(MySelf, self:GetClass())
+			if hint then
+				draw.SimpleText(hint, "ZS3D2DFont2Small", 0, 168, COLOR_LBLUE, TEXT_ALIGN_CENTER)
+			end
+		end
+
 	cam.End3D2D()
 end

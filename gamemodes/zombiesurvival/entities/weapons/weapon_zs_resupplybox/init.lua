@@ -42,7 +42,7 @@ function SWEP:PrimaryAttack()
 	local pos, ang = status:RecalculateValidity()
 	if not status:GetValidPlacement() or not pos or not ang then return end
 
-	self:SetNextPrimaryAttack(CurTime() + self.Primary.Delay)
+	self:SetNextPrimaryAttack(CurTime() + GAMEMODE:GetSupplyPlaceDelay(owner, self.Primary.Delay))
 
 	local ent = ents.Create("prop_resupplybox")
 	if ent:IsValid() then

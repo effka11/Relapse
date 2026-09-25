@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кривые слуха</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #161616;
+    --panel: #1e1e1e;
+    --line: #2c2c2c;
+    --text: #e8e8e8;
+    --muted: #9a9a9a;
+    --accent: #d7a15a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 16px 20px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); }
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    padding: 16px 20px 28px;
+  }
+  label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  input, select, button {
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  input, select { width: 100%; padding: 8px 10px; }
+  #list {
+    position: relative;
+    height: 280px;
+    margin-top: 8px;
+    overflow: auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  #spacer { position: relative; width: 100%; }
+  #spacer .item {
+    height: 26px;
+    line-height: 26px;
+    padding: 0 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  #spacer .item.on { background: #2c2c2c; }
+  #spacer .item:hover { background: #333; }
+  button { padding: 8px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  #detail {
+    white-space: pre-wrap;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    min-height: 96px;
+    margin: 12px 0;
+  }
+  .row { display: flex; gap: 8px; align-items: end; margin: 8px 0; }
+  .row > * { flex: 1; }
+  canvas {
+    width: 100%;
+    height: 320px;
+    background: #121212;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  tr.pick { cursor: pointer; }
+  tr.pick:hover { background: #242424; }
+  #status { color: var(--muted); min-height: 1.2em; }
+  h2 { font-size: 16px; margin: 18px 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Кривые слуха</h1>
+  <p>Список — звуки, которые вызывает сервер, включая моды. Галочка значит, что пики уже заданы. Звук всё равно можно открыть и поправить.</p>
+</header>
+<main>
+  <section>
+    <label for="q">Поиск</label>
+    <input id="q" placeholder="ствол, шаг, файл, скрипт">
+    <label>Звук</label>
+    <div id="list"><div id="spacer"></div></div>
+    <div id="detail"></div>
+    <div class="row">
+      <button id="play" type="button">Слушать</button>
+      <div>
+        <label for="radius">Радиус, м</label>
+        <input id="radius" type="number" min="0" step="0.5" placeholder="не задан">
+      </div>
+    </div>
+    <div class="row">
+      <button id="auto-one" type="button">Авто пики</button>
+      <button id="auto-all" type="button">Авто пики — список</button>
+    </div>
+    <div class="row">
+      <button id="clear" type="button">Убрать пики</button>
+      <button id="revert" type="button">Вернуть из кода</button>
+    </div>
+    <p id="status"></p>
+  </section>
+  <section>
+    <canvas id="view" width="1000" height="320"></canvas>
+    <p class="hint">Серые штрихи — файл, тонкая линия — его громкость. Щелчок ставит пик, перетаскивание двигает, правый щелчок снимает. Авто пики ставит одну точку на удар. Вторая появляется, только если звук затихает и потом начинается заново. Цветная линия — сами пики и их спад, время пика не сдвигается. Серая линия — подъём к следующему пику, только она сглаживает переход.</p>
+    <h2>Параметры по звукам</h2>
+    <div class="row">
+      <button id="copy-one" type="button">Скопировать этот звук</button>
+      <button id="copy-all" type="button">Скопировать всю таблицу</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th></th><th>Звук</th><th>Радиус, м</th><th>Пики, мс / доля</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+</main>
+<audio id="speaker"></audio>
+<script>
+const q = document.getElementById("q");
+const list = document.getElementById("list");
+const spacer = document.getElementById("spacer");
+const detail = document.getElementById("detail");
+const radius = document.getElementById("radius");
+const status = document.getElementById("status");
+const canvas = document.getElementById("view");
+const ctx2d = canvas.getContext("2d");
+
+let sounds = [];
+let byPath = new Map();
+let filtered = [];
+let selected = "";
+let curves = {};
+let imported = {};
+let wave = null;
+let waveUrl = "";
+let drag = null;
+let saveTimer = 0;
+let filterTimer = 0;
+let drawQueued = false;
+const ROW = 26;
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function keyOf(path) { return (path || "").toLowerCase(); }
+
+function currentSound() {
+  return byPath.get(selected) || null;
+}
+
+function hasCurve(sound) {
+  const curve = curves[keyOf(sound.path)];
+  return !!(curve && curve.peaks && curve.peaks.length >= 1);
+}
+
+function applyFilter() {
+  const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) {
+    filtered = sounds;
+  } else {
+    const out = [];
+    for (let i = 0; i < sounds.length; i++) {
+      const blob = sounds[i]._blob;
+      let ok = true;
+      for (let w = 0; w < words.length; w++) {
+        if (blob.indexOf(words[w]) < 0) { ok = false; break; }
+      }
+      if (ok) out.push(sounds[i]);
+    }
+    filtered = out;
+  }
+  list.scrollTop = 0;
+  paintList();
+  status.textContent = "В списке " + filtered.length + " из " + sounds.length;
+}
+
+function paintList() {
+  const total = filtered.length * ROW;
+  spacer.style.height = total + "px";
+  const height = list.clientHeight || 280;
+  const start = Math.max(0, Math.floor(list.scrollTop / ROW) - 2);
+  const end = Math.min(filtered.length, Math.ceil((list.scrollTop + height) / ROW) + 2);
+  const frag = document.createDocumentFragment();
+  for (let i = start; i < end; i++) {
+    const sound = filtered[i];
+    const el = document.createElement("div");
+    el.className = "item" + (sound.path === selected ? " on" : "");
+    el.style.position = "absolute";
+    el.style.top = (i * ROW) + "px";
+    el.style.left = "0";
+    el.style.right = "0";
+    el.textContent = (hasCurve(sound) ? "✓ " : "") + sound.title;
+    el.dataset.path = sound.path;
+    frag.appendChild(el);
+  }
+  spacer.replaceChildren(frag);
+}
+
+function selectPath(path) {
+  selected = path;
+  const index = filtered.findIndex((s) => s.path === path);
+  if (index >= 0) {
+    const top = index * ROW;
+    const bottom = top + ROW;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  }
+  paintList();
+  onPick();
+}
+
+function currentCurve() {
+  const sound = currentSound();
+  if (!sound) return null;
+  return curves[keyOf(sound.path)] || null;
+}
+
+// Same release as GetNoiseHalfLife. The preview treats a full peak as loudness 100.
+const HALF_QUIET = 0.48;
+const HALF_LOUD = 0.16;
+const ATTACK = 0.07;
+
+function attackY(s) {
+  if (s <= 0) return 0;
+  if (s >= 1) return 1;
+  return s * s * (3 - 2 * s);
+}
+
+function halfLife(level) {
+  const t = Math.sqrt(Math.max(0, Math.min(1, level / 100)));
+  return HALF_QUIET + (HALF_LOUD - HALF_QUIET) * t;
+}
+
+function releaseAt(peaks, t) {
+  let best = 0;
+  for (let i = 0; i < peaks.length; i++) {
+    const age = t - peaks[i][0];
+    if (age < 0) continue;
+    const height = peaks[i][1];
+    const y = height * Math.pow(0.5, age / halfLife(height * 100));
+    if (y > best) best = y;
+  }
+  return best > 1 ? 1 : best;
+}
+
+function riseAt(peaks, t) {
+  let best = releaseAt(peaks, t);
+  for (let i = 0; i < peaks.length; i++) {
+    const P = peaks[i][0];
+    let prev = 0;
+    for (let j = 0; j < peaks.length; j++) {
+      const tj = peaks[j][0];
+      if (tj < P && tj > prev) prev = tj;
+    }
+    const origin = P - ATTACK;
+    let clip = prev;
+    if (clip < 0) clip = 0;
+    if (t < origin || t < clip || t > P) continue;
+    const y0 = releaseAt(peaks, origin);
+    const y1 = releaseAt(peaks, P);
+    if (y1 <= y0) continue;
+    const y = y0 + (y1 - y0) * attackY((t - origin) / ATTACK);
+    if (y > best) best = y;
+  }
+  return best > 1 ? 1 : best;
+}
+
+function duration() {
+  const curve = currentCurve();
+  const peaks = curve && curve.peaks;
+  const last = peaks && peaks.length ? peaks[peaks.length - 1][0] : 0;
+  const audio = wave ? wave.dur : 0;
+  return Math.max(0.2, audio, last);
+}
+
+function ensureCurve() {
+  const sound = currentSound();
+  if (!sound) return null;
+  const key = keyOf(sound.path);
+  if (!curves[key] || !curves[key].peaks) {
+    const prev = curves[key] || {};
+    curves[key] = { path: sound.path, radius_m: prev.radius_m != null ? prev.radius_m : null, peaks: prev.peaks || [] };
+  }
+  return curves[key];
+}
+
+function detectPeaks(rms) {
+  if (!rms || rms.length < 2) return [];
+  const idxs = [];
+  for (let i = 0; i < rms.length; i++) {
+    const y = rms[i][1];
+    if (y < 0.15) continue;
+    const prev = i > 0 ? rms[i - 1][1] : -1;
+    const next = i + 1 < rms.length ? rms[i + 1][1] : -1;
+    if (y >= prev && y >= next) idxs.push(i);
+  }
+  const round = (n) => Math.round(n * 1000) / 1000;
+  if (!idxs.length) {
+    let best = 0;
+    for (let i = 1; i < rms.length; i++) if (rms[i][1] > rms[best][1]) best = i;
+    return [[round(rms[best][0]), 1]];
+  }
+  idxs.sort((a, b) => rms[b][1] - rms[a][1]);
+  const kept = [idxs[0]];
+  for (let n = 1; n < idxs.length && kept.length < 4; n++) {
+    const i = idxs[n];
+    const t = rms[i][0];
+    const y = rms[i][1];
+    let separate = true;
+    for (let k = 0; k < kept.length; k++) {
+      const j = kept[k];
+      if (Math.abs(t - rms[j][0]) < 0.18) { separate = false; break; }
+      let valley = Math.min(y, rms[j][1]);
+      const lo = i < j ? i : j;
+      const hi = i < j ? j : i;
+      for (let s = lo; s <= hi; s++) if (rms[s][1] < valley) valley = rms[s][1];
+      if (valley > Math.min(y, rms[j][1]) * 0.35) { separate = false; break; }
+    }
+    if (separate) kept.push(i);
+  }
+  const peaks = [];
+  for (let k = 0; k < kept.length; k++) {
+    const i = kept[k];
+    peaks.push([round(rms[i][0]), round(Math.min(1, rms[i][1]))]);
+  }
+  peaks.sort((a, b) => a[0] - b[0]);
+  return peaks;
+}
+
+function showDetail() {
+  const sound = currentSound();
+  if (!sound) {
+    detail.textContent = "";
+    return;
+  }
+  detail.textContent = sound.title + "\n" + sound.detail;
+  const curve = curves[keyOf(sound.path)];
+  radius.value = curve && curve.radius_m != null ? curve.radius_m : "";
+}
+
+async function loadWave() {
+  wave = null;
+  const sound = currentSound();
+  if (!sound || !sound.path || sound.path.indexOf("script:") === 0) {
+    draw();
+    return;
+  }
+  const res = await fetch("/api/audio?path=" + encodeURIComponent(sound.path));
+  if (!res.ok) {
+    status.textContent = "Файла нет в локальных архивах. Пик поставить можно, дорожки нет.";
+    draw();
+    return;
+  }
+  const bytes = await res.arrayBuffer();
+  if (waveUrl) URL.revokeObjectURL(waveUrl);
+  waveUrl = URL.createObjectURL(new Blob([bytes]));
+  document.getElementById("speaker").src = waveUrl;
+  const audio = await audioCtx.decodeAudioData(bytes.slice(0));
+  wave = measure(audio);
+  draw();
+}
+
+function measure(audio) {
+  const data = audio.getChannelData(0);
+  const buckets = 360;
+  const size = Math.max(1, Math.floor(data.length / buckets));
+  const stride = size > 8 ? 4 : 1;
+  const min = new Float32Array(buckets);
+  const max = new Float32Array(buckets);
+  let peak = 0;
+  for (let i = 0; i < buckets; i++) {
+    let lo = 0;
+    let hi = 0;
+    const a = i * size;
+    const b = Math.min(data.length, a + size);
+    for (let j = a; j < b; j += stride) {
+      const v = data[j];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+      const av = v < 0 ? -v : v;
+      if (av > peak) peak = av;
+    }
+    min[i] = lo;
+    max[i] = hi;
+  }
+  const win = Math.max(1, Math.floor(audio.sampleRate * 0.006));
+  const hop = Math.max(win, Math.floor(data.length / 400));
+  const inner = Math.max(1, Math.floor(win / 32));
+  const rms = [];
+  let rmsPeak = 0;
+  for (let t = 0; t + win <= data.length; t += hop) {
+    let acc = 0;
+    let n = 0;
+    for (let j = t; j < t + win; j += inner) {
+      const v = data[j];
+      acc += v * v;
+      n += 1;
+    }
+    const v = Math.sqrt(acc / n);
+    if (v > rmsPeak) rmsPeak = v;
+    rms.push([t / audio.sampleRate, v]);
+  }
+  if (rmsPeak > 0) {
+    for (const p of rms) p[1] /= rmsPeak;
+  }
+  return { min, max, peak: peak || 1, rms, dur: audio.duration };
+}
+
+let generating = false;
+async function generateAll() {
+  if (generating) return;
+  const list = [];
+  for (let i = 0; i < filtered.length; i++) {
+    const sound = filtered[i];
+    if (sound.path && sound.path.indexOf("script:") !== 0) list.push(sound);
+  }
+  generating = true;
+  let made = 0;
+  for (let i = 0; i < list.length; i++) {
+    status.textContent = "Пики " + (i + 1) + " / " + list.length;
+    try {
+      const measured = await measurePath(list[i].path);
+      if (measured) {
+        const peaks = detectPeaks(measured.rms);
+        if (peaks.length) {
+          applyDetected(list[i], peaks);
+          made += 1;
+        }
+      }
+    } catch (err) {}
+    if ((i + 1) % 15 === 0) {
+      paintList();
+      await save();
+    }
+  }
+  generating = false;
+  scheduleSave();
+  status.textContent = "Пики готовы: " + made + " из " + list.length;
+}
+
+function plotBox() {
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  return { w, h, l: 46, r: 16, t: 16, b: 28 };
+}
+
+function xOf(t, box) {
+  return box.l + (t / duration()) * (box.w - box.l - box.r);
+}
+
+function yOf(v, box) {
+  return box.t + (1 - v) * (box.h - box.t - box.b);
+}
+
+function tOf(x, box) {
+  return ((x - box.l) / (box.w - box.l - box.r)) * duration();
+}
+
+function vOf(y, box) {
+  return 1 - (y - box.t) / (box.h - box.t - box.b);
+}
+
+let canvasW = 0;
+let canvasH = 0;
+let canvasDpr = 0;
+
+function requestDraw() {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => {
+    drawQueued = false;
+    draw();
+  });
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (w !== canvasW || h !== canvasH || dpr !== canvasDpr) {
+    canvasW = w;
+    canvasH = h;
+    canvasDpr = dpr;
+    canvas.width = Math.max(1, Math.floor(w * dpr));
+    canvas.height = Math.max(1, Math.floor(h * dpr));
+  }
+  ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const box = plotBox();
+  ctx2d.clearRect(0, 0, w, h);
+  ctx2d.strokeStyle = "#333";
+  ctx2d.beginPath();
+  ctx2d.moveTo(box.l, yOf(0, box));
+  ctx2d.lineTo(w - box.r, yOf(0, box));
+  ctx2d.moveTo(box.l, box.t);
+  ctx2d.lineTo(box.l, yOf(0, box));
+  ctx2d.stroke();
+  ctx2d.fillStyle = "#8d8d8d";
+  ctx2d.font = "11px Segoe UI";
+  ctx2d.textAlign = "right";
+  for (const v of [0, 0.5, 1]) {
+    ctx2d.fillText(v.toFixed(1), box.l - 6, yOf(v, box) + 4);
+  }
+  ctx2d.textAlign = "center";
+  const dur = duration();
+  for (let i = 0; i <= 4; i++) {
+    const t = dur * i / 4;
+    ctx2d.fillText(t.toFixed(2), xOf(t, box), h - 8);
+  }
+  if (wave) {
+    const n = wave.min.length;
+    const peak = wave.peak;
+    ctx2d.beginPath();
+    ctx2d.strokeStyle = "#3c3c3c";
+    for (let i = 0; i < n; i++) {
+      const x = xOf((i + 0.5) * wave.dur / n, box);
+      ctx2d.moveTo(x, yOf(wave.min[i] / peak, box));
+      ctx2d.lineTo(x, yOf(wave.max[i] / peak, box));
+    }
+    ctx2d.stroke();
+    ctx2d.beginPath();
+    wave.rms.forEach((p, i) => {
+      const x = xOf(p[0], box);
+      const y = yOf(p[1], box);
+      if (i === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    });
+    ctx2d.strokeStyle = "#8a8a8a";
+    ctx2d.stroke();
+  }
+  const curve = currentCurve();
+  const peaks = curve && curve.peaks;
+  if (peaks && peaks.length) {
+    const dur = duration();
+    ctx2d.beginPath();
+    const steps = 100;
+    for (let i = 0; i <= steps; i++) {
+      const t = dur * i / steps;
+      const x = xOf(t, box);
+      const y = yOf(riseAt(peaks, t), box);
+      if (i === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    }
+    ctx2d.strokeStyle = "#9a9a9a";
+    ctx2d.lineWidth = 1.5;
+    ctx2d.stroke();
+    ctx2d.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = dur * i / steps;
+      const x = xOf(t, box);
+      const y = yOf(releaseAt(peaks, t), box);
+      if (i === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    }
+    ctx2d.strokeStyle = "#d7a15a";
+    ctx2d.lineWidth = 2;
+    ctx2d.stroke();
+    ctx2d.lineWidth = 1;
+    for (let i = 0; i < peaks.length; i++) {
+      ctx2d.fillStyle = "#d7a15a";
+      ctx2d.beginPath();
+      ctx2d.arc(xOf(peaks[i][0], box), yOf(peaks[i][1], box), 5, 0, Math.PI * 2);
+      ctx2d.fill();
+    }
+  }
+}
+
+function hit(mx, my) {
+  const curve = currentCurve();
+  const box = plotBox();
+  if (!curve || !curve.peaks) return null;
+  for (let i = curve.peaks.length - 1; i >= 0; i--) {
+    const p = curve.peaks[i];
+    if (Math.hypot(mx - xOf(p[0], box), my - yOf(p[1], box)) < 10) return { index: i };
+  }
+  return null;
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 300);
+  paintList();
+  renderTable();
+  draw();
+}
+
+async function save() {
+  const payload = {};
+  for (const sound of sounds) {
+    const key = keyOf(sound.path);
+    const curve = curves[key];
+    const had = imported[key];
+    if (curve && curve.peaks && curve.peaks.length >= 1) payload[key] = curve;
+    else if (had) payload[key] = { cleared: true };
+  }
+  await fetch("/api/curves", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+function pointerPos(ev) {
+  const rect = canvas.getBoundingClientRect();
+  return [ev.clientX - rect.left, ev.clientY - rect.top];
+}
+
+canvas.addEventListener("pointerdown", (ev) => {
+  if (ev.button !== 0) return;
+  const sound = currentSound();
+  if (!sound) return;
+  const curve = ensureCurve();
+  const box = plotBox();
+  const [x, y] = pointerPos(ev);
+  const found = hit(x, y);
+  if (found) {
+    drag = found;
+  } else {
+    const t = Math.min(duration(), Math.max(0, tOf(x, box)));
+    const v = Math.min(1, Math.max(0, vOf(y, box)));
+    curve.peaks.push([t, v]);
+    drag = { index: curve.peaks.length - 1 };
+  }
+  canvas.setPointerCapture(ev.pointerId);
+  requestDraw();
+});
+
+canvas.addEventListener("pointermove", (ev) => {
+  if (!drag) return;
+  const curve = currentCurve();
+  if (!curve || !curve.peaks[drag.index]) return;
+  const box = plotBox();
+  const [x, y] = pointerPos(ev);
+  const p = curve.peaks[drag.index];
+  p[0] = Math.min(duration(), Math.max(0, tOf(x, box)));
+  p[1] = Math.min(1, Math.max(0, vOf(y, box)));
+  requestDraw();
+});
+
+canvas.addEventListener("pointerup", () => {
+  if (!drag) return;
+  const curve = currentCurve();
+  if (curve && curve.peaks) curve.peaks.sort((a, b) => a[0] - b[0]);
+  drag = null;
+  scheduleSave();
+});
+
+canvas.addEventListener("contextmenu", (ev) => {
+  ev.preventDefault();
+  const curve = currentCurve();
+  if (!curve || !curve.peaks) return;
+  const [x, y] = pointerPos(ev);
+  const found = hit(x, y);
+  if (!found) return;
+  curve.peaks.splice(found.index, 1);
+  scheduleSave();
+});
+
+function applyDetected(sound, peaks) {
+  const key = keyOf(sound.path);
+  const prev = curves[key] || {};
+  curves[key] = {
+    path: sound.path,
+    radius_m: prev.radius_m != null ? prev.radius_m : null,
+    peaks: peaks,
+  };
+}
+
+async function measurePath(path) {
+  const res = await fetch("/api/audio?path=" + encodeURIComponent(path));
+  if (!res.ok) return null;
+  const bytes = await res.arrayBuffer();
+  const audio = await audioCtx.decodeAudioData(bytes.slice(0));
+  return measure(audio);
+}
+
+function fmtPairs(pairs, scale) {
+  if (!pairs) return "";
+  return pairs.map((p) => Math.round(p[0] * scale) + " / " + p[1].toFixed(3)).join(", ");
+}
+
+function luaFor(sound, curve) {
+  const lines = [];
+  lines.push("-- " + (sound ? sound.title : curve.path));
+  lines.push('["' + (curve.path || sound.path) + '"] = {');
+  if (curve.radius_m != null && curve.radius_m !== "") {
+    lines.push("\tRadius = " + Number(curve.radius_m) + " * METRE,");
+  }
+  lines.push("\tPeaks = {");
+  for (const k of curve.peaks) lines.push("\t\t{" + k[0].toFixed(3) + ", " + k[1].toFixed(3) + "},");
+  lines.push("\t},");
+  lines.push("},");
+  return lines.join("\n");
+}
+
+function tuned() {
+  const rows = [];
+  for (const sound of sounds) {
+    const curve = curves[keyOf(sound.path)];
+    if (curve && curve.peaks && curve.peaks.length >= 1) rows.push({ sound, curve });
+  }
+  return rows;
+}
+
+function renderTable() {
+  const body = document.getElementById("rows");
+  body.innerHTML = "";
+  for (const row of tuned()) {
+    const tr = document.createElement("tr");
+    tr.className = "pick";
+    const cells = [
+      "✓",
+      row.sound.title,
+      row.curve.radius_m == null || row.curve.radius_m === "" ? "" : String(row.curve.radius_m),
+      fmtPairs(row.curve.peaks, 1000),
+    ];
+    for (const text of cells) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    tr.addEventListener("click", () => {
+      q.value = "";
+      filtered = sounds;
+      selectPath(row.sound.path);
+    });
+    body.appendChild(tr);
+  }
+}
+
+async function copyText(text) {
+  await navigator.clipboard.writeText(text);
+  status.textContent = "Скопировано.";
+}
+
+function onPick() {
+  showDetail();
+  loadWave();
+  draw();
+}
+
+let listQueued = false;
+list.addEventListener("scroll", () => {
+  if (listQueued) return;
+  listQueued = true;
+  requestAnimationFrame(() => {
+    listQueued = false;
+    paintList();
+  });
+});
+list.addEventListener("click", (ev) => {
+  const item = ev.target.closest(".item");
+  if (!item) return;
+  selectPath(item.dataset.path);
+});
+q.addEventListener("input", () => {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(applyFilter, 80);
+});
+radius.addEventListener("change", () => {
+  const curve = ensureCurve();
+  if (!curve) return;
+  curve.radius_m = radius.value === "" ? null : Number(radius.value);
+  scheduleSave();
+});
+document.getElementById("play").addEventListener("click", async () => {
+  if (audioCtx.state === "suspended") await audioCtx.resume();
+  const speaker = document.getElementById("speaker");
+  speaker.currentTime = 0;
+  speaker.play();
+});
+document.getElementById("auto-one").addEventListener("click", () => {
+  const sound = currentSound();
+  if (!sound || !wave) return;
+  applyDetected(sound, detectPeaks(wave.rms));
+  scheduleSave();
+});
+document.getElementById("auto-all").addEventListener("click", generateAll);
+document.getElementById("clear").addEventListener("click", () => {
+  const sound = currentSound();
+  if (!sound) return;
+  delete curves[keyOf(sound.path)];
+  radius.value = "";
+  scheduleSave();
+});
+document.getElementById("revert").addEventListener("click", () => {
+  const sound = currentSound();
+  if (!sound) return;
+  const key = keyOf(sound.path);
+  const src = imported[key];
+  if (src) curves[key] = JSON.parse(JSON.stringify(src));
+  else delete curves[key];
+  showDetail();
+  scheduleSave();
+});
+document.getElementById("copy-one").addEventListener("click", () => {
+  const sound = currentSound();
+  const curve = currentCurve();
+  if (!sound || !curve || !curve.peaks || curve.peaks.length < 1) return;
+  copyText(luaFor(sound, curve));
+});
+document.getElementById("copy-all").addEventListener("click", () => {
+  const blocks = tuned().map((row) => luaFor(row.sound, row.curve));
+  copyText(blocks.join("\n"));
+});
+window.addEventListener("resize", draw);
+
+async function boot() {
+  const res = await fetch("/api/state");
+  const data = await res.json();
+  sounds = data.sounds;
+  byPath = new Map();
+  for (let i = 0; i < sounds.length; i++) {
+    const sound = sounds[i];
+    sound._blob = (sound.title + "\n" + sound.path + "\n" + sound.group + "\n" + sound.detail).toLowerCase();
+    byPath.set(sound.path, sound);
+  }
+  imported = data.imported || {};
+  curves = data.curves || {};
+  filtered = sounds;
+  let start = sounds[0] ? sounds[0].path : "";
+  for (let i = 0; i < sounds.length; i++) {
+    if (sounds[i].path.toLowerCase().endsWith("player/footsteps/concrete1.wav")) {
+      start = sounds[i].path;
+      break;
+    }
+  }
+  renderTable();
+  status.textContent = "В списке " + sounds.length + " из " + sounds.length;
+  if (start) selectPath(start);
+}
+
+boot();
+</script>
+</body>
+</html>

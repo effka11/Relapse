@@ -56,11 +56,8 @@ end)
 
 local DrawColorModify = DrawColorModify
 local DrawSharpen = DrawSharpen
-local EyePos = EyePos
 local TEAM_HUMAN = TEAM_HUMAN
 local TEAM_UNDEAD = TEAM_UNDEAD
-local render_SetMaterial = render.SetMaterial
-local render_DrawSprite = render.DrawSprite
 local render_SetLightingMode = render.SetLightingMode
 local math_Approach = math.Approach
 local FrameTime = FrameTime
@@ -69,7 +66,6 @@ local math_sin = math.sin
 local math_min = math.min
 local math_max = math.max
 local math_abs = math.abs
-local team_GetPlayers = team.GetPlayers
 
 local FullBright = false
 
@@ -218,51 +214,10 @@ hook.Add("PostDrawTranslucentRenderables", "ZFullBright", GM.FullBrightOn)
 hook.Add("PreDrawViewModel", "ZFullBright", GM.FullBrightOff)
 hook.Add("RenderScreenspaceEffects", "ZFullBright", GM.FullBrightOff)
 
-local matGlow = Material("Sprites/light_glow02_add_noz")
-local colHealthEmpty = GM.AuraColorEmpty
-local colHealthFull = GM.AuraColorFull
-local colHealth = Color(255, 255, 255)
-function GM:DrawHumanIndicators()
-	if MySelf:Team() ~= TEAM_UNDEAD or not self.Auras or self.m_ZombieVision then return end
-
-	local eyepos = EyePos()
-	local range, dist, healthfrac, pos, size
-	for _, pl in pairs(team_GetPlayers(TEAM_HUMAN)) do
-		range = pl:GetAuraRangeSqr()
-		dist = pl:GetPos():DistToSqr(eyepos)
-		if pl:Alive() and dist <= range and (not pl:GetDTBool(DT_PLAYER_BOOL_NECRO) or dist >= 27500) then
-			healthfrac = math_max(pl:Health(), 0) / pl:GetMaxHealth()
-			colHealth.r = math_Approach(colHealthEmpty.r, colHealthFull.r, math_abs(colHealthEmpty.r - colHealthFull.r) * healthfrac)
-			colHealth.g = math_Approach(colHealthEmpty.g, colHealthFull.g, math_abs(colHealthEmpty.g - colHealthFull.g) * healthfrac)
-			colHealth.b = math_Approach(colHealthEmpty.b, colHealthFull.b, math_abs(colHealthEmpty.b - colHealthFull.b) * healthfrac)
-
-			pos = pl:WorldSpaceCenter()
-
-			render_SetMaterial(matGlow)
-			render_DrawSprite(pos, 13, 13, colHealth)
-			size = math_sin(self.HeartBeatTime + pl:EntIndex()) * 50 - 21
-			if size > 0 then
-				render_DrawSprite(pos, size * 1.5, size, colHealth)
-				render_DrawSprite(pos, size, size * 1.5, colHealth)
-			end
-		end
-	end
-end
-
+-- Zombie vision is gone: humans show through hearing (cl_relapse_hearing.lua).
+-- Kept for old callers; it can only switch off.
 function GM:ToggleZombieVision(onoff)
-	if onoff == nil then
-		onoff = not self.m_ZombieVision
-	end
-
-	if onoff then
-		if not self.m_ZombieVision then
-			self.m_ZombieVision = true
-			MySelf:EmitSound("npc/stalker/breathing3.wav", 0, 230)
-		end
-	elseif self.m_ZombieVision then
-		self.m_ZombieVision = nil
-		MySelf:EmitSound("npc/zombie/zombie_pain6.wav", 0, 110)
-	end
+	self.m_ZombieVision = nil
 end
 
 local CModWhiteOut = {

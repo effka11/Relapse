@@ -185,6 +185,11 @@ function GM:BuildReconnectState(pl)
 		resupplyboxusedbyothers = pl.ResupplyBoxUsedByOthers or 0,
 		nestsdestroyed = pl.NestsDestroyed or 0,
 		nestspawns = pl.NestSpawns or 0,
+		sigilscorrupted = pl.SigilsCorrupted or 0,
+		sigilsrestored = pl.SigilsRestored or 0,
+		bosskills = pl.BossKills or 0,
+		meleekills = pl.MeleeKills or 0,
+		redeemedthisround = pl.RedeemedThisRound,
 		wavebarricadedamage = pl.WaveBarricadeDamage or 0,
 		wavehumandamage = pl.WaveHumanDamage or 0,
 		lifebarricadedamage = pl.LifeBarricadeDamage or 0,
@@ -229,6 +234,11 @@ function GM:ApplyReconnectRoundStats(pl, state)
 	pl.ResupplyBoxUsedByOthers = state.resupplyboxusedbyothers or 0
 	pl.NestsDestroyed = state.nestsdestroyed or 0
 	pl.NestSpawns = state.nestspawns or 0
+	pl.SigilsCorrupted = state.sigilscorrupted or 0
+	pl.SigilsRestored = state.sigilsrestored or 0
+	pl.BossKills = state.bosskills or 0
+	pl.MeleeKills = state.meleekills or 0
+	pl.RedeemedThisRound = state.redeemedthisround
 	pl.WaveBarricadeDamage = state.wavebarricadedamage or 0
 	pl.WaveHumanDamage = state.wavehumandamage or 0
 	pl.LifeBarricadeDamage = state.lifebarricadedamage or 0

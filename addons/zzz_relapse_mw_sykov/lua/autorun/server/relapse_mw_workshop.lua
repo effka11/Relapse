@@ -29,3 +29,4 @@ resource.AddWorkshop("2317864856") -- CODMW2019 Alex playermodel
 resource.AddWorkshop("3572296525") -- Metal Gear Solid Δ Snake Eater KGB Unit
 resource.AddWorkshop("3627414330") -- COD MW2019 Russian J-12 playermodel
 resource.AddWorkshop("2929135394") -- Max Payne 3 Tropa Z / Tropa Z 2
+resource.AddWorkshop("2824766377") -- L4D medkit only (replaces c_medkit / w_medkit)

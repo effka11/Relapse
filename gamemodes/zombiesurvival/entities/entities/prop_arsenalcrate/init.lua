@@ -105,6 +105,9 @@ function ENT:Use(activator, caller)
 end
 
 function ENT:AltUse(activator, tr)
+	if activator:Crouching() and GAMEMODE.BeginSupplySell and GAMEMODE:BeginSupplySell(activator, self) then
+		return
+	end
 	self:PackUp(activator)
 end
 

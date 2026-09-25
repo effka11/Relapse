@@ -4,6 +4,7 @@ local P_Team = meta.Team
 local DMG_TAKE_BLEED = DMG_SLASH + DMG_CLUB + DMG_BULLET + DMG_BUCKSHOT + DMG_CRUSH
 function meta:ProcessDamage(dmginfo)
 	if not self:IsValidLivingPlayer() then return end --??? Apparently player was null sometimes on server?
+	self.RelapseBloodReturn = nil
 
 	local attacker, inflictor, dmgtype = dmginfo:GetAttacker(), dmginfo:GetInflictor(), dmginfo:GetDamageType()
 
@@ -55,7 +56,7 @@ function meta:ProcessDamage(dmginfo)
 
 				local bloodrate = GAMEMODE.GetMeleeBloodArmorRate and GAMEMODE:GetMeleeBloodArmorRate(attacker) or (attacker.MeleeDamageToBloodArmorMul or 0)
 				if bloodrate > 0 and attacker:GetBloodArmor() < attacker.MaxBloodArmor then
-					attacker:SetBloodArmor(math.min(attacker.MaxBloodArmor, attacker:GetBloodArmor() + math.min(damage, self:Health()) * bloodrate * (attacker.BloodarmorGainMul or 1)))
+					attacker:SetBloodArmor(math.min(attacker.MaxBloodArmor, attacker:GetBloodArmor() + math.min(damage, self:Health()) * bloodrate * GAMEMODE:GetBloodArmorGainMul(attacker)))
 				end
 
 				if attacker:IsSkillActive(SKILL_HEAVYSTRIKES) and not self:GetZombieClassTable().Boss and (wep.IsFistWeapon and attacker:IsSkillActive(SKILL_CRITICALKNUCKLE) or wep.MeleeKnockBack > 0) then
@@ -221,10 +222,14 @@ function meta:ProcessDamage(dmginfo)
 				end
 			end
 
-			local ratio = 0.5 + self.BloodArmorDamageReductionAdd + (self:IsSkillActive(SKILL_IRONBLOOD) and self:Health() <= self:GetMaxHealth() * 0.5 and 0.25 or 0)
+			local ratio = (GAMEMODE.GetBloodArmorAbsorbRatio and GAMEMODE:GetBloodArmorAbsorbRatio(self) or (0.5 + (self.BloodArmorDamageReductionAdd or 0))) + (self:IsSkillActive(SKILL_IRONBLOOD) and self:Health() <= self:GetMaxHealth() * 0.5 and 0.25 or 0)
 			local absorb = math.min(self:GetBloodArmor(), damage * ratio)
 			dmginfo:SetDamage(damage - absorb)
 			self:SetBloodArmor(self:GetBloodArmor() - absorb)
+			local backRate = GAMEMODE.GetBloodArmorReturnRate and GAMEMODE:GetBloodArmorReturnRate(self) or 0
+			if absorb > 0 and backRate > 0 then
+				self.RelapseBloodReturn = absorb * backRate
+			end
 
 			if attacker:IsValid() and attacker:IsPlayer() then
 				local myteam = attacker:Team()
@@ -253,6 +258,14 @@ function meta:ProcessDamage(dmginfo)
 		self.ShouldFlinch = true
 	end
 end
+
+hook.Add("PostEntityTakeDamage", "RelapseBloodReturn", function(ent)
+	if not ent:IsPlayer() then return end
+	local back = ent.RelapseBloodReturn
+	ent.RelapseBloodReturn = nil
+	if not back or back <= 0 or not ent:Alive() then return end
+	ent:SetHealth(math.min(ent:GetMaxHealth(), ent:Health() + back))
+end)
 
 GM.TrinketRecharges = {
 	reactiveflasher = {"ReactiveFlashMessage", "LastReactiveFlash", "Reactive Flasher", 75},
@@ -919,30 +932,56 @@ function meta:DropAllAmmo()
 	end
 end
 
+function GM:BroadcastResupplyStock(target)
+	net.Start("zs_resupplystock")
+		net.WriteUInt(math.max(0, math.floor(self.ResupplyCharges or 0)), 16)
+		net.WriteFloat(self.ResupplyClock and self.ResupplyNext or 0)
+	if target then
+		net.Send(target)
+	else
+		net.Broadcast()
+	end
+end
+
+function GM:BeginResupplyClock()
+	if self.ResupplyClock then return end
+
+	self.ResupplyCharges = self.ResupplyCharges or 0
+	self.ResupplyNext = CurTime() + (self.ResupplyBoxCooldown or 60)
+	self.ResupplyClock = true
+	self:BroadcastResupplyStock()
+end
+
+function GM:StopResupplyClockIfEmpty()
+	timer.Simple(0, function()
+		if not GAMEMODE or not GAMEMODE.ResupplyClock then return end
+		if #ents.FindByClass("prop_resupplybox") > 0 then return end
+
+		GAMEMODE.ResupplyClock = false
+		GAMEMODE.ResupplyNext = 0
+		GAMEMODE:BroadcastResupplyStock()
+	end)
+end
+
+function GM:TickResupplyStock(time)
+	if not self.ResupplyClock or not self.ResupplyNext then return end
+	if time < self.ResupplyNext then return end
+
+	self.ResupplyCharges = (self.ResupplyCharges or 0) + 1
+	self.ResupplyNext = time + (self.ResupplyBoxCooldown or 60)
+	self:BroadcastResupplyStock()
+end
+
 function meta:Resupply(owner, obj)
-	if GAMEMODE:GetWave() <= 0 then return end
-
-	local stockpiling = self:IsSkillActive(SKILL_STOCKPILE)
-	local stowage = self:IsSkillActive(SKILL_STOWAGE)
-
-	if (stowage and (self.StowageCaches or 0) <= 0) or (not stowage and CurTime() < (self.NextResupplyUse or 0)) then
+	if (GAMEMODE.ResupplyCharges or 0) <= 0 then
 		self:CenterNotify(COLOR_RED, translate.ClientGet(self, "no_ammo_here"))
 		return
 	end
 
-	if not stowage then
-		self.NextResupplyUse = CurTime() + GAMEMODE.ResupplyBoxCooldown * (self.ResupplyDelayMul or 1) * (stockpiling and 2.12 or 1)
+	GAMEMODE.ResupplyCharges = GAMEMODE.ResupplyCharges - 1
+	GAMEMODE:BroadcastResupplyStock()
 
-		net.Start("zs_nextresupplyuse")
-			net.WriteFloat(self.NextResupplyUse)
-		net.Send(self)
-	else
-		self.StowageCaches = self.StowageCaches - 1
-
-		net.Start("zs_stowagecaches")
-			net.WriteInt(self.StowageCaches, 8)
-		net.Send(self)
-	end
+	local stockpiling = self:IsSkillActive(SKILL_STOCKPILE)
 
 	local ammotype = self:GetResupplyAmmoType()
 	local amount = GAMEMODE.AmmoCache[ammotype]
@@ -950,7 +989,7 @@ function meta:Resupply(owner, obj)
 		amount = GAMEMODE:GetResupplyBoxAmmoGive(amount, owner, obj)
 	end
 
-	for i = 1, stockpiling and not stowage and 2 or 1 do
+	for i = 1, stockpiling and 2 or 1 do
 		net.Start("zs_ammopickup")
 			net.WriteUInt(amount, 16)
 			net.WriteString(ammotype)
@@ -1286,6 +1325,7 @@ function meta:Redeem(silent, noequip)
 		net.Broadcast()
 	end
 
+	self.RedeemedThisRound = CurTime()
 	gamemode.Call("PostPlayerRedeemed", self)
 end
 

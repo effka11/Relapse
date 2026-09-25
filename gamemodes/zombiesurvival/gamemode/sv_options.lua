@@ -125,22 +125,6 @@ local function GetMostKey(key, top)
 	end
 end
 
-local function GetMostFunc(func, top)
-	top = top or 0
-	local toppl
-	for _, pl in pairs(player.GetAll()) do
-		local amount = pl[func](pl)
-		if amount > top then
-			top = amount
-			toppl = pl
-		end
-	end
-
-	if toppl and top > 0 then
-		return toppl, top
-	end
-end
-
 GM.HonorableMentions[HM_MOSTZOMBIESKILLED].GetPlayer = function(self)
 	return GetMostKey("ZombiesKilled")
 end
@@ -151,18 +135,6 @@ end
 
 GM.HonorableMentions[HM_MOSTHEADSHOTS].GetPlayer = function(self)
 	return GetMostKey("Headshots")
-end
-
-GM.HonorableMentions[HM_SCARECROW].GetPlayer = function(self)
-	return GetMostKey("CrowKills")
-end
-
-GM.HonorableMentions[HM_DEFENCEDMG].GetPlayer = function(self)
-	return GetMostKey("DefenceDamage")
-end
-
-GM.HonorableMentions[HM_STRENGTHDMG].GetPlayer = function(self)
-	return GetMostKey("StrengthBoostDamage")
 end
 
 GM.HonorableMentions[HM_BARRICADEDESTROYER].GetPlayer = function(self)
@@ -188,21 +160,6 @@ GM.HonorableMentions[HM_GOODDOCTOR].GetPlayer = function(self)
 	return GetMostKey("HealedThisRound")
 end
 
-GM.HonorableMentions[HM_MOSTDAMAGETOUNDEAD].GetPlayer = function(self)
-	local top = 0
-	local toppl
-	for _, pl in pairs(player.GetAll()) do
-		if pl.DamageDealt and pl.DamageDealt[TEAM_HUMAN] > top then
-			top = pl.DamageDealt[TEAM_HUMAN]
-			toppl = pl
-		end
-	end
-
-	if toppl and top >= 1 then
-		return toppl, math.ceil(top)
-	end
-end
-
 GM.HonorableMentions[HM_MOSTDAMAGETOHUMANS].GetPlayer = function(self)
 	local top = 0
 	local toppl
@@ -224,51 +181,6 @@ GM.HonorableMentions[HM_LASTBITE].GetPlayer = function(self)
 	end
 end
 
-GM.HonorableMentions[HM_USEFULTOOPPOSITE].GetPlayer = function(self)
-	local pl, mag = GetMostFunc("Deaths")
-	if mag and mag >= 30 then
-		return pl, mag
-	end
-end
-
-GM.HonorableMentions[HM_PACIFIST].GetPlayer = function(self)
-	if WINNER == TEAM_HUMAN then
-		for _, pl in pairs(player.GetAll()) do
-			if pl.ZombiesKilled == 0 and pl:Team() == TEAM_HUMAN then return pl end
-		end
-	end
-end
-
-GM.HonorableMentions[HM_STUPID].GetPlayer = function(self)
-	local dist = 99999
-	local finalpl
-	for _, pl in pairs(player.GetAll()) do
-		if pl.ZombieSpawnDeathDistance and pl.ZombieSpawnDeathDistance < dist then
-			finalpl = pl
-			dist = pl.ZombieSpawnDeathDistance
-		end
-	end
-
-	if finalpl and dist <= 1000 then
-		return finalpl, math.ceil(dist / 12)
-	end
-end
-
-GM.HonorableMentions[HM_OUTLANDER].GetPlayer = function(self)
-	local dist = 0
-	local finalpl
-	for _, pl in pairs(player.GetAll()) do
-		if pl.ZombieSpawnDeathDistance and dist < pl.ZombieSpawnDeathDistance then
-			finalpl = pl
-			dist = pl.ZombieSpawnDeathDistance
-		end
-	end
-
-	if finalpl and 8000 <= dist then
-		return finalpl, math.ceil(dist / 12)
-	end
-end
-
 GM.HonorableMentions[HM_SALESMAN].GetPlayer = function(self)
 	return GetMostKey("PointsCommission")
 end
@@ -283,4 +195,35 @@ end
 
 GM.HonorableMentions[HM_NESTMASTER].GetPlayer = function(self)
 	return GetMostKey("NestSpawns")
+end
+
+GM.HonorableMentions[HM_SIGILCORRUPT].GetPlayer = function(self)
+	return GetMostKey("SigilsCorrupted")
+end
+
+GM.HonorableMentions[HM_SIGILRESTORE].GetPlayer = function(self)
+	return GetMostKey("SigilsRestored")
+end
+
+GM.HonorableMentions[HM_BOSSKILL].GetPlayer = function(self)
+	return GetMostKey("BossKills")
+end
+
+-- One panic swing is not the hunt.
+GM.HonorableMentions[HM_MELEEKILLS].GetPlayer = function(self)
+	return GetMostKey("MeleeKills", 4)
+end
+
+GM.HonorableMentions[HM_REDEEMED].GetPlayer = function(self)
+	local best, when
+	for _, pl in pairs(player.GetAll()) do
+		local at = pl.RedeemedThisRound
+		if at and pl:Team() == TEAM_HUMAN and (not when or at > when) then
+			best = pl
+			when = at
+		end
+	end
+	if best then
+		return best
+	end
 end

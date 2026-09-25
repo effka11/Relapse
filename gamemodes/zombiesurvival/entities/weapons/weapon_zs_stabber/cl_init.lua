@@ -56,6 +56,9 @@ function SWEP:CalcViewModelView(vm, oldpos, oldang, pos, ang)
 		local offset = self.SwingOffset
 		local armdelay = owner:GetMeleeSpeedMul()
 		local swingtime = self.SwingTime * (owner.MeleeSwingDelayMul or 1) * armdelay
+		if GAMEMODE and GAMEMODE.GetMeleeWindupTimeMul then
+			swingtime = swingtime * GAMEMODE:GetMeleeWindupTimeMul(owner, self)
+		end
 
 		ang = Angle(ang.pitch, ang.yaw, ang.roll) -- Copy
 

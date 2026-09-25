@@ -1,7 +1,7 @@
-SWEP.PrintName = "Оружейный станок"
+SWEP.PrintName = "Станок"
 SWEP.TranslationName = "wep_remantler"
 SWEP.TranslationDescription = "wep_remantler_desc"
-SWEP.Description = "A workshop box. It takes guns apart for scrap, and puts scrap back into better ones. Trinkets too."
+SWEP.Description = "Breaks gear into scrap and builds it back better: guns, melee, devices, and tools. Trinkets too."
 
 SWEP.ViewModel = "models/weapons/v_pistol.mdl"
 SWEP.WorldModel = Model("models/props_lab/powerbox01a.mdl")
@@ -23,6 +23,13 @@ SWEP.MaxStock = 5
 
 SWEP.WalkSpeed = SPEED_NORMAL
 SWEP.FullWalkSpeed = SPEED_SLOWEST
+
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_remantler3.png"
+
+if CLIENT then
+	killicon.Add("weapon_zs_remantler", "zombiesurvival/killicons/weapon_zs_remantler3.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_remantler3.png")
+end
 
 function SWEP:Initialize()
 	self:SetWeaponHoldType("slam")

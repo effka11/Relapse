@@ -61,7 +61,10 @@ end
 function GM:RegisterZombieClass(name, tab)
 	local gm = GAMEMODE or GM
 
-	if tab.Wave then tab.Wave = math.floor(tab.Wave * self.NumberOfWaves) end
+	-- Authored as a fraction of 6 (`2/6` = wave 2). A shorter match clamps the finale roster onto the last wave.
+	if tab.Wave then
+		tab.Wave = math.min(math.floor(tab.Wave * 6), self.NumberOfWaves)
+	end
 	table.insert(gm.ZombieClasses, tab)
 	tab.Index = #gm.ZombieClasses
 	if CLIENT then

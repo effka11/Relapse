@@ -280,11 +280,6 @@ hook.Add("PostDrawTranslucentRenderables", "RelapseLadderHint", function(depth, 
 	cam.IgnoreZ(false)
 end)
 
-hook.Remove("Think", "RelapseLadderStepHint")
-if RelapseHint and RelapseHint.Registry and RelapseHint.Registry.ladder_step then
-	RelapseHint.Registry.ladder_step:Hide()
-end
---[[ Step-off HUD hint (E onto a landing). Leave is jump toward the camera.
 hook.Add("Think", "RelapseLadderStepHint", function()
 	if not RelapseHint then return end
 	local hint = RelapseHint.New("ladder_step")
@@ -306,4 +301,3 @@ hook.Add("Think", "RelapseLadderStepHint", function()
 		hint:Hide()
 	end
 end)
-]]

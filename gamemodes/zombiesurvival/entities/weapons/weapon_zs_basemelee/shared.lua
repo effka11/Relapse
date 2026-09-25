@@ -160,7 +160,11 @@ function SWEP:StartSwinging()
 	if GAMEMODE and GAMEMODE.GetMeleeAttackDelayMul then
 		delayMul = GAMEMODE:GetMeleeAttackDelayMul(owner, self)
 	end
-	self:SetSwingEnd(CurTime() + self.SwingTime * delayMul)
+	local windup = 1
+	if GAMEMODE and GAMEMODE.GetMeleeWindupTimeMul then
+		windup = GAMEMODE:GetMeleeWindupTimeMul(owner, self)
+	end
+	self:SetSwingEnd(CurTime() + self.SwingTime * delayMul * windup)
 end
 
 function SWEP:DoMeleeAttackAnim()

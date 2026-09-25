@@ -114,7 +114,6 @@ function PANEL:PerformLayout()
 	self:RefreshSize()
 	local pad = self.RelapsePad or RelapseUI.Grid15(3)
 	local gap = self.RelapseGap or RelapseUI.Grid15()
-	local bar = RelapseUI.ScrollBarW() + RelapseUI.ScrollGap()
 	local inner = math.max(1, self:GetWide() - pad * 2)
 
 	local total = 0
@@ -137,11 +136,9 @@ function PANEL:PerformLayout()
 	if alignInv then
 		maxH = math.min(maxH, frame:GetTall())
 	end
-	local needScroll = total + pad * 2 > maxH
 	local hei = math.min(maxH, total + pad * 2)
 	if alignInv then
 		hei = frame:GetTall()
-		needScroll = total + pad * 2 > hei
 	else
 		hei = math.max(RelapseUI.Grid15(8), hei)
 	end
@@ -165,7 +162,7 @@ function PANEL:PerformLayout()
 		self.Canvas:SetSize(self:GetWide(), self:GetTall())
 	end
 
-	local itemW = needScroll and math.max(1, inner - bar) or inner
+	local itemW = inner
 	local y = pad
 	for _, item in ipairs(visible) do
 		item:SetWide(itemW)

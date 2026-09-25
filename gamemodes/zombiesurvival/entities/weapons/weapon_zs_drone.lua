@@ -81,7 +81,7 @@ end
 
 function SWEP:PrimaryAttack()
 	if not self:CanPrimaryAttack() then return end
-	self:SetNextPrimaryFire(CurTime() + self.Primary.Delay)
+	self:SetNextPrimaryFire(CurTime() + GAMEMODE:GetDevicePlaceDelay(self:GetOwner(), self, self.Primary.Delay))
 
 	local owner = self:GetOwner()
 	self:SendWeaponAnim(ACT_VM_THROW)

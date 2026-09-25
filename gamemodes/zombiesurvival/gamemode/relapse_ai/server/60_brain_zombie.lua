@@ -45,6 +45,14 @@ Brain.DeathClasses = {"Zombie", "Ghoul"}
 
 local HUNT_MEMORY = 5 -- seconds to chase a lost target's last known position
 local SIGIL_REEVAL = 5
+-- Already at a sigil (through the door, not still crossing the map). A human
+-- this much farther than that sigil does not pull the bot off it: a teleport
+-- to the far sigil used to turn the whole horde around.
+local SIGIL_COMMIT = 400
+local SIGIL_PULL = 250
+-- A human or a live sigil within this Z is still on the surface we stand on.
+-- A storey down (the pit under the east ledge) is not.
+local FLOOR_BAND = 48
 local HOPELESS_SIGIL_COOLDOWN = 30
 local HOPELESS_HUMAN_COOLDOWN = 10
 -- Same human, still on an island we have no edge to. Walking back to the cliff
@@ -204,9 +212,26 @@ local function PickSigil(bot, bb, now)
 	return best
 end
 
+-- Inside the commit ball, a far human does not pull us off the sigil. Already
+-- walking to it: one step that leaves the ball is not a release. The ledge
+-- corner did that every half second — the sigil route stepped out to 415,
+-- hunt won, the player route stepped back inside 400, and two bots paced.
+local function SigilHolds(sigilDist, humanDist, holding)
+	if not (sigilDist and humanDist) then return false end
+	if humanDist <= sigilDist + SIGIL_PULL then return false end
+	if holding then return true end
+	return sigilDist <= SIGIL_COMMIT
+end
+
 local function ScoreIntents(bot, bb, senses, now)
 	local best, bestScore, data = "wander", 5, nil
 	local mem = bot.Memory
+	local sigil = PickSigil(bot, bb, now)
+	local sigilDist
+	if sigil then
+		sigilDist = bot.Player:GetPos():Distance(sigil:GetPos())
+	end
+	local holding = bb.Intent == "sigil"
 
 	for _, c in ipairs(senses) do
 		if c.Visible then
@@ -229,8 +254,9 @@ local function ScoreIntents(bot, bb, senses, now)
 				ignore = nil
 			end
 
-			if not ignore then
-				-- Distance is a tie-break only: a far human still beats a sigil.
+			if not ignore and not SigilHolds(sigilDist, math.sqrt(c.Dist2), holding) then
+				-- Distance only trims the score. A human in the same room still
+				-- beats the sigil; one a teleport away does not, once we are there.
 				local score = 80 - math.min(25, math.sqrt(c.Dist2) / 400)
 				if ent == bb.Target then score = score + 12 end
 				if mem.LastAttacker == ent and now - (mem.LastAttackTime or 0) < 6 then score = score + 20 end
@@ -243,7 +269,8 @@ local function ScoreIntents(bot, bb, senses, now)
 
 	if best ~= "hunt" then
 		local m = Percep.BestMemory(bot)
-		if m and now - m.Time <= HUNT_MEMORY and not bb.IgnoreHumans[m.Ent] then
+		local memDist = m and bot.Player:GetPos():Distance(m.Pos)
+		if m and now - m.Time <= HUNT_MEMORY and not bb.IgnoreHumans[m.Ent] and not SigilHolds(sigilDist, memDist, holding) then
 			local score = 55 - (now - m.Time) * 6
 			if bb.Intent == "search" then score = score + 8 end
 			if score > bestScore then
@@ -252,7 +279,6 @@ local function ScoreIntents(bot, bb, senses, now)
 		end
 	end
 
-	local sigil = PickSigil(bot, bb, now)
 	if sigil then
 		local score = 40
 		if bb.Intent == "sigil" then score = score + 8 end
@@ -264,12 +290,46 @@ local function ScoreIntents(bot, bb, senses, now)
 	return best, data
 end
 
+-- A living human or an uncorrupted sigil on this surface. The world cache is
+-- already the living set.
+local function SurfaceHasTarget(pl)
+	local z = pl:GetPos().z
+	local humans = Percep.World.Humans
+	for i = 1, #humans do
+		local h = humans[i]
+		if IsValid(h) and math.abs(h:GetPos().z - z) <= FLOOR_BAND then
+			return true
+		end
+	end
+	local sigils = Percep.World.Sigils
+	for i = 1, #sigils do
+		local s = sigils[i]
+		if IsValid(s) and math.abs(s:GetPos().z - z) <= FLOOR_BAND then
+			return true
+		end
+	end
+	return false
+end
+
 -- Locomotion gave up on the current goal (no path, a path that ends short and
 -- we stood at its end, or stuck three times): drop that goal for a while so the
 -- next ScoreIntents picks something else. The mesh already carries shafts and
 -- drops, so "he is above us" is not a reason to keep pushing the same request.
+-- A one-way drop keeps the pit on the same island, so the path ends on the pit
+-- floor and never arrives. No human and no sigil on that floor: die and respawn
+-- instead of standing there. A path that does arrive is a stuck body, not an
+-- empty floor.
 local function HandleHopeless(bot, bb, intent, data, now)
 	local loco = bot.Loco
+	local pl = bot.Player
+	local classtab = pl:GetZombieClassTable()
+	if pl:Alive() and not bb.Suicide and not (classtab and classtab.Boss)
+		and not loco.PathReached and not SurfaceHasTarget(pl) then
+		bb.Suicide = true
+		loco:Note("suicide")
+		pl:Kill()
+		return
+	end
 	if intent == "hunt" and IsValid(data) then
 		local mine = CellAt(bot.Player:GetPos())
 		local theirs = CellAt(data:GetPos())

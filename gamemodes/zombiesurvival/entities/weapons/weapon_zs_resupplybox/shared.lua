@@ -4,7 +4,10 @@ SWEP.TranslationDescription = "wep_resupplybox_desc"
 SWEP.Description = "A resupply crate. It hands out rounds for whatever you are holding. Not often, and not for everyone at once."
 
 SWEP.ViewModel = "models/weapons/v_pistol.mdl"
-SWEP.WorldModel = Model("models/Items/ammocrate_ar2.mdl")
+SWEP.WorldModel = Model("models/ammo/fas2/ammocrate.mdl")
+SWEP.RelapsePreviewSequence = "Open"
+SWEP.RelapsePreviewCycle = 1
+SWEP.RelapsePreviewScale = 0.75
 
 SWEP.AmmoIfHas = true
 
@@ -24,6 +27,13 @@ SWEP.WalkSpeed = SPEED_NORMAL
 SWEP.FullWalkSpeed = SPEED_SLOWEST
 
 SWEP.NoDeploySpeedChange = true
+
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_resupplybox2.png"
+
+if CLIENT then
+	killicon.Add("weapon_zs_resupplybox", "zombiesurvival/killicons/weapon_zs_resupplybox2.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_resupplybox2.png")
+end
 
 function SWEP:Initialize()
 	self:SetWeaponHoldType("slam")

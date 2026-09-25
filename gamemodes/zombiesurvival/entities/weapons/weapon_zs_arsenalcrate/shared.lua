@@ -25,6 +25,13 @@ SWEP.FullWalkSpeed = SPEED_SLOWEST
 
 SWEP.NoDeploySpeedChange = true
 
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_arsenalcrate3.png"
+
+if CLIENT then
+	killicon.Add("weapon_zs_arsenalcrate", "zombiesurvival/killicons/weapon_zs_arsenalcrate3.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_arsenalcrate3.png")
+end
+
 function SWEP:Initialize()
 	self:SetWeaponHoldType("slam")
 	self:SetDeploySpeed(10)

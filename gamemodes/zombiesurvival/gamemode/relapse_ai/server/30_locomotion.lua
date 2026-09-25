@@ -13,9 +13,11 @@
 --
 -- Think only calls these. A new condition belongs in the layer function, not
 -- in a new branch of Think.
---   obstacles   breakables in the way: E on an unlocked door, then claws; a
---               nailed prop is clawed at once; anything else first asks the
---               mesh for a detour (DetourWait), then claws
+--   obstacles   breakables in the way: E on an unlocked door from outside the
+--               swing, and they stay there until the leaf has stopped (walking
+--               in while it still moves shoves the body off the hole); a locked
+--               door is claws; a nailed prop is clawed at once; anything else
+--               first asks the mesh for a detour (DetourWait), then claws
 --   stuck       no progress for StuckTime -> escalate: hop, sidestep, mark, episode
 --
 -- Every decision that is not steering writes a Note. The recorder turns some of
@@ -28,6 +30,10 @@
 --   prop:around prop:past giveup:<class>
 --   ladder:approach ladder:mount ladder:climb ladder:leave ladder:done
 --   ladder:abort:<approach|mount|stall|fell|leave|unplanned>
+--   suicide    hopeless, this floor has no living human and no living sigil
+-- solid is a recorder bug, not a note: the hull started inside a solid a player
+-- body does not pass. IgnoreTraces, passable groups and ShouldNotCollide(player)
+-- are not that (the sigil prop blocker).
 
 local AI = RelapseAI
 local Loco = {}
@@ -884,9 +890,26 @@ local function ObstacleHealth(ent)
 	return ent:Health()
 end
 
+-- Opening is not a clear hole. Passable flips the moment the leaf moves;
+-- stepping in then meets the swing and the leaf shoves the body off the opening.
+local function DoorStillMoving(door)
+	local class = door:GetClass()
+	if class == "prop_door_rotating" then
+		local st = door.GetInternalVariable and door:GetInternalVariable("m_eDoorState")
+		return st == 1
+	end
+	if class == "func_door" or class == "func_door_rotating" then
+		local st = door.GetInternalVariable and door:GetInternalVariable("m_toggle_state")
+		return st == 2
+	end
+	return false
+end
+
 -- Is the leaf still across the walk chord? State can say closed after the leaf
--- has swung; the chord is the truth.
+-- has swung; the chord is the truth. A leaf that is still moving blocks even
+-- when the chord already misses the hole it left.
 function Loco:DoorBlocks(door, pos)
+	if DoorStillMoving(door) then return true end
 	local Mesh = AI.Mesh
 	if not (Mesh and Mesh.DoorwayOpen) then return true end
 	local id = door:EntIndex()
@@ -916,21 +939,67 @@ function Loco:DoorCleared(door)
 	self.NextRepath = 0
 end
 
--- Unlocked prop door in our way: E opens it. The brain aims at the obstacle,
--- so the engine's use trace finds the leaf.
+-- Outside a leaf's swing. A shut door is a thin box; open, it sweeps about its
+-- own length. Claws close that gap and the moving leaf shoves the body off the hole.
+local DOOR_STAND = 72
+
+local function DoorStandPoint(self, door, pos)
+	local c = door:WorldSpaceCenter()
+	local sx, sy = self.DoorSideX, self.DoorSideY
+	if not sx then
+		local dx, dy = pos.x - c.x, pos.y - c.y
+		local len = math_sqrt(dx * dx + dy * dy)
+		if len < 1 then
+			sx, sy = 1, 0
+		else
+			sx, sy = dx / len, dy / len
+		end
+	end
+	return c.x + sx * DOOR_STAND, c.y + sy * DOOR_STAND
+end
+
+-- Unlocked prop door in our way: E opens it, once we are standing clear of the
+-- swing and looking at the leaf.
 function Loco:TryUseDoor(pos, now)
 	local door = self.Obstacle
 	if not IsValid(door) or door:GetClass() ~= "prop_door_rotating" then return end
-	if now < self.NextDoorUse then return end
 	if door.IsDoorLocked and door:IsDoorLocked() then return end
+	if not self:DoorBlocks(door, pos) then return end
+	self.ObstacleSeen = now
+	-- The hunt still looks at the player. Use traces the eyes, so the head
+	-- has to be on the leaf or E hits whatever is behind it.
+	local view = self.Bot and self.Bot.View
+	local eye = self.Player:EyePos()
+	local aim = door:NearestPoint(eye)
+	if view then
+		view:SetOverride(aim)
+		if view:AngleTo(aim) > 25 then return end
+	end
+	local sx, sy = DoorStandPoint(self, door, pos)
+	local dx, dy = sx - pos.x, sy - pos.y
+	if dx * dx + dy * dy > 20 * 20 then return end
+	if now < self.NextDoorUse then return end
 	local classtab = self.Player.GetZombieClassTable and self.Player:GetZombieClassTable()
 	if classtab and classtab.NoUse then return end
-	local eye = self.Player:EyePos()
-	local near = door:NearestPoint(eye)
+	local near = aim
 	if near:DistToSqr(eye) > self.P.DoorUseDist * self.P.DoorUseDist then return end
 	self.NextDoorUse = now + self.P.DoorUseInterval
 	self:PressUse()
 	self:Note("door:use")
+end
+
+-- Wish toward the stand point while an unlocked leaf still fills the hole.
+-- Zero once there: the path chord runs through the leaf, and walking it means
+-- the swing meets the body.
+function Loco:OpenDoorWish(pos, wx, wy)
+	local door = self.Obstacle
+	if not IsValid(door) or not Loco.DoorOpenable(door) then return wx, wy end
+	if not self:DoorBlocks(door, pos) then return wx, wy end
+	local sx, sy = DoorStandPoint(self, door, pos)
+	local dx, dy = sx - pos.x, sy - pos.y
+	local len = math_sqrt(dx * dx + dy * dy)
+	if len < 12 then return 0, 0 end
+	return dx / len, dy / len
 end
 
 -- Pad just outside the footprint. A pad into a brush is skipped.
@@ -973,10 +1042,13 @@ function Loco:LoosePropExit(ent)
 end
 
 -- Unnailed physics we are standing on: hop off, never punch the floor.
+-- Frozen is a platform (a pallet laid as floor). Hopping lands on it again.
 function Loco:OnLooseProp()
 	local g = self.Player:GetGroundEntity()
 	if not IsValid(g) or g:IsWorld() then return nil end
 	if g.IsNailed and g:IsNailed() then return nil end
+	local phys = g.GetPhysicsObject and g:GetPhysicsObject()
+	if IsValid(phys) and not phys:IsMotionEnabled() then return nil end
 	if IsPhysicsPropClass(g:GetClass()) and g:GetMoveType() == MOVETYPE_VPHYSICS then
 		return g
 	end
@@ -1042,12 +1114,30 @@ function Loco:SetObstacle(ent, loose, hitPos)
 		self.ObstacleMarked = nil
 		self.DetourUntil = 0
 		self.NextDoorUse = 0
+		if not (IsDoor(ent) and Loco.DoorOpenable(ent)) then
+			self.DoorSideX, self.DoorSideY = nil, nil
+			local view = self.Bot and self.Bot.View
+			if view then view:ClearOverride() end
+		end
 
 	local Nav = AI.Nav
 		local door = IsDoor(ent)
 		if door then
-			-- The graph already prices a shut leaf; a detour, if any, was taken.
-			self:Note("break:" .. ent:GetClass())
+			if Loco.DoorOpenable(ent) then
+				-- Remember the side we walked in from. The swing meets that side.
+				local c = ent:WorldSpaceCenter()
+				local p = self.Player:GetPos()
+				local dx, dy = p.x - c.x, p.y - c.y
+				local len = math_sqrt(dx * dx + dy * dy)
+				if len < 1 then
+					self.DoorSideX, self.DoorSideY = 1, 0
+				else
+					self.DoorSideX, self.DoorSideY = dx / len, dy / len
+				end
+			else
+				-- The graph already prices a shut leaf; a detour, if any, was taken.
+				self:Note("break:" .. ent:GetClass())
+			end
 		else
 			local penalty = loose and (Nav.Penalty.Prop or 450) or Nav.Penalty.Barricade
 			local duration = loose and 15 or self.P.BarricadeMark
@@ -1084,7 +1174,10 @@ function Loco:ClearObstacle(unmark)
 	self.Obstacle = nil
 	self.ObstacleMarked = nil
 	self.ObstacleLoose = false
+	self.DoorSideX, self.DoorSideY = nil, nil
 	self.DetourUntil = 0
+	local view = self.Bot and self.Bot.View
+	if view then view:ClearOverride() end
 end
 
 -- What the brain should break right now, or nil. Also the place where an
@@ -1166,6 +1259,12 @@ function Loco:GetObstacle()
 	-- Still waiting to hear whether there is a way around it.
 	if self.DetourUntil > now then return nil end
 
+	-- Unlocked: E from outside the swing. Claws walk into the leaf and it pushes back.
+	if IsDoor(ent) and Loco.DoorOpenable(ent) then
+		local classtab = self.Player.GetZombieClassTable and self.Player:GetZombieClassTable()
+		if not (classtab and classtab.NoUse) then return nil end
+	end
+
 	if self.ObstacleMarked and now >= self.NextMark then
 		local Nav = AI.Nav
 		if self.ObstacleLoose then
@@ -1215,7 +1314,7 @@ local function ConsiderHit(self, tr, dist, accept)
 end
 
 -- Step around a loose prop when a lane beside it is open.
-function Loco:TrySidestepAround(pos, dx, dy)
+function Loco:TrySidestepAround(pos, dx, dy, ent)
 	if CurTime() < self.SideStepUntil then return false end
 	SetProbeContext(self)
 	local rx, ry = -dy, dx
@@ -1232,7 +1331,9 @@ function Loco:TrySidestepAround(pos, dx, dy)
 			local g = util_TraceLine(groundTrace)
 			if g.Hit and math_abs(g.HitPos.z - pos.z) < 40 then
 				self:SideStepFor(0.55, s)
+				self.NoteFocus = ent
 				self:Note("prop:around")
+				self.NoteFocus = nil
 				return true
 			end
 		end
@@ -1311,7 +1412,7 @@ function Loco:ProbeObstacle(pos, dx, dy, dist, accept)
 
 	local hitEnt = (chest.Hit and chest.Entity) or (knee.Hit and knee.Entity)
 	local _, loose = Loco.IsBreakable(hitEnt)
-	if loose and self:TrySidestepAround(pos, dx, dy) then
+	if loose and self:TrySidestepAround(pos, dx, dy, hitEnt) then
 		return nil
 	end
 
@@ -2023,6 +2124,13 @@ function Loco:WatchStuck(pos, now)
 
 	self:ProbeObstacle(pos)
 
+	-- Standing out of an unlocked door's swing is the open, not a stuck.
+	local waitDoor = self.Obstacle
+	if IsValid(waitDoor) and Loco.DoorOpenable(waitDoor) and self:DoorBlocks(waitDoor, pos) then
+		self.ProgressTime = now
+		return
+	end
+
 	-- Horizontal progress only: hopping in place under a ledge is not progress.
 	local px, py = pos.x - self.ProgressPos.x, pos.y - self.ProgressPos.y
 	if px * px + py * py > P.ProgressDist * P.ProgressDist then
@@ -2140,20 +2248,22 @@ function Loco:Step(cmd, viewYaw, dt)
 	local wx, wy = target.x - pos.x, target.y - pos.y
 	local len = math_sqrt(wx * wx + wy * wy)
 	if len < 1 then
-				self.WishDir:Zero()
-			return buttons
+		wx, wy = 0, 0
+	else
+		wx, wy = wx / len, wy / len
 	end
-	wx, wy = wx / len, wy / len
 	self.PathDir.x, self.PathDir.y = wx, wy
 
 	if now < self.SideStepUntil then
 		local s = self.SideStep
 		wx, wy = -wy * s, wx * s
-	elseif pl:IsOnGround() then
+	elseif pl:IsOnGround() and len >= 1 then
 		wx, wy = self:Slide(pos, wx, wy, target, now)
 	end
 	-- Airborne: push the way the path goes. A hop over a curb needs the body
 	-- to keep pressing into it; the engine does its own sliding up there.
+	-- An unlocked door replaces this: stand clear of the swing, then E.
+	wx, wy = self:OpenDoorWish(pos, wx, wy)
 
 	self.WishDir.x, self.WishDir.y = wx, wy
 	if now < self.JumpUntil then

@@ -59,6 +59,9 @@ function SWEP:GetViewModelPosition(pos, ang)
 		if GAMEMODE and GAMEMODE.GetMeleeAttackDelayMul then
 			swingtime = self.SwingTime * GAMEMODE:GetMeleeAttackDelayMul(owner, self)
 		end
+		if GAMEMODE and GAMEMODE.GetMeleeWindupTimeMul then
+			swingtime = swingtime * GAMEMODE:GetMeleeWindupTimeMul(owner, self)
+		end
 
 		ang = Angle(ang.pitch, ang.yaw, ang.roll) -- Copy
 

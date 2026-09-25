@@ -22,7 +22,10 @@ function ENT:Think()
 		local aimvec = owner:GetAimVector()
 		local point = pack:NearestPoint(eyepos)
 		local dist = point:DistToSqr(eyepos)
-		if owner:CompensatedMeleeTrace(64, 4, nil, nil, nil, true).Entity == pack or ((dist <= 64 or (point - eyepos):GetNormalized():Dot(aimvec) >= 0.75) and dist <= 4096 and WorldVisible(aimvec, point)) then
+		local traced = owner:CompensatedMeleeTrace(64, 4, nil, nil, nil, true).Entity
+		-- Resupply is packed as the model, but the swing hits its solid box.
+		local onPack = traced == pack or (traced:IsValid() and traced.Crate == pack)
+		if onPack or ((dist <= 64 or (point - eyepos):GetNormalized():Dot(aimvec) >= 0.75) and dist <= 4096 and WorldVisible(eyepos, point)) then
 			if not self:GetNotOwner() and pack.GetObjectOwner then
 				local packowner = pack:GetObjectOwner()
 				if packowner:IsValid() and packowner:Team() == TEAM_HUMAN and packowner ~= packer and not gamemode.Call("PlayerIsAdmin", packer) then
@@ -30,7 +33,28 @@ function ENT:Think()
 				end
 			end
 
+			if self:GetSupplySell() and not packer:Crouching() then
+				packer:EmitSound("items/medshotno1.wav")
+				self.Removing = true
+				self:Remove()
+				self:NextThink(CurTime())
+				return true
+			end
+
 			if CurTime() >= self:GetEndTime() then
+				if self:GetSupplySell() then
+					local packer = self:GetOwner()
+					if GAMEMODE.CompleteSupplySell and GAMEMODE:CompleteSupplySell(packer, pack) then
+						packer:EmitSound("items/ammocrate_close.wav")
+					else
+						packer:EmitSound("items/medshotno1.wav")
+					end
+					self.Removing = true
+					self:Remove()
+					self:NextThink(CurTime())
+					return true
+				end
+
 				if self:GetNotOwner() then
 					local count = 0
 					for _, ent in pairs(ents.FindByClass("status_packup")) do

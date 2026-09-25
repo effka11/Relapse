@@ -13,6 +13,9 @@ local function PhraseF(key, ...)
 	return RelapseUI.TF(key, ...)
 end
 
+local CHAR_PAGE_GRID = 1
+local CHAR_PAGE_SCARS = 2
+
 ---------------------------------------------------------------------------
 -- Character stat tip
 ---------------------------------------------------------------------------
@@ -31,7 +34,8 @@ local GRID_STAT_SKIP = {
 	ArsenalRivalOthers = true,
 	ArsenalRivalSelf = true,
 	ArsenalBreakPoints = true,
-	ArsenalMonopoly = true
+	ArsenalMonopoly = true,
+	SupplySell = true
 }
 
 local GRID_STAT_INFO = {
@@ -39,28 +43,45 @@ local GRID_STAT_INFO = {
 	Recoil = { key = "recoil", name = "char_stat_recoil", fallback = "Recoil", kind = "pct" },
 	Deploy = { key = "deploy", name = "char_stat_deploy", fallback = "Deploy speed", kind = "pct" },
 	Repair = { key = "repair", name = "char_stat_repair", fallback = "Repair rate", kind = "pct" },
+	RepairPerNail = { key = "repairpernail", name = "char_stat_repairpernail", fallback = "Repair per own nail", kind = "pct" },
+	Phase = { key = "phase", name = "char_stat_phase", fallback = "Barricade phase speed", kind = "pct" },
 	DeviceHealth = { key = "devicehealth", name = "char_stat_devicehealth", fallback = "Device durability", kind = "pct" },
+	DeviceHandle = { key = "devicehandle", name = "char_stat_devicehandle", fallback = "Device setup speed", kind = "pct" },
+	TurretFire = { key = "turretfire", name = "char_stat_turretfire", fallback = "Turret attack speed", kind = "pct" },
+	GunFire = { key = "gunfire", name = "char_stat_gunfire", fallback = "Fire rate", kind = "pct" },
+	RangedShop = { key = "rangedshop", name = "char_stat_rangedshop", fallback = "Ranged weapon discount", kind = "pct" },
+	SupplyHandle = { key = "supplyhandle", name = "char_stat_supplyhandle", fallback = "Supply setup speed", kind = "pct" },
 	ResupplyAmmo = { key = "crateammo", name = "char_stat_crateammo", fallback = "Crate ammo", kind = "pct" },
 	ArsenalMargin = { key = "arsenalcut", name = "char_stat_arsenalcut", fallback = "Arsenal margin", kind = "pct" },
 	ArsenalCrateCost = { key = "arsenalcratecost", name = "char_stat_arsenalcratecost", fallback = "Arsenal crate cost", kind = "pct" },
 	HammerSwing = { key = "hammerswing", name = "char_stat_hammerswing", fallback = "Hammer attack speed", kind = "pct" },
 	MeleeSwing = { key = "meleeattack", name = "char_stat_meleeattack", fallback = "Melee attack speed", kind = "pct" },
+	MeleeWindup = { key = "meleewindup", name = "char_stat_meleewindup", fallback = "Swing speed", kind = "pct" },
 	MeleeStamina = { key = "meleestamina", name = "char_stat_meleestamina", fallback = "Melee stamina cost", kind = "pct" },
 	NailRange = { key = "nailrange", name = "char_stat_nailrange", fallback = "Nail range", kind = "pct" },
 	MaxNails = { key = "maxnails", name = "char_stat_maxnails", fallback = "Nails per prop" },
 	DoorDamage = { key = "doordamage", name = "char_stat_doordamage", fallback = "Door damage", kind = "pct" },
 	Heal = { key = "heal", name = "char_stat_heal", fallback = "Healing received", kind = "pct" },
 	MedicHeal = { key = "medicheal", name = "char_stat_medicheal", fallback = "Healing effectiveness", kind = "pct" },
+	MedkitCharge = { key = "medkitcharge", name = "char_stat_medkitcharge", fallback = "Medkit recovery speed", kind = "pct" },
 	MeleeDamage = { key = "melee", name = "char_stat_melee", fallback = "Melee damage", kind = "pct" },
 	MeleeMiss = { key = "meleemiss", name = "char_stat_meleemiss", fallback = "Melee miss chance", kind = "pct" },
 	HitSlow = { key = "hitslow", name = "char_stat_hitslow", fallback = "Slow from incoming melee", kind = "pct" },
 	BloodFromMelee = { key = "bloodfrommelee", name = "char_stat_bloodfrommelee", fallback = "Blood armor from melee", kind = "pct" },
+	BloodAbsorb = { key = "bloodabsorb", name = "char_stat_bloodabsorb", fallback = "Blood armor absorption", kind = "pct" },
+	BloodGain = { key = "bloodgain", name = "char_stat_bloodgain", fallback = "Blood armor gain", kind = "pct" },
+	FoodBlood = { key = "foodblood", name = "char_stat_foodblood", fallback = "Blood armor from food", kind = "pct" },
+	BloodReturn = { key = "bloodreturn", name = "char_stat_bloodreturn", fallback = "Absorbed damage returned", kind = "pct" },
 	MeleeViewPunch = { key = "meleepunch", name = "char_stat_meleepunch", fallback = "Incoming melee camera kick", kind = "pct" },
 	AimShake = { key = "aimshake", name = "char_stat_aimshake", fallback = "Aim tremor", kind = "pct" },
 	AimShakeFear = { key = "aimshakefear", name = "char_stat_aimshakefear", fallback = "Fear tremor", kind = "pct" },
 	AimShakeHP = { key = "aimshakehp", name = "char_stat_aimshakehp", fallback = "Low-health tremor", kind = "pct" },
 	AimShakeThreshold = { key = "aimshakethreshold", name = "char_stat_aimshakethreshold", fallback = "Tremor health threshold", kind = "pct" },
 	ZombieHealth = { key = "zombiehealth", name = "char_stat_zombiehealth", fallback = "Zombie max health", kind = "pct" },
+	BarricadeDamage = { key = "barricadedmg", name = "char_stat_barricadedmg", fallback = "Barricade damage", kind = "pct" },
+	LoosePropDamage = { key = "looseprop", name = "char_stat_looseprop", fallback = "Unnailed prop damage", kind = "pct" },
+	ZombieDoorDamage = { key = "zombiedoor", name = "char_stat_zombiedoor", fallback = "Zombie door damage", kind = "pct" },
+	ZombieHumanDamage = { key = "zombiehuman", name = "char_stat_zombiehuman", fallback = "Damage to humans", kind = "pct" },
 	Worth = { key = "worth", name = "char_stat_worth", fallback = "Starting worth" },
 	Scrap = { key = "scrap", name = "char_stat_scrap", fallback = "Starting scrap" },
 	FallResist = { key = "fallresist", name = "char_stat_fall", fallback = "Fall damage", kind = "pp" },
@@ -523,10 +544,6 @@ local function DrawWrapped(text, font, x, y, maxW, col, maxLines)
 	return y
 end
 
-local function OfferHas(id)
-	return GAMEMODE:RelapseScarOfferHas(State().Offer, id)
-end
-
 local function RankOf(id)
 	return GAMEMODE:GetRelapseScarRank(id)
 end
@@ -560,6 +577,117 @@ local function DrawScarGain(id, rank, x, y)
 	elseif unit ~= "" then
 		ink(" " .. unit, c.Text)
 	end
+end
+
+local function PushRun(runs, text, white)
+	if text == nil or text == "" then return end
+	local last = runs[#runs]
+	if last and last.white == white then
+		last.text = last.text .. text
+	else
+		runs[#runs + 1] = { text = text, white = white and true or false }
+	end
+end
+
+local function ScarEffectRuns(id, rank)
+	local raw = Phrase("scar_" .. id .. "_effect", "")
+	if raw == "" then
+		raw = Phrase("scar_" .. id .. "_desc", "")
+	end
+	local stat = "0"
+	if GAMEMODE.RelapseScarStatText then
+		stat = GAMEMODE:RelapseScarStatText(id, math.max(1, rank))
+	end
+	local mark = "\1"
+	local s = tostring(raw or "")
+	s = string.gsub(s, "%%[%d%.]*[a-zA-Z]", mark)
+	s = string.gsub(s, "k×%d+", mark)
+	s = string.gsub(s, "%f[%w][kp]%f[%W]", mark)
+
+	local runs = {}
+	local i = 1
+	while i <= #s do
+		local a, b = string.find(s, mark, i, true)
+		if not a then
+			PushRun(runs, string.sub(s, i), false)
+			break
+		end
+		PushRun(runs, string.sub(s, i, a - 1), false)
+		PushRun(runs, stat, true)
+		i = b + 1
+	end
+	if #runs == 0 then
+		runs[1] = { text = "", white = false }
+	end
+	return runs
+end
+
+local function WrapEffectRuns(runs, font, maxW)
+	surface.SetFont(font)
+	local lines = {}
+	local line = {}
+	local lineW = 0
+	local function push(text, white)
+		if text == nil or text == "" then return end
+		local last = line[#line]
+		if last and last.white == white then
+			last.text = last.text .. text
+		else
+			line[#line + 1] = { text = text, white = white and true or false }
+		end
+	end
+	local function flush()
+		if #line == 0 then return end
+		lines[#lines + 1] = line
+		line = {}
+		lineW = 0
+	end
+	for _, run in ipairs(runs) do
+		local text = run.text or ""
+		local pos = 1
+		while pos <= #text do
+			local nl = string.find(text, "\n", pos, true)
+			local chunk = nl and string.sub(text, pos, nl - 1) or string.sub(text, pos)
+			local at = 1
+			while at <= #chunk do
+				local _, we, word, spaces = string.find(chunk, "(%S+)(%s*)", at)
+				if not we then break end
+				local wordW = surface.GetTextSize(word)
+				if lineW > 0 and lineW + wordW > maxW then
+					flush()
+				end
+				push(word, run.white)
+				lineW = lineW + wordW
+				if spaces ~= "" then
+					local spW = surface.GetTextSize(spaces)
+					if lineW + spW <= maxW then
+						push(spaces, run.white)
+						lineW = lineW + spW
+					end
+				end
+				at = we + 1
+			end
+			if nl then
+				flush()
+				pos = nl + 1
+			else
+				break
+			end
+		end
+	end
+	flush()
+	if #lines == 0 then
+		lines[1] = { { text = "", white = false } }
+	end
+	return lines
+end
+
+local function EffectLineWide(line)
+	local w = 0
+	for i = 1, #line do
+		w = w + (surface.GetTextSize(line[i].text) or 0)
+	end
+	return w
 end
 
 local function RankCaption(id, lottery)
@@ -619,6 +747,9 @@ local function SelectScar(frame, id, lottery, silent)
 	if GAMEMODE.LayoutCharacterFooter then
 		GAMEMODE:LayoutCharacterFooter(frame)
 	end
+	if (frame.CharPage or CHAR_PAGE_GRID) == CHAR_PAGE_SCARS and RelapseUI.IconsDevSelect then
+		RelapseUI.IconsDevSelect(id, "scar")
+	end
 	if not silent then
 		surface.PlaySound("buttons/button14.wav")
 	end
@@ -630,13 +761,38 @@ function CARD:Init()
 	self:SetText("")
 	self:SetPaintBackgroundEnabled(false)
 	self:SetPaintBorderEnabled(false)
-	self.NameLabel = EasyLabel(self, "", "Relapse15", RelapseUI.Col.Text)
+	self.NameLabel = EasyLabel(self, "", "Relapse20", RelapseUI.Col.Text)
 	self.NameLabel:SetContentAlignment(5)
-	self.RankLabel = EasyLabel(self, "", "Relapse13", RelapseUI.Col.Muted)
+	self.RankLabel = EasyLabel(self, "", "Relapse15", RelapseUI.Col.Muted)
 	self.RankLabel:SetContentAlignment(5)
 	self.IconFrame = vgui.Create("DPanel", self)
 	self.IconFrame:SetPaintBackground(false)
 	self.IconFrame:SetMouseInputEnabled(false)
+	self.IconFrame.Paint = function(_, w, h)
+		return self:PaintIcon(w, h)
+	end
+end
+
+function CARD:PaintIcon(w, h)
+	local mat = self.ScarMat
+	if not mat or mat:IsError() then
+		return true
+	end
+	local tw, th = mat:Width(), mat:Height()
+	if tw <= 0 or th <= 0 then
+		tw, th = 256, 256
+	end
+	local iw, ih = RelapseUI.FitIconDims(tw, th, w, h)
+	local id = self.ScarId
+	local zoom = RelapseUI.ScarIconZoomValue(id)
+	local ang = RelapseUI.ScarIconAngValue(id)
+	local ox, oy = RelapseUI.ScarIconPosValue(id)
+	local col = self.Locked and RelapseUI.Col.Muted or RelapseUI.Col.Text
+	local a = self.Locked and 80 or 255
+	surface.SetMaterial(mat)
+	surface.SetDrawColor(col.r, col.g, col.b, a)
+	surface.DrawTexturedRectRotated(w * 0.5 + ox, h * 0.5 + oy, iw * zoom, ih * zoom, ang)
+	return true
 end
 
 function CARD:SetCardSize(w, h)
@@ -652,10 +808,12 @@ function CARD:PerformLayout(w, h)
 	w = self.CardW or w or self:GetWide()
 	h = self.CardH or h or self:GetTall()
 	self:SetSize(w, h)
-	local pad = RelapseUI.M().cardPad
-	local rankH = IsValid(self.RankLabel) and self.RankLabel:GetTall() or RelapseUI.sPx(13)
-	local nameH = IsValid(self.NameLabel) and self.NameLabel:GetTall() or RelapseUI.sPx(15)
-	local iconH = math.max(RelapseUI.Grid15(3), h - pad * 2 - nameH - rankH - RelapseUI.Grid5(2))
+	local pad = RelapseUI.Grid5(2)
+	local gap = RelapseUI.Grid5()
+	local nameH = RelapseUI.Grid5(4)
+	local rankH = RelapseUI.Grid5(3)
+	local textH = nameH + gap + rankH
+	local iconH = math.max(RelapseUI.Grid5(3), h - pad * 2 - textH - gap)
 	if IsValid(self.IconFrame) then
 		self.IconFrame:SetSize(w - pad * 2, iconH)
 		self.IconFrame:SetPos(pad, pad)
@@ -664,11 +822,11 @@ function CARD:PerformLayout(w, h)
 		end
 	end
 	if IsValid(self.NameLabel) then
-		self.NameLabel:SetWide(w - pad * 2)
-		self.NameLabel:SetPos(pad, h - pad - rankH - nameH)
+		self.NameLabel:SetSize(w - pad * 2, nameH)
+		self.NameLabel:SetPos(pad, h - pad - textH)
 	end
 	if IsValid(self.RankLabel) then
-		self.RankLabel:SetWide(w - pad * 2)
+		self.RankLabel:SetSize(w - pad * 2, rankH)
 		self.RankLabel:SetPos(pad, h - pad - rankH)
 	end
 end
@@ -682,14 +840,18 @@ function CARD:SetScar(id, lottery)
 	local locked = RankOf(id) <= 0 and not lottery
 	self.Locked = locked
 
-	local font = lottery and "Relapse20" or "Relapse15"
+	local font = "Relapse20"
+	local textW = math.max(RelapseUI.Grid5(2), (self.CardW or self:GetWide()) - RelapseUI.Grid5(2) * 2)
 	self.NameLabel:SetFont(font)
-	self.NameLabel:SetText(Ellipsize(ScarName(id), font, math.max(8, (self.CardW or self:GetWide()) - RelapseUI.M().cardPad * 2)))
+	self.NameLabel:SetText(Ellipsize(ScarName(id), font, textW))
 	self.NameLabel:SizeToContents()
+	self.NameLabel:SetTall(RelapseUI.Grid5(4))
 	self.NameLabel:SetTextColor(locked and RelapseUI.Col.Muted or RelapseUI.Col.Text)
 
+	self.RankLabel:SetFont("Relapse15")
 	self.RankLabel:SetText(RankCaption(id, lottery))
 	self.RankLabel:SizeToContents()
+	self.RankLabel:SetTall(RelapseUI.Grid5(3))
 	self.RankLabel:SetTextColor(locked and RelapseUI.Col.Muted or RelapseUI.Col.Accent)
 
 	for _, ch in ipairs(self.IconFrame:GetChildren()) do
@@ -697,37 +859,32 @@ function CARD:SetScar(id, lottery)
 			ch:Remove()
 		end
 	end
-	if scar.Icon then
-		local img = RelapseUI.MakeSilhouetteIcon(self.IconFrame, scar.Icon)
-		if locked then
-			img:SetImageColor(RelapseUI.Col.Muted)
-			img:SetAlpha(80)
-		end
-		self.Icon = img
-	end
+	self.Icon = nil
+	self.ScarMat = scar.Icon and RelapseUI.ScarIconMaterial(scar.Icon) or nil
 	self:InvalidateLayout(true)
 end
 
 function CARD:Paint(w, h)
 	RelapseUI.PaintCard(self, w, h, self.On, self.Locked, false)
-	if self.Lottery then
-		local r = RelapseUI.sPx(6)
-		surface.SetDrawColor(RelapseUI.Col.Accent)
-		surface.DrawRect(w - RelapseUI.Grid15() - r, RelapseUI.Grid15() - r * 0.5, r, r)
-	end
 	return true
 end
 
 function CARD:DoClick()
+	if self.Lottery then
+		if not self.ScarId then return end
+		surface.PlaySound("buttons/button14.wav")
+		net.Start("zs_scars_take")
+			net.WriteString(self.ScarId)
+		net.SendToServer()
+		return
+	end
 	local frame = pCharacter
 	if not IsValid(frame) then return end
-	SelectScar(frame, self.ScarId, self.Lottery)
+	SelectScar(frame, self.ScarId, false)
 end
 
 vgui.Register("RelapseScarCard", CARD, "DButton")
 
-local CHAR_PAGE_GRID = 1
-local CHAR_PAGE_SCARS = 2
 local LayoutCharacter
 
 local matGridBeamSrc = Material("effects/laser1")
@@ -748,9 +905,9 @@ do
 	end
 end
 
-local GRID_ZOOM_MIN = 800
-local GRID_ZOOM_MAX = 5200
-local GRID_ZOOM_START = GRID_ZOOM_MIN + 500
+local GRID_ZOOM_MIN = 560
+local GRID_ZOOM_MAX = 1900
+local GRID_ZOOM_START = 980
 local GRID_RT_SIZE = 2048
 local skillsDev = false
 
@@ -960,15 +1117,14 @@ function GRID:CanHubRelapse()
 	return IsValid(pl) and pl.CanSkillsRemort and pl:CanSkillsRemort()
 end
 
-function GRID:GridWine(a)
-	local c = RelapseUI.Col.Danger
-	return Color(c.r, c.g, c.b, a)
+function GRID:NodeMuted(n)
+	local gm = GAMEMODE
+	return gm and gm.CycleGridNodeMuted and gm:CycleGridNodeMuted(MySelf, n)
 end
 
--- Additive Fog outshines Wine. Same hue, lower value so owned light sits with бордо.
-function GRID:GridLit(a, bright)
-	local c = RelapseUI.Col.Text
-	local k = bright and 0.70 or 0.52
+function GRID:GridGray(a)
+	local c = RelapseUI.Col.Muted
+	local k = 0.62
 	return Color(
 		math.floor(c.r * k + 0.5),
 		math.floor(c.g * k + 0.5),
@@ -977,22 +1133,45 @@ function GRID:GridLit(a, bright)
 	)
 end
 
+function GRID:GridWine(a)
+	local c = RelapseUI.Col.Danger
+	return Color(c.r, c.g, c.b, a)
+end
+
+function GRID:GridLit(a, bright)
+	local c = RelapseUI.Col.Text
+	local k = bright and 0.78 or 0.62
+	return Color(
+		math.floor(c.r * k + 0.5),
+		math.floor(c.g * k + 0.5),
+		math.floor(c.b * k + 0.5),
+		a
+	)
+end
+
+function GRID:NodeWine(n)
+	return self:NodeMuted(n) and self:NodeOwned(n)
+end
+
 function GRID:GridNodeInk(n)
+	if self:NodeWine(n) then
+		return self:GridWine(160)
+	end
 	local remortHub = n and n.tree == nil and self:CanHubRelapse()
 	local rest
 	if remortHub then
-		rest = self:GridWine(230)
+		rest = self:GridGray(170)
 	elseif self:NodeOwned(n) then
-		rest = self:GridLit(200)
+		rest = self:GridLit(140)
 	else
-		rest = self:GridWine(175)
+		rest = self:GridGray(120)
 	end
 	local t = self:HoverAmt(n)
 	if remortHub or t <= 0 then
 		return rest
 	end
 	t = t * t * (3 - 2 * t)
-	local lit = self:GridLit(220, true)
+	local lit = self:GridLit(165, true)
 	return Color(
 		Lerp(t, rest.r, lit.r),
 		Lerp(t, rest.g, lit.g),
@@ -1003,15 +1182,49 @@ end
 
 function GRID:GridEdgeInk(e)
 	local a, b = e[1], e[2]
-	if self:NodeOwned(a) and self:NodeOwned(b) then
-		return self:GridLit(130)
+	if self:NodeWine(a) and self:NodeWine(b) then
+		return self:GridWine(110)
 	end
-	return self:GridWine(110)
+	if self:NodeOwned(a) and self:NodeOwned(b) then
+		return self:GridLit(105)
+	end
+	return self:GridGray(75)
 end
 
 local function DrawGridBeam(pa, pb, col, u0, u1)
-	render.DrawBeam(pa, pb, 3, u0, u1, Color(col.r, col.g, col.b, math.min(col.a or 255, 160)))
-	render.DrawBeam(pa, pb, 7, u0, u1, Color(col.r, col.g, col.b, math.min((col.a or 255) * 0.32, 55)))
+	render.DrawBeam(pa, pb, 3, u0, u1, Color(col.r, col.g, col.b, math.min(col.a or 255, 105)))
+	render.DrawBeam(pa, pb, 8, u0, u1, Color(col.r, col.g, col.b, math.min((col.a or 255) * 0.4, 42)))
+end
+
+local FADE_STEPS = 8
+
+local function BeamFade(t, from, to)
+	local u = math.Clamp((t - 0.25) / 0.5, 0, 1)
+	u = u * u * (3 - 2 * u)
+	return Color(
+		Lerp(u, from.r, to.r),
+		Lerp(u, from.g, to.g),
+		Lerp(u, from.b, to.b),
+		Lerp(u, from.a or 255, to.a or 255)
+	)
+end
+
+local function DrawFadeBeam(pa, pb, from, to)
+	local dx, dy, dz = pb.x - pa.x, pb.y - pa.y, pb.z - pa.z
+	for pass = 1, 2 do
+		local width = pass == 1 and 3 or 8
+		render.StartBeam(FADE_STEPS + 1)
+		for i = 0, FADE_STEPS do
+			local t = i / FADE_STEPS
+			local col = BeamFade(t, from, to)
+			local a = pass == 1 and math.min(col.a, 105) or math.min(col.a * 0.4, 42)
+			render.AddBeam(
+				Vector(pa.x + dx * t, pa.y + dy * t, pa.z + dz * t),
+				width, t, Color(col.r, col.g, col.b, a)
+			)
+		end
+		render.EndBeam()
+	end
 end
 
 function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx, vy, vw, vh)
@@ -1023,38 +1236,16 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 
 	render.SetMaterial(matGridBeam)
 	local remort = self:CanHubRelapse()
-	local wine = remort and self:GridWine(110)
-	local lit = remort and self:GridLit(145, true)
-	local spokeN = 8
-	local function spokeCol(t)
-		local u = math.Clamp((t - 0.25) / 0.5, 0, 1)
-		u = u * u * (3 - 2 * u)
-		return Color(
-			Lerp(u, wine.r, lit.r),
-			Lerp(u, wine.g, lit.g),
-			Lerp(u, wine.b, lit.b),
-			Lerp(u, wine.a, 145)
-		)
-	end
+	local dim = remort and self:GridGray(75)
+	local litPulse = remort and self:GridLit(120, true)
+	local lit = remort and Color(litPulse.r, litPulse.g, litPulse.b, 105)
 	for _, e in ipairs(layout.edges) do
 		local pa = self:DrawPos(e[1].x, e[1].y)
 		local pb = self:DrawPos(e[2].x, e[2].y)
-		if remort and e.hub and self:NodeOwned(e[2]) then
-			local dx, dy, dz = pb.x - pa.x, pb.y - pa.y, pb.z - pa.z
-			for pass = 1, 2 do
-				local width = pass == 1 and 3 or 7
-				render.StartBeam(spokeN + 1)
-				for i = 0, spokeN do
-					local t = i / spokeN
-					local col = spokeCol(t)
-					local a = pass == 1 and math.min(col.a, 160) or math.min(col.a * 0.32, 55)
-					render.AddBeam(
-						Vector(pa.x + dx * t, pa.y + dy * t, pa.z + dz * t),
-						width, t, Color(col.r, col.g, col.b, a)
-					)
-				end
-				render.EndBeam()
-			end
+		if self:NodeWine(e[2]) and not self:NodeWine(e[1]) then
+			DrawFadeBeam(pa, pb, self:GridLit(105), self:GridWine(105))
+		elseif remort and e.hub and self:NodeOwned(e[2]) and not self:NodeMuted(e[2]) then
+			DrawFadeBeam(pa, pb, dim, lit)
 		else
 			DrawGridBeam(pa, pb, self:GridEdgeInk(e), 0, 1)
 		end
@@ -1066,19 +1257,21 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 		local t = self:HoverAmt(n)
 		t = t * t * (3 - 2 * t)
 		local col = self:GridNodeInk(n)
-		local size = Lerp(t, 9, 12)
+		local size = Lerp(t, 7, 9.5)
 		local pos = self:DrawPos(n.x, n.y)
+		local coreA = math.floor((col.a or 255) * 0.4)
+		local core = Color(col.r, col.g, col.b, coreA)
 		if remortHub then
 			local g = Lerp(t, 1, 1.12)
-			render.DrawQuadEasy(pos, to_camera, 40 * g, 40 * g, Color(col.r, col.g, col.b, 55), 0)
-			render.DrawQuadEasy(pos, to_camera, 24 * g, 24 * g, Color(col.r, col.g, col.b, 120), 0)
-			render.DrawQuadEasy(pos, to_camera, 14 * g, 14 * g, col, 0)
+			render.DrawQuadEasy(pos, to_camera, 26 * g, 26 * g, Color(col.r, col.g, col.b, 20), 0)
+			render.DrawQuadEasy(pos, to_camera, 16 * g, 16 * g, Color(col.r, col.g, col.b, 46), 0)
+			render.DrawQuadEasy(pos, to_camera, 9 * g, 9 * g, core, 0)
 			return
 		end
 		if t > 0.01 then
-			render.DrawQuadEasy(pos, to_camera, size * 1.7, size * 1.7, Color(col.r, col.g, col.b, math.floor(55 * t)), 0)
+			render.DrawQuadEasy(pos, to_camera, size * 1.45, size * 1.45, Color(col.r, col.g, col.b, math.floor(16 * t)), 0)
 		end
-		render.DrawQuadEasy(pos, to_camera, size, size, col, 0)
+		render.DrawQuadEasy(pos, to_camera, size, size, core, 0)
 	end
 	paintDot(layout.hub)
 	for _, n in ipairs(layout.nodes) do
@@ -1097,7 +1290,7 @@ function GRID:FadeBand(w, h)
 end
 
 -- Additive blit treats RGB 0 as gone. Linear vgui gradients never quite
--- reach 0, so white lasers stay a hairline after wine is already invisible.
+-- reach 0, so white lasers stay a hairline after gray is already invisible.
 local function GridEdgeKeep(t)
 	t = math.Clamp(t, 0, 1)
 	t = t * t * (3 - 2 * t)
@@ -1161,16 +1354,32 @@ function GRID:BlitWeb(w, h, fade)
 	render.PopFilterMin()
 end
 
+function GRID:NodeActs(n)
+	if not n or n.tree == nil then
+		return false
+	end
+	local gm = GAMEMODE
+	if not gm or gm:CycleGridMutedByAncestor(MySelf, n) then
+		return false
+	end
+	if gm:CycleGridIsMuteRoot(MySelf, n) then
+		return true
+	end
+	local skill = gm:GetCycleGridSkill(n.treeId, n.slot)
+	if skill and gm:HasCycleGridSkill(MySelf, skill.id) then
+		return true
+	end
+	return gm:CycleGridIsOffered(MySelf, n.treeId, n.slot)
+end
+
 function GRID:OnMousePressed(mc)
 	if mc ~= MOUSE_LEFT and mc ~= MOUSE_MIDDLE then return end
 	local mx, my = gui.MousePos()
 	self.PressMX, self.PressMY = mx, my
 	self.PressHubRelapse = mc == MOUSE_LEFT and self:CanHubRelapse() and self.HoverNode and self.HoverNode.tree == nil
-	self.PressUnlock = mc == MOUSE_LEFT and self.HoverNode and self.HoverNode.tree ~= nil
-		and GAMEMODE.CycleGridIsOffered
-		and GAMEMODE:CycleGridIsOffered(MySelf, self.HoverNode.treeId, self.HoverNode.slot)
+	self.PressNode = mc == MOUSE_LEFT and self.HoverNode and self.HoverNode.tree ~= nil and self.HoverNode or nil
 	if self:PanLimit() <= 0 then
-		if self.PressHubRelapse or self.PressUnlock then
+		if self.PressHubRelapse or self.PressNode then
 			self:MouseCapture(true)
 		end
 		return
@@ -1185,13 +1394,13 @@ end
 
 function GRID:OnMouseReleased()
 	local wantRelapse = self.PressHubRelapse
-	local wantUnlock = self.PressUnlock
+	local pressed = self.PressNode
 	local px, py = self.PressMX, self.PressMY
 	self.PressHubRelapse = false
-	self.PressUnlock = false
+	self.PressNode = nil
 	self.Dragging = false
 	self:MouseCapture(false)
-	if (not wantRelapse and not wantUnlock) or not px then
+	if (not wantRelapse and not pressed) or not px then
 		return
 	end
 	local mx, my = gui.MousePos()
@@ -1203,13 +1412,37 @@ function GRID:OnMouseReleased()
 		return
 	end
 	local n = self.HoverNode
-	if wantUnlock and n and n.tree ~= nil and n.treeId and GAMEMODE.CycleGridIsOffered
-		and GAMEMODE:CycleGridIsOffered(MySelf, n.treeId, n.slot) then
+	if not pressed or n ~= pressed or n.tree == nil then
+		return
+	end
+	local gm = GAMEMODE
+	if gm:CycleGridMutedByAncestor(MySelf, n) then
+		return
+	end
+	if gm:CycleGridIsMuteRoot(MySelf, n) then
+		net.Start("zs_cycle_grid_mute")
+		net.WriteString(n.treeId)
+		net.WriteUInt(n.slot, 5)
+		net.SendToServer()
+		return
+	end
+	local skill = gm:GetCycleGridSkill(n.treeId, n.slot)
+	local owned = skill and gm:HasCycleGridSkill(MySelf, skill.id)
+	if owned then
+		net.Start("zs_cycle_grid_mute")
+		net.WriteString(n.treeId)
+		net.WriteUInt(n.slot, 5)
+		net.SendToServer()
+		return
+	end
+	if gm:CycleGridIsOffered(MySelf, n.treeId, n.slot) then
 		net.Start("zs_cycle_grid_unlock")
 		net.WriteString(n.treeId)
 		net.WriteUInt(n.slot, 5)
 		net.SendToServer()
+		return
 	end
+	surface.PlaySound("buttons/button8.wav")
 end
 
 function GRID:OnMouseWheeled(delta)
@@ -1268,8 +1501,7 @@ function GRID:Paint(w, h)
 		self:SetCursor("arrow")
 	elseif self:CanHubRelapse() and hoverNode and hoverNode.tree == nil then
 		self:SetCursor("hand")
-	elseif hoverNode and hoverNode.tree ~= nil and GAMEMODE.CycleGridIsOffered
-		and GAMEMODE:CycleGridIsOffered(MySelf, hoverNode.treeId, hoverNode.slot) then
+	elseif hoverNode and hoverNode.tree ~= nil and self:NodeActs(hoverNode) then
 		self:SetCursor("hand")
 	else
 		self:SetCursor("arrow")
@@ -1306,7 +1538,7 @@ end
 
 function GRID:SkillCaption(n, layout)
 	if n == layout.hub then
-		return Phrase("grid_hub_name", "Rebirth"), Phrase("grid_hub_desc", "Wipes the grid and cycle level. Scars and the SP bonus stay.")
+		return Phrase("grid_hub_name", "Rebirth"), Phrase("grid_hub_desc", "Wipes the grid and cycle level. Scars and the points bonus stay.")
 	end
 	if not n or not n.treeId then
 		return
@@ -1386,6 +1618,22 @@ end
 
 vgui.Register("RelapseCycleGrid", GRID, "DPanel")
 
+local function SyncScarIconsDev(frame)
+	if not IsValid(frame) then return end
+	if (frame.CharPage or CHAR_PAGE_GRID) == CHAR_PAGE_SCARS then
+		if RelapseUI.IconsDevBindScar then
+			RelapseUI.IconsDevBindScar(frame)
+		end
+		if frame.SelectedId and RelapseUI.IconsDevSelect then
+			RelapseUI.IconsDevSelect(frame.SelectedId, "scar")
+		end
+		return
+	end
+	if RelapseUI.IconsDevUnbindScar then
+		RelapseUI.IconsDevUnbindScar()
+	end
+end
+
 local function ApplyCharPage(frame, idx)
 	if not IsValid(frame) then return end
 	idx = math.Clamp(tonumber(idx) or CHAR_PAGE_GRID, CHAR_PAGE_GRID, CHAR_PAGE_SCARS)
@@ -1397,6 +1645,7 @@ local function ApplyCharPage(frame, idx)
 		end
 	end
 	LayoutCharacter(frame)
+	SyncScarIconsDev(frame)
 end
 
 local function ScarCardSize()
@@ -1404,17 +1653,12 @@ local function ScarCardSize()
 end
 
 local function DefaultSelection(frame)
-	local st = State()
 	local id = frame.SelectedId
-	if id then
+	if id and not frame.SelectedLottery then
 		local scar = GAMEMODE:GetRelapseScar(id)
-		if scar and (scar.InPool or RankOf(id) > 0 or (frame.SelectedLottery and OfferHas(id))) then
-			local lottery = frame.SelectedLottery and OfferHas(id) and (st.Picks or 0) > 0
-			return id, lottery
+		if scar then
+			return id, false
 		end
-	end
-	if st.Offer and st.Offer[1] and (st.Picks or 0) > 0 then
-		return st.Offer[1], true
 	end
 	for _, sid in ipairs(GAMEMODE.RelapseScarOrder or {}) do
 		if RankOf(sid) > 0 then
@@ -1422,45 +1666,273 @@ local function DefaultSelection(frame)
 		end
 	end
 	for _, sid in ipairs(GAMEMODE.RelapseScarOrder or {}) do
-		local scar = GAMEMODE:GetRelapseScar(sid)
-		if scar and scar.InPool then
+		if GAMEMODE:GetRelapseScar(sid) then
 			return sid, false
 		end
 	end
 	return nil, false
 end
 
+local function LotteryBox(offerCount)
+	local size = ScarCardSize()
+	local gap = RelapseUI.Grid15(2)
+	local pad = RelapseUI.Grid15(3)
+	local titleY = RelapseUI.Grid15(2)
+	surface.SetFont("Relapse30")
+	local _, titleCell = surface.GetTextSize("Ay")
+	titleCell = math.max(titleCell or 0, RelapseUI.sPx(30))
+	local header = titleY + titleCell - RelapseUI.sPx(6) + RelapseUI.sPx(45)
+	local n = math.Clamp(offerCount, 1, 3)
+	local cardsW = n * size + math.max(0, n - 1) * gap
+	local w = pad + cardsW + pad
+	local h = header + size + pad
+	return {
+		size = size,
+		gap = gap,
+		pad = pad,
+		titleY = titleY,
+		header = header,
+		n = n,
+		cardsW = cardsW,
+		w = w,
+		h = h
+	}
+end
+
+local function PlaceLottery(frame)
+	local win = frame.LotteryWin
+	if not IsValid(win) then return end
+	local st = State()
+	local offer = st.Offer or {}
+	local onScars = (frame.CharPage or CHAR_PAGE_GRID) == CHAR_PAGE_SCARS
+	local show = onScars and frame:IsVisible() and (st.Picks or 0) > 0 and #offer > 0
+	local was = win:IsVisible()
+	win:SetVisible(show)
+	if show and not was then
+		win:MoveToFront()
+	end
+	if not show then
+		frame._ScarTipDraw = nil
+		local nudge = frame._LotteryNudge or 0
+		if nudge ~= 0 then
+			local host = frame:GetParent()
+			local sx, sy = frame:LocalToScreen(0, 0)
+			sx = sx + nudge
+			local x, y = sx, sy
+			if IsValid(host) then
+				x, y = host:ScreenToLocal(sx, sy)
+			end
+			frame:SetPos(x, y)
+			frame._LotteryNudge = 0
+		end
+		return
+	end
+	local alpha = frame:GetAlpha() or 255
+	win:SetAlpha(alpha)
+	win:SetMouseInputEnabled(alpha > 10)
+	local host = frame:GetParent()
+	if IsValid(host) and win:GetParent() ~= host then
+		win:SetParent(host)
+	end
+	local gap = RelapseUI.sPx(30)
+	local margin = RelapseUI.Grid15(2)
+	local prev = frame._LotteryNudge or 0
+	local sx, sy = frame:LocalToScreen(0, 0)
+	local natural = sx + prev
+	local overflow = natural + frame:GetWide() + gap + win:GetWide() - (ScrW() - margin)
+	local shift = 0
+	if overflow > 0 then
+		shift = math.min(overflow, math.max(0, natural - margin))
+	end
+	sx = natural - shift
+	if shift ~= prev then
+		local fx, fy = sx, sy
+		if IsValid(host) then
+			fx, fy = host:ScreenToLocal(sx, sy)
+		end
+		frame:SetPos(fx, fy)
+		frame._LotteryNudge = shift
+	end
+	local x = sx + frame:GetWide() + gap
+	local y = sy
+	x = math.max(margin, math.min(x, ScrW() - margin - win:GetWide()))
+	y = math.Clamp(y, margin, math.max(margin, ScrH() - margin - win:GetTall()))
+	if IsValid(host) then
+		x, y = host:ScreenToLocal(x, y)
+	end
+	win:SetPos(x, y)
+end
+
+local function EnsureLotteryWin(frame)
+	if IsValid(frame.LotteryWin) then
+		return frame.LotteryWin
+	end
+	local host = frame:GetParent()
+	local win = vgui.Create("DFrame", IsValid(host) and host or nil)
+	win:SetTitle("")
+	win:SetDraggable(false)
+	win:SetDeleteOnClose(false)
+	win:SetKeyboardInputEnabled(false)
+	win:DockPadding(0, 0, 0, 0)
+	win.Paint = RelapseUI.PaintWindow
+	RelapseUI.HideChrome(win)
+	win:SetVisible(false)
+	if IsValid(win.lblTitle) then
+		win.lblTitle:SetVisible(false)
+	end
+	local title = EasyLabel(win, Phrase("char_choose_scar", "Выберите шрам"), "Relapse30", RelapseUI.Col.Text)
+	title:SetContentAlignment(4)
+	win.TitleLab = title
+	local picks = EasyLabel(win, "", "Relapse20", RelapseUI.Col.Muted)
+	picks:SetContentAlignment(4)
+	win.PicksLab = picks
+	frame.LotteryWin = win
+	return win
+end
+
+local function UpdateScarTip(frame)
+	if not IsValid(frame) or not frame:IsVisible() then
+		if IsValid(frame) then
+			frame._ScarTipDraw = nil
+		end
+		return
+	end
+	local win = frame.LotteryWin
+	if not IsValid(win) or not win:IsVisible() or (win:GetAlpha() or 0) < 10 then
+		frame._ScarTipDraw = nil
+		return
+	end
+	local mx, my = input.GetCursorPos()
+	local card
+	for _, btn in ipairs(frame.LotCards or {}) do
+		if IsValid(btn) and btn.ScarId then
+			local bx, by = btn:LocalToScreen(0, 0)
+			local bw, bh = btn:GetSize()
+			if mx >= bx and my >= by and mx <= bx + bw and my <= by + bh then
+				card = btn
+				break
+			end
+		end
+	end
+	if not card then
+		frame._ScarTipDraw = nil
+		return
+	end
+	local id = card.ScarId
+	local name = ScarName(id)
+	local runs = ScarEffectRuns(id, RankOf(id) + 1)
+	local nameFont = "Relapse20"
+	local font = "Relapse15"
+	local maxW = RelapseUI.sPx(280)
+	local lines = WrapEffectRuns(runs, font, maxW)
+	surface.SetFont(nameFont)
+	local nameW, nameH = surface.GetTextSize(name)
+	surface.SetFont(font)
+	local _, lineH = surface.GetTextSize("Ay")
+	lineH = math.max(1, lineH)
+	local textW = nameW
+	for i = 1, #lines do
+		textW = math.max(textW, EffectLineWide(lines[i]))
+	end
+	local pad = RelapseUI.Grid15()
+	local gap = RelapseUI.Grid5()
+	local w = pad + textW + pad
+	local h = pad + nameH + gap + #lines * lineH + pad
+	local x = mx - RelapseUI.Grid15() - w
+	local y = my
+	x = math.max(0, x)
+	y = math.Clamp(y, 0, math.max(0, ScrH() - h))
+	frame._ScarTipDraw = {
+		name = name,
+		lines = lines,
+		x = x,
+		y = y,
+		w = w,
+		h = h,
+		pad = pad,
+		gap = gap,
+		nameH = nameH,
+		lineH = lineH
+	}
+end
+
+local function DrawScarTip()
+	local frame = pCharacter
+	local st = IsValid(frame) and frame._ScarTipDraw
+	if not st then return end
+	RelapseUI.RoundFill(RelapseUI.RadPx("Card"), st.x, st.y, st.w, st.h, RelapseUI.Col.Bg)
+	local c = RelapseUI.Col
+	draw.SimpleText(st.name, "Relapse20", st.x + st.pad, st.y + st.pad, c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	local ty = st.y + st.pad + st.nameH + st.gap
+	surface.SetFont("Relapse15")
+	for i = 1, #st.lines do
+		local x = st.x + st.pad
+		for j = 1, #st.lines[i] do
+			local run = st.lines[i][j]
+			draw.SimpleText(run.text, "Relapse15", x, ty, run.white and c.Text or c.Muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+			x = x + (surface.GetTextSize(run.text) or 0)
+		end
+		ty = ty + st.lineH
+	end
+end
+
+hook.Add("PostRenderVGUI", "RelapseScarLotTip", DrawScarTip)
+
 local function RebuildLottery(frame)
+	EnsureLotteryWin(frame)
+	local win = frame.LotteryWin
 	for _, btn in ipairs(frame.LotCards or {}) do
 		if IsValid(btn) then
 			btn:Remove()
 		end
 	end
 	frame.LotCards = {}
-	if not IsValid(frame.Lottery) then return end
+	if not IsValid(win) then return end
 
 	local st = State()
 	local picks = st.Picks or 0
-	if IsValid(frame.PicksChip) then
-		frame.PicksChip.RelapseText = picks > 1 and PhraseF("char_picks", picks) or ""
-		frame.PicksChip:SetVisible(picks > 1)
+	local offer = (picks > 0 and st.Offer) or {}
+	local title = win.TitleLab
+	if IsValid(title) then
+		title:SetText(Phrase("char_choose_scar", "Выберите шрам"))
+		title:SizeToContents()
 	end
-	if picks <= 0 then
+	local box = LotteryBox(#offer)
+	if IsValid(title) then
+		local extra = 0
+		if IsValid(win.PicksLab) and picks > 1 then
+			win.PicksLab:SetText(PhraseF("char_picks", picks))
+			win.PicksLab:SizeToContents()
+			extra = RelapseUI.Grid15() + win.PicksLab:GetWide()
+		end
+		box.w = math.max(box.w, box.pad + title:GetWide() + extra + box.pad)
+	end
+	win:SetSize(box.w, box.h)
+	if IsValid(title) then
+		title:SetPos(box.pad, box.titleY)
+	end
+	if IsValid(win.PicksLab) then
+		win.PicksLab:SetVisible(picks > 1)
+		if picks > 1 and IsValid(title) then
+			local _, titleH = title:GetSize()
+			local _, pickH = win.PicksLab:GetSize()
+			win.PicksLab:SetPos(box.pad + title:GetWide() + RelapseUI.Grid15(), box.titleY + math.max(0, titleH - pickH))
+		end
+	end
+	if #offer == 0 then
+		PlaceLottery(frame)
 		return
 	end
-
-	local gap = RelapseUI.Grid15(2)
-	local offer = st.Offer or {}
-	local size = ScarCardSize()
-	local x = 0
-	for i = 1, #offer do
-		local btn = vgui.Create("RelapseScarCard", frame.Lottery)
-		btn:SetCardSize(size, size)
+	local x = math.floor((box.w - box.cardsW) * 0.5 + 0.5)
+	for i = 1, math.min(3, #offer) do
+		local btn = vgui.Create("RelapseScarCard", win)
+		btn:SetCardSize(box.size, box.size)
 		btn:SetScar(offer[i], true)
-		btn:SetPos(x, RelapseUI.Grid15(3))
+		btn:SetPos(x, box.header)
 		frame.LotCards[#frame.LotCards + 1] = btn
-		x = x + size + gap
+		x = x + box.size + box.gap
 	end
+	PlaceLottery(frame)
 end
 
 local function RebuildInventory(frame)
@@ -1480,7 +1952,7 @@ local function RebuildInventory(frame)
 
 	for _, id in ipairs(GAMEMODE.RelapseScarOrder or {}) do
 		local scar = GAMEMODE:GetRelapseScar(id)
-		if scar and (scar.InPool or RankOf(id) > 0) then
+		if scar then
 			local btn = vgui.Create("RelapseScarCard", layout)
 			btn:SetCardSize(size, size)
 			btn:SetScar(id, false)
@@ -1491,32 +1963,8 @@ end
 
 function GM:LayoutCharacterFooter(frame)
 	if not IsValid(frame) then return end
-	local take = frame.Take
-	local remort = frame.RelapseBtn
 	local classBtn = frame.ClassBtn
-	local st = State()
 	local pl = MySelf
-	local onScars = (frame.CharPage or CHAR_PAGE_GRID) == CHAR_PAGE_SCARS
-	local canTake = onScars and IsValid(take) and frame.SelectedId and (st.Picks or 0) > 0 and OfferHas(frame.SelectedId)
-	if IsValid(take) then
-		take:SetVisible(canTake)
-		if canTake then
-			RelapseUI.AlignFooterRight(take)
-			RelapseUI.AlignFooterBottom(take)
-		end
-	end
-	if IsValid(remort) then
-		local canRemort = IsValid(pl) and pl.CanSkillsRemort and pl:CanSkillsRemort()
-		remort:SetVisible(canRemort)
-		if canRemort then
-			RelapseUI.AlignFooterBottom(remort)
-			if canTake and IsValid(take) then
-				remort:SetX(take:GetX() - RelapseUI.Grid15(2) - remort:GetWide())
-			else
-				RelapseUI.AlignFooterRight(remort)
-			end
-		end
-	end
 	if IsValid(classBtn) then
 		local undead = IsValid(pl) and pl:Team() == TEAM_UNDEAD
 		local blocked = GAMEMODE.ShouldUseAlternateDynamicSpawn and GAMEMODE:ShouldUseAlternateDynamicSpawn()
@@ -1616,13 +2064,6 @@ function LayoutCharacter(frame)
 			frame.Desc:SetVisible(vis)
 			frame.Desc:SetMouseInputEnabled(vis)
 		end
-		if IsValid(frame.Lottery) then
-			frame.Lottery:SetMouseInputEnabled(vis)
-		end
-		if IsValid(frame.InvHead) then
-			frame.InvHead:SetVisible(vis)
-			frame.InvHead:SetMouseInputEnabled(vis)
-		end
 		if IsValid(frame.InvScroll) then
 			frame.InvScroll:SetVisible(vis)
 			frame.InvScroll:SetMouseInputEnabled(vis)
@@ -1631,56 +2072,56 @@ function LayoutCharacter(frame)
 
 	if gridPage then
 		showScars(false)
-		if IsValid(frame.Lottery) then
-			frame.Lottery:SetVisible(false)
-		end
 		GAMEMODE:LayoutCharacterFooter(frame)
 		return
 	end
 
 	showScars(true)
 
-	local st = State()
-	local picks = st.Picks or 0
-	local lotH = 0
-	if picks > 0 then
-		lotH = RelapseUI.Grid15(3) + ScarCardSize()
-	end
-	local descH = RelapseUI.Grid15(10)
-	local invTitleH = RelapseUI.Grid15(3)
-
 	-- Relapse30 cell sits ~6px above caps. 90px from the window top to the name ink.
-	local y = RelapseUI.sPx(90) - RelapseUI.sPx(6) - body:GetY()
-	if IsValid(frame.Desc) then
-		frame.Desc:SetPos(rightX, y)
-		frame.Desc:SetSize(rightW, descH)
+	local descTop = RelapseUI.sPx(90) - RelapseUI.sPx(6) - body:GetY()
+	surface.SetFont("Relapse30")
+	local _, titleCell = surface.GetTextSize("Ay")
+	titleCell = math.max(1, titleCell or RelapseUI.sPx(30))
+	local minGainY = titleCell - RelapseUI.sPx(6) + RelapseUI.Grid15() - RelapseUI.sPx(5)
+	surface.SetFont("Relapse20")
+	local _, gainH = surface.GetTextSize("Ay")
+	gainH = math.max(1, gainH)
+	local sketchExtra = 0
+	local scar = frame.SelectedId and GAMEMODE:GetRelapseScar(frame.SelectedId)
+	if scar and not scar.InPool then
+		surface.SetFont("Relapse15")
+		local _, sketchH = surface.GetTextSize("Ay")
+		sketchExtra = RelapseUI.Grid15() + math.max(1, sketchH or 0)
 	end
-	y = y + descH + gap
-
-	if IsValid(frame.Lottery) then
-		if lotH > 0 then
-			frame.Lottery:SetVisible(true)
-			frame.Lottery:SetPos(rightX, y)
-			frame.Lottery:SetSize(rightW, lotH)
-			y = y + lotH + gap
-		else
-			frame.Lottery:SetVisible(false)
-			frame.Lottery:SetSize(rightW, 0)
+	local card = ScarCardSize()
+	local rowsH = card * 3 + gap * 2
+	-- Relapse20 cell hangs sPx(5) under the ink. 45px from that ink to the cards.
+	local cardsGap = RelapseUI.sPx(45) - RelapseUI.sPx(5)
+	-- Lowest row sits 90px above the window bottom. Title stays on the top 90px line.
+	local cardsBottom = math.min(bh, frame:GetTall() - RelapseUI.sPx(90) - body:GetY())
+	local cardsY = cardsBottom - rowsH
+	local gainY = cardsY - cardsGap - gainH - sketchExtra - descTop
+	if gainY < minGainY then
+		gainY = minGainY
+		cardsY = descTop + gainY + gainH + sketchExtra + cardsGap
+		if bh - cardsY < rowsH then
+			cardsY = math.max(0, bh - rowsH)
 		end
 	end
-
-	if IsValid(frame.InvHead) then
-		frame.InvHead:SetPos(rightX, y)
-		frame.InvHead:SetSize(rightW, invTitleH)
+	local descH = gainY + gainH + sketchExtra
+	frame.ScarGainY = gainY
+	if IsValid(frame.Desc) then
+		frame.Desc:SetPos(rightX, descTop)
+		frame.Desc:SetSize(rightW, math.max(0, descH))
 	end
-	y = y + invTitleH
 	if IsValid(frame.InvScroll) then
-		frame.InvScroll:SetPos(rightX, y)
-		frame.InvScroll:SetSize(rightW, math.max(1, bh - y))
+		frame.InvScroll:SetPos(rightX, cardsY)
+		frame.InvScroll:SetSize(rightW, math.max(1, bh - cardsY))
 	end
 	if IsValid(frame.InvLayout) then
 		frame.InvLayout:SetPos(0, 0)
-		frame.InvLayout:SetWide(math.max(1, frame.InvScroll:GetWide() - RelapseUI.ScrollBarHitW()))
+		frame.InvLayout:SetWide(math.max(1, frame.InvScroll:GetWide()))
 	end
 	GAMEMODE:LayoutCharacterFooter(frame)
 end
@@ -1740,20 +2181,20 @@ local function PaintIdentity(frame, w, h)
 	x = x + Ink(Phrase("char_remort_lab", "Реморт") .. ":", font, x, met.remortY, c.Muted)
 	x = x + gap
 	Ink(frame.RemortNum or "0", font, x, met.remortY, c.Text)
-	if (frame.CharPage or CHAR_PAGE_GRID) == CHAR_PAGE_GRID then
-		local sp = 0
-		if GAMEMODE.GetCycleGridSPRemaining and IsValid(MySelf) then
-			sp = GAMEMODE:GetCycleGridSPRemaining(MySelf) or 0
-		end
-		local lab = Phrase("char_sp_lab", "SP") .. ":"
-		local num = tostring(sp)
-		surface.SetFont(font)
-		local labW = surface.GetTextSize(lab) or 0
-		local numW = surface.GetTextSize(num) or 0
-		local spX = w - RelapseUI.Grid15() - labW - gap - numW
-		Ink(lab, font, spX, met.remortY, c.Muted)
-		Ink(num, font, spX + labW + gap, met.remortY, c.Text)
+	local points = 0
+	if (frame.CharPage or CHAR_PAGE_GRID) == CHAR_PAGE_SCARS then
+		points = (GAMEMODE.RelapseScarState and GAMEMODE.RelapseScarState.Picks) or 0
+	elseif GAMEMODE.GetCycleGridSPRemaining and IsValid(MySelf) then
+		points = GAMEMODE:GetCycleGridSPRemaining(MySelf) or 0
 	end
+	local lab = Phrase("char_sp_lab", "Очки") .. ":"
+	local num = tostring(points)
+	surface.SetFont(font)
+	local labW = surface.GetTextSize(lab) or 0
+	local numW = surface.GetTextSize(num) or 0
+	local pointsX = w - RelapseUI.Grid15() - labW - gap - numW
+	Ink(lab, font, pointsX, met.remortY, c.Muted)
+	Ink(num, font, pointsX + labW + gap, met.remortY, c.Text)
 	return true
 end
 
@@ -1823,8 +2264,15 @@ function GM:CloseCharacterSheet(fromEsc, instant)
 	if not (pCharacter and pCharacter:IsValid()) then
 		return false
 	end
+	if RelapseUI.IconsDevUnbindScar then
+		RelapseUI.IconsDevUnbindScar()
+	end
 	if pCharacter._StatTipDraw then
 		pCharacter._StatTipDraw = nil
+	end
+	pCharacter._ScarTipDraw = nil
+	if IsValid(pCharacter.LotteryWin) then
+		pCharacter.LotteryWin:SetVisible(false)
 	end
 	if not (pCharacter:IsVisible() or pCharacter._RelapseClosing) then
 		return false
@@ -1875,6 +2323,7 @@ function GM:OpenCharacterSheet()
 		RelapseUI.ShowShopFrame(pCharacter)
 		self:RefreshCharacterSheet()
 		BindStatTip(pCharacter)
+		SyncScarIconsDev(pCharacter)
 		return
 	end
 	RelapseUI.CreateFonts()
@@ -1933,10 +2382,12 @@ function GM:OpenCharacterSheet()
 		local scar = GAMEMODE:GetRelapseScar(id)
 		local c = RelapseUI.Col
 		draw.SimpleText(ScarName(id), "Relapse30", 0, 0, c.Text)
-		surface.SetFont("Relapse30")
-		local titleCell = select(2, surface.GetTextSize("Ay"))
-		-- Relapse30 hang 6; Relapse20 hang 5. 45px ink to the gain capital.
-		local y = titleCell - RelapseUI.sPx(6) + RelapseUI.sPx(45) - RelapseUI.sPx(5)
+		local y = frame.ScarGainY
+		if not y then
+			surface.SetFont("Relapse30")
+			local titleCell = select(2, surface.GetTextSize("Ay"))
+			y = titleCell - RelapseUI.sPx(6) + RelapseUI.Grid15() - RelapseUI.sPx(5)
+		end
 		DrawScarGain(id, RankOf(id), 0, y)
 		if scar and not scar.InPool then
 			surface.SetFont(GAIN_FONT)
@@ -1946,75 +2397,12 @@ function GM:OpenCharacterSheet()
 		return true
 	end
 
-	local lottery = vgui.Create("DPanel", body)
-	lottery:SetPaintBackground(false)
-	frame.Lottery = lottery
-	local lotTitle = EasyLabel(lottery, Phrase("char_lottery", "Lottery"), "Relapse20", RelapseUI.Col.Muted)
-	lotTitle:SetPos(0, 0)
-	frame.LotteryTitle = lotTitle
-	local chip = vgui.Create("DPanel", lottery)
-	chip:SetMouseInputEnabled(false)
-	chip.Paint = function(me, w, h)
-		if not me.RelapseText or me.RelapseText == "" then return true end
-		RelapseUI.RoundFill(RelapseUI.RadPx("Card"), 0, 0, w, h, RelapseUI.Col.Card)
-		draw.SimpleText(me.RelapseText, "Relapse20", w * 0.5, h * 0.5, RelapseUI.Col.Accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-		return true
-	end
-	frame.PicksChip = chip
-	lottery.PerformLayout = function(me, w, h)
-		if IsValid(lotTitle) then
-			lotTitle:SizeToContents()
-			lotTitle:SetPos(0, math.floor((RelapseUI.Grid15(3) - lotTitle:GetTall()) * 0.5))
-		end
-		if IsValid(chip) then
-			surface.SetFont("Relapse20")
-			local tw = surface.GetTextSize(chip.RelapseText or "3×")
-			chip:SetSize(math.max(RelapseUI.Grid15(4), tw + RelapseUI.Grid15(2)), RelapseUI.Grid15(3))
-			chip:SetPos((IsValid(lotTitle) and lotTitle:GetWide() or 0) + RelapseUI.Grid15(), 0)
-		end
-	end
-
-	local invHead = vgui.Create("DPanel", body)
-	invHead:SetPaintBackground(false)
-	frame.InvHead = invHead
-	local invTitle = EasyLabel(invHead, Phrase("char_scars", "Scars"), "Relapse20", RelapseUI.Col.Muted)
-	invTitle:SetPos(0, 0)
-	invHead.PerformLayout = function()
-		invTitle:SizeToContents()
-		invTitle:SetPos(0, math.floor((RelapseUI.Grid15(3) - invTitle:GetTall()) * 0.5))
-	end
-
 	local invScroll = vgui.Create("DScrollPanel", body)
 	invScroll.Paint = function() return true end
 	RelapseUI.StyleScroll(invScroll)
 	frame.InvScroll = invScroll
 	local layout = vgui.Create("DIconLayout", invScroll)
 	frame.InvLayout = layout
-
-	local take = vgui.Create("DButton", bottomspace)
-	take:SetFont("Relapse20")
-	take:SetText(Phrase("char_take", "Take"))
-	take:SetSize(RelapseUI.Cells(12), L.m.btnH)
-	take.Paint = RelapseUI.PaintPrimaryButton
-	take.DoClick = function()
-		if not frame.SelectedId then
-			surface.PlaySound("buttons/button8.wav")
-			return
-		end
-		surface.PlaySound("buttons/button14.wav")
-		net.Start("zs_scars_take")
-			net.WriteString(frame.SelectedId)
-		net.SendToServer()
-	end
-	frame.Take = take
-
-	local remort = vgui.Create("DButton", bottomspace)
-	remort:SetFont("Relapse20")
-	remort:SetText(Phrase("char_relapse", "Relapse"))
-	remort:SetSize(RelapseUI.Cells(12), L.m.btnH)
-	remort.Paint = RelapseUI.PaintGhostButton
-	remort.DoClick = ConfirmRelapse
-	frame.RelapseBtn = remort
 
 	local classBtn = vgui.Create("DButton", bottomspace)
 	classBtn:SetFont("Relapse20")
@@ -2030,8 +2418,16 @@ function GM:OpenCharacterSheet()
 	frame.ClassBtn = classBtn
 
 	frame.Think = function(me)
-		if not me:IsVisible() then return end
+		if not me:IsVisible() then
+			if IsValid(me.LotteryWin) then
+				me.LotteryWin:SetVisible(false)
+			end
+			me._ScarTipDraw = nil
+			return
+		end
 		UpdateIdentity(me)
+		PlaceLottery(me)
+		UpdateScarTip(me)
 	end
 
 	frame.CharTabs = RelapseUI.CreateFilterStrip(body, {
@@ -2096,6 +2492,15 @@ net.Receive("zs_cycle_grid_sync", function()
 	end
 	local had = pl.CycleGridTaken ~= nil
 	local before = had and gm:CycleGridTakenCount(pl) or 0
+	local muteBefore = ""
+	if had and pl.CycleGridMute then
+		local keys = {}
+		for key in pairs(pl.CycleGridMute) do
+			keys[#keys + 1] = key
+		end
+		table.sort(keys)
+		muteBefore = table.concat(keys, ",")
+	end
 	gm:InitCycleGrid(pl, true)
 	local n = net.ReadUInt(8)
 	for _ = 1, n do
@@ -2104,8 +2509,38 @@ net.Receive("zs_cycle_grid_sync", function()
 			pl.CycleGridTaken[id] = true
 		end
 	end
+	local nm = net.ReadUInt(8)
+	local muteKeys = {}
+	for _ = 1, nm do
+		local treeId = net.ReadString()
+		local slot = net.ReadUInt(5)
+		if gm:GetCycleGridNode(treeId, slot) then
+			local key = gm:CycleGridMuteKey(treeId, slot)
+			pl.CycleGridMute[key] = true
+			muteKeys[#muteKeys + 1] = key
+		end
+	end
+	table.sort(muteKeys)
+	local muteAfter = table.concat(muteKeys, ",")
+	local nLive = net.ReadUInt(8)
+	for _ = 1, nLive do
+		local id = net.ReadString()
+		if gm.CycleGridCatalog[id] then
+			pl.CycleGridLive[id] = true
+		end
+	end
+	local nLiveMute = net.ReadUInt(8)
+	for _ = 1, nLiveMute do
+		local treeId = net.ReadString()
+		local slot = net.ReadUInt(5)
+		if gm:GetCycleGridNode(treeId, slot) then
+			pl.CycleGridLiveMute[gm:CycleGridMuteKey(treeId, slot)] = true
+		end
+	end
 	if had and gm:CycleGridTakenCount(pl) > before then
 		surface.PlaySound("buttons/button14.wav")
+	elseif had and muteBefore ~= muteAfter then
+		surface.PlaySound("buttons/button15.wav")
 	end
 	if gm.RefreshCharacterSheet then
 		gm:RefreshCharacterSheet()

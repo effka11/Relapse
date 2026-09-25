@@ -107,8 +107,9 @@ GM.RelapseAmmo = {
 	},
 }
 
--- Not cartridges. Same 15-pt shelf and slider as RelapseAmmo; PackCount is the
--- 15-pt box (not Dollars). Nail 4 = old 4 pts/nail; 2×/3× stay 8/12 for random.
+-- Not cartridges. Nails stay on the 15-pt shelf: PackCount is that box.
+-- Medical supplies use the same slider. PackCount 6 is the 15-pt box, so the
+-- 5-pt step is 2 charges (6 * 5/15). One charge is 25 health on the medkit.
 GM.RelapseShopPackOrder = {
 	"battery",
 	"gaussenergy",
@@ -118,7 +119,7 @@ GM.RelapseShopPacks = {
 	["battery"] = {
 		PrintName = "Medical Supplies",
 		Icon = "ammo_medpower",
-		PackCount = 25,
+		PackCount = 6,
 	},
 	["gaussenergy"] = {
 		PrintName = "Nails",

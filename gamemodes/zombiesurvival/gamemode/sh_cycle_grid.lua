@@ -368,6 +368,83 @@ GM.CycleGridCatalog = {
 		need = "vitality_5",
 		Blood = 2
 	},
+	vitality_7 = {
+		tree = "vitality",
+		slot = 6,
+		nameKey = "grid_skill_vitality_7",
+		descKey = "grid_skill_vitality_7_desc",
+		U = 20,
+		BloodAbsorb = 0.04
+	},
+	vitality_8 = {
+		tree = "vitality",
+		slot = 9,
+		nameKey = "grid_skill_vitality_8",
+		descKey = "grid_skill_vitality_8_desc",
+		U = 20,
+		need = "vitality_7",
+		BloodAbsorb = 0.04
+	},
+	vitality_9 = {
+		tree = "vitality",
+		slot = 15,
+		nameKey = "grid_skill_vitality_9",
+		descKey = "grid_skill_vitality_9_desc",
+		U = 20,
+		need = "vitality_8",
+		BloodAbsorb = 0.04
+	},
+	vitality_10 = {
+		tree = "vitality",
+		slot = 4,
+		nameKey = "grid_skill_vitality_10",
+		descKey = "grid_skill_vitality_10_desc",
+		U = 20,
+		BloodGain = 0.03
+	},
+	vitality_11 = {
+		tree = "vitality",
+		slot = 8,
+		nameKey = "grid_skill_vitality_11",
+		descKey = "grid_skill_vitality_11_desc",
+		U = 20,
+		need = "vitality_10",
+		BloodGain = 0.03
+	},
+	vitality_12 = {
+		tree = "vitality",
+		slot = 13,
+		nameKey = "grid_skill_vitality_12",
+		descKey = "grid_skill_vitality_12_desc",
+		U = 20,
+		need = "vitality_11",
+		BloodGain = 0.03
+	},
+	vitality_13 = {
+		tree = "vitality",
+		slot = 11,
+		nameKey = "grid_skill_vitality_13",
+		descKey = "grid_skill_vitality_13_desc",
+		U = 20,
+		Blood = 5,
+		BloodAbsorb = -0.10
+	},
+	vitality_14 = {
+		tree = "vitality",
+		slot = 12,
+		nameKey = "grid_skill_vitality_14",
+		descKey = "grid_skill_vitality_14_desc",
+		U = 20,
+		FoodBlood = 0.15
+	},
+	vitality_15 = {
+		tree = "vitality",
+		slot = 14,
+		nameKey = "grid_skill_vitality_15",
+		descKey = "grid_skill_vitality_15_desc",
+		U = 20,
+		BloodReturn = 0.10
+	},
 	agility_1 = {
 		tree = "agility",
 		slot = 0,
@@ -444,6 +521,41 @@ GM.CycleGridCatalog = {
 		Jump = 0.02,
 		Health = -2
 	},
+	agility_9 = {
+		tree = "agility",
+		slot = 3,
+		nameKey = "grid_skill_agility_9",
+		descKey = "grid_skill_agility_9_desc",
+		U = 20,
+		Phase = 0.05
+	},
+	agility_10 = {
+		tree = "agility",
+		slot = 7,
+		nameKey = "grid_skill_agility_10",
+		descKey = "grid_skill_agility_10_desc",
+		U = 20,
+		need = "agility_9",
+		Phase = 0.05
+	},
+	agility_11 = {
+		tree = "agility",
+		slot = 10,
+		nameKey = "grid_skill_agility_11",
+		descKey = "grid_skill_agility_11_desc",
+		U = 20,
+		need = "agility_10",
+		Phase = 0.05
+	},
+	agility_12 = {
+		tree = "agility",
+		slot = 11,
+		nameKey = "grid_skill_agility_12",
+		descKey = "grid_skill_agility_12_desc",
+		U = 20,
+		Phase = 0.10,
+		Health = -4
+	},
 	ranged_1 = {
 		tree = "ranged",
 		slot = 0,
@@ -495,6 +607,75 @@ GM.CycleGridCatalog = {
 		U = 20,
 		need = "ranged_5",
 		Recoil = -0.03
+	},
+	ranged_7 = {
+		tree = "ranged",
+		slot = 7,
+		nameKey = "grid_skill_ranged_7",
+		descKey = "grid_skill_ranged_7_desc",
+		U = 20,
+		Deploy = 0.10
+	},
+	ranged_8 = {
+		tree = "ranged",
+		slot = 11,
+		nameKey = "grid_skill_ranged_8",
+		descKey = "grid_skill_ranged_8_desc",
+		U = 20,
+		need = "ranged_7",
+		Deploy = 0.10
+	},
+	ranged_9 = {
+		tree = "ranged",
+		slot = 15,
+		nameKey = "grid_skill_ranged_9",
+		descKey = "grid_skill_ranged_9_desc",
+		U = 20,
+		need = "ranged_8",
+		Deploy = 0.10
+	},
+	ranged_10 = {
+		tree = "ranged",
+		slot = 8,
+		nameKey = "grid_skill_ranged_10",
+		descKey = "grid_skill_ranged_10_desc",
+		U = 20,
+		GunFire = 0.02
+	},
+	ranged_11 = {
+		tree = "ranged",
+		slot = 12,
+		nameKey = "grid_skill_ranged_11",
+		descKey = "grid_skill_ranged_11_desc",
+		U = 20,
+		need = "ranged_10",
+		GunFire = 0.02
+	},
+	ranged_12 = {
+		tree = "ranged",
+		slot = 16,
+		nameKey = "grid_skill_ranged_12",
+		descKey = "grid_skill_ranged_12_desc",
+		U = 20,
+		need = "ranged_11",
+		GunFire = 0.02
+	},
+	ranged_13 = {
+		tree = "ranged",
+		slot = 13,
+		nameKey = "grid_skill_ranged_13",
+		descKey = "grid_skill_ranged_13_desc",
+		U = 20,
+		RangedShop = 0.10
+	},
+	ranged_14 = {
+		tree = "ranged",
+		slot = 14,
+		nameKey = "grid_skill_ranged_14",
+		descKey = "grid_skill_ranged_14_desc",
+		U = 20,
+		Recoil = -0.09,
+		Deploy = -0.30
 	},
 	build_1 = {
 		tree = "build",
@@ -590,6 +771,32 @@ GM.CycleGridCatalog = {
 		need = "build_10",
 		MaxNails = 1
 	},
+	build_12 = {
+		tree = "build",
+		slot = 3,
+		nameKey = "grid_skill_build_12",
+		descKey = "grid_skill_build_12_desc",
+		U = 20,
+		RepairPerNail = 0.01
+	},
+	build_13 = {
+		tree = "build",
+		slot = 6,
+		nameKey = "grid_skill_build_13",
+		descKey = "grid_skill_build_13_desc",
+		U = 20,
+		need = "build_12",
+		RepairPerNail = 0.01
+	},
+	build_14 = {
+		tree = "build",
+		slot = 11,
+		nameKey = "grid_skill_build_14",
+		descKey = "grid_skill_build_14_desc",
+		U = 20,
+		need = "build_13",
+		RepairPerNail = 0.01
+	},
 	mechanics_1 = {
 		tree = "mechanics",
 		slot = 0,
@@ -615,6 +822,66 @@ GM.CycleGridCatalog = {
 		U = 20,
 		need = "mechanics_2",
 		DeviceHealth = 0.05
+	},
+	mechanics_4 = {
+		tree = "mechanics",
+		slot = 1,
+		nameKey = "grid_skill_mechanics_4",
+		descKey = "grid_skill_mechanics_4_desc",
+		U = 20,
+		DeviceHandle = 0.07
+	},
+	mechanics_5 = {
+		tree = "mechanics",
+		slot = 3,
+		nameKey = "grid_skill_mechanics_5",
+		descKey = "grid_skill_mechanics_5_desc",
+		U = 20,
+		need = "mechanics_4",
+		DeviceHandle = 0.07
+	},
+	mechanics_6 = {
+		tree = "mechanics",
+		slot = 7,
+		nameKey = "grid_skill_mechanics_6",
+		descKey = "grid_skill_mechanics_6_desc",
+		U = 20,
+		need = "mechanics_5",
+		DeviceHandle = 0.07
+	},
+	mechanics_7 = {
+		tree = "mechanics",
+		slot = 5,
+		nameKey = "grid_skill_mechanics_7",
+		descKey = "grid_skill_mechanics_7_desc",
+		U = 20,
+		TurretFire = 0.03
+	},
+	mechanics_8 = {
+		tree = "mechanics",
+		slot = 9,
+		nameKey = "grid_skill_mechanics_8",
+		descKey = "grid_skill_mechanics_8_desc",
+		U = 20,
+		need = "mechanics_7",
+		TurretFire = 0.03
+	},
+	mechanics_9 = {
+		tree = "mechanics",
+		slot = 13,
+		nameKey = "grid_skill_mechanics_9",
+		descKey = "grid_skill_mechanics_9_desc",
+		U = 20,
+		need = "mechanics_8",
+		TurretFire = 0.03
+	},
+	mechanics_10 = {
+		tree = "mechanics",
+		slot = 17,
+		nameKey = "grid_skill_mechanics_10",
+		descKey = "grid_skill_mechanics_10_desc",
+		U = 20,
+		TurretFire = 0.15
 	},
 	medicine_1 = {
 		tree = "medicine",
@@ -642,6 +909,15 @@ GM.CycleGridCatalog = {
 		need = "medicine_2",
 		MedicHeal = 0.03
 	},
+	medicine_5 = {
+		tree = "medicine",
+		slot = 7,
+		nameKey = "grid_skill_medicine_5",
+		descKey = "grid_skill_medicine_5_desc",
+		U = 20,
+		MedicHeal = 0.07,
+		Heal = -0.05
+	},
 	medicine_4 = {
 		tree = "medicine",
 		slot = 9,
@@ -668,6 +944,32 @@ GM.CycleGridCatalog = {
 		U = 20,
 		need = "medicine_4",
 		AloeGrow = -60
+	},
+	medicine_6 = {
+		tree = "medicine",
+		slot = 1,
+		nameKey = "grid_skill_medicine_6",
+		descKey = "grid_skill_medicine_6_desc",
+		U = 20,
+		MedkitCharge = 0.10
+	},
+	medicine_7 = {
+		tree = "medicine",
+		slot = 3,
+		nameKey = "grid_skill_medicine_7",
+		descKey = "grid_skill_medicine_7_desc",
+		U = 20,
+		need = "medicine_6",
+		MedkitCharge = 0.10
+	},
+	medicine_8 = {
+		tree = "medicine",
+		slot = 6,
+		nameKey = "grid_skill_medicine_8",
+		descKey = "grid_skill_medicine_8_desc",
+		U = 20,
+		need = "medicine_7",
+		MedkitCharge = 0.10
 	},
 	melee_1 = {
 		tree = "melee",
@@ -826,6 +1128,15 @@ GM.CycleGridCatalog = {
 		MeleeMiss = 0.04,
 		HitSlow = -0.75
 	},
+	melee_18 = {
+		tree = "melee",
+		slot = 5,
+		nameKey = "grid_skill_melee_18",
+		descKey = "grid_skill_melee_18_desc",
+		U = 20,
+		MeleeDamage = 0.05,
+		MeleeWindup = -0.15
+	},
 	shadow_1 = {
 		tree = "shadow",
 		slot = 0,
@@ -842,6 +1153,92 @@ GM.CycleGridCatalog = {
 		U = 20,
 		need = "shadow_1",
 		ZombieHealth = 0.03
+	},
+	shadow_3 = {
+		tree = "shadow",
+		slot = 1,
+		nameKey = "grid_skill_shadow_3",
+		descKey = "grid_skill_shadow_3_desc",
+		U = 20,
+		BarricadeDamage = 0.03
+	},
+	shadow_4 = {
+		tree = "shadow",
+		slot = 4,
+		nameKey = "grid_skill_shadow_4",
+		descKey = "grid_skill_shadow_4_desc",
+		U = 20,
+		need = "shadow_3",
+		BarricadeDamage = 0.03
+	},
+	shadow_5 = {
+		tree = "shadow",
+		slot = 6,
+		nameKey = "grid_skill_shadow_5",
+		descKey = "grid_skill_shadow_5_desc",
+		U = 20,
+		need = "shadow_4",
+		BarricadeDamage = 0.03
+	},
+	shadow_6 = {
+		tree = "shadow",
+		slot = 11,
+		nameKey = "grid_skill_shadow_6",
+		descKey = "grid_skill_shadow_6_desc",
+		U = 20,
+		LoosePropDamage = 0.20
+	},
+	shadow_7 = {
+		tree = "shadow",
+		slot = 10,
+		nameKey = "grid_skill_shadow_7",
+		descKey = "grid_skill_shadow_7_desc",
+		U = 20,
+		ZombieDoorDamage = 0.15
+	},
+	shadow_8 = {
+		tree = "shadow",
+		slot = 7,
+		nameKey = "grid_skill_shadow_8",
+		descKey = "grid_skill_shadow_8_desc",
+		U = 20,
+		BarricadeDamage = 0.05,
+		ZombieHumanDamage = -0.07
+	},
+	shadow_9 = {
+		tree = "shadow",
+		slot = 5,
+		nameKey = "grid_skill_shadow_9",
+		descKey = "grid_skill_shadow_9_desc",
+		U = 20,
+		ZombieHumanDamage = 0.04
+	},
+	shadow_10 = {
+		tree = "shadow",
+		slot = 8,
+		nameKey = "grid_skill_shadow_10",
+		descKey = "grid_skill_shadow_10_desc",
+		U = 20,
+		need = "shadow_9",
+		ZombieHumanDamage = 0.04
+	},
+	shadow_11 = {
+		tree = "shadow",
+		slot = 12,
+		nameKey = "grid_skill_shadow_11",
+		descKey = "grid_skill_shadow_11_desc",
+		U = 20,
+		need = "shadow_10",
+		ZombieHumanDamage = 0.04
+	},
+	shadow_12 = {
+		tree = "shadow",
+		slot = 13,
+		nameKey = "grid_skill_shadow_12",
+		descKey = "grid_skill_shadow_12_desc",
+		U = 20,
+		ZombieHumanDamage = 0.07,
+		BarricadeDamage = -0.05
 	},
 	supply_1 = {
 		tree = "supply",
@@ -871,7 +1268,7 @@ GM.CycleGridCatalog = {
 	},
 	supply_2 = {
 		tree = "supply",
-		slot = 5,
+		slot = 2,
 		nameKey = "grid_skill_supply_2",
 		descKey = "grid_skill_supply_2_desc",
 		U = 20,
@@ -879,7 +1276,7 @@ GM.CycleGridCatalog = {
 	},
 	supply_4 = {
 		tree = "supply",
-		slot = 7,
+		slot = 4,
 		nameKey = "grid_skill_supply_4",
 		descKey = "grid_skill_supply_4_desc",
 		U = 20,
@@ -888,16 +1285,50 @@ GM.CycleGridCatalog = {
 	},
 	supply_8 = {
 		tree = "supply",
-		slot = 10,
+		slot = 6,
 		nameKey = "grid_skill_supply_8",
 		descKey = "grid_skill_supply_8_desc",
 		U = 20,
 		need = "supply_4",
 		ArsenalMargin = 0.02
 	},
-	supply_9 = {
+	supply_12 = {
+		tree = "supply",
+		slot = 5,
+		nameKey = "grid_skill_supply_12",
+		descKey = "grid_skill_supply_12_desc",
+		U = 20,
+		SupplyHandle = 0.07
+	},
+	supply_13 = {
+		tree = "supply",
+		slot = 7,
+		nameKey = "grid_skill_supply_13",
+		descKey = "grid_skill_supply_13_desc",
+		U = 20,
+		need = "supply_12",
+		SupplyHandle = 0.07
+	},
+	supply_14 = {
+		tree = "supply",
+		slot = 10,
+		nameKey = "grid_skill_supply_14",
+		descKey = "grid_skill_supply_14_desc",
+		U = 20,
+		need = "supply_13",
+		SupplyHandle = 0.07
+	},
+	supply_15 = {
 		tree = "supply",
 		slot = 8,
+		nameKey = "grid_skill_supply_15",
+		descKey = "grid_skill_supply_15_desc",
+		U = 20,
+		SupplySell = 0.5
+	},
+	supply_9 = {
+		tree = "supply",
+		slot = 12,
 		nameKey = "grid_skill_supply_9",
 		descKey = "grid_skill_supply_9_desc",
 		U = 20,
@@ -906,7 +1337,7 @@ GM.CycleGridCatalog = {
 	},
 	supply_10 = {
 		tree = "supply",
-		slot = 12,
+		slot = 9,
 		nameKey = "grid_skill_supply_10",
 		descKey = "grid_skill_supply_10_desc",
 		U = 20,
@@ -996,6 +1427,130 @@ function GM:InitCycleGrid(pl, wipe)
 	if wipe or not pl.CycleGridTaken then
 		pl.CycleGridTaken = {}
 	end
+	if wipe or not pl.CycleGridMute then
+		pl.CycleGridMute = {}
+	end
+	if wipe or not pl.CycleGridLive then
+		pl.CycleGridLive = {}
+	end
+	if wipe or not pl.CycleGridLiveMute then
+		pl.CycleGridLiveMute = {}
+	end
+end
+
+function GM:CycleGridMuteKey(treeId, slot)
+	return tostring(treeId) .. ":" .. tostring(slot)
+end
+
+function GM:CycleGridKeyMuted(pl, node, set)
+	if not node or node.tree == nil or not IsValid(pl) or not set then
+		return false
+	end
+	local n = node
+	while n and n.tree ~= nil do
+		if set[self:CycleGridMuteKey(n.treeId, n.slot)] then
+			return true
+		end
+		n = n.parent
+	end
+	return false
+end
+
+function GM:CycleGridNodeMuted(pl, node)
+	return self:CycleGridKeyMuted(pl, node, pl.CycleGridMute)
+end
+
+function GM:CycleGridLiveNodeMuted(pl, node)
+	return self:CycleGridKeyMuted(pl, node, pl.CycleGridLiveMute)
+end
+
+function GM:CycleGridIsMuteRoot(pl, node)
+	if not node or node.tree == nil or not IsValid(pl) or not pl.CycleGridMute then
+		return false
+	end
+	return pl.CycleGridMute[self:CycleGridMuteKey(node.treeId, node.slot)] == true
+end
+
+function GM:CycleGridMutedByAncestor(pl, node)
+	return self:CycleGridNodeMuted(pl, node) and not self:CycleGridIsMuteRoot(pl, node)
+end
+
+function GM:CycleGridSkillMuted(pl, id)
+	local skill = id and self.CycleGridCatalog[id]
+	if not skill then
+		return false
+	end
+	return self:CycleGridNodeMuted(pl, self:GetCycleGridNode(skill.tree, skill.slot))
+end
+
+function GM:CycleGridLiveSkillMuted(pl, id)
+	local skill = id and self.CycleGridCatalog[id]
+	if not skill then
+		return false
+	end
+	return self:CycleGridLiveNodeMuted(pl, self:GetCycleGridNode(skill.tree, skill.slot))
+end
+
+function GM:CycleGridLiveHas(pl, id)
+	return IsValid(pl) and id and pl.CycleGridLive and pl.CycleGridLive[id] == true
+end
+
+function GM:CycleGridCommitLive(pl)
+	if not IsValid(pl) then
+		return
+	end
+	self:InitCycleGrid(pl)
+	local live = {}
+	for id in pairs(pl.CycleGridTaken) do
+		if self.CycleGridCatalog[id] then
+			live[id] = true
+		end
+	end
+	local mute = {}
+	for key in pairs(pl.CycleGridMute) do
+		mute[key] = true
+	end
+	pl.CycleGridLive = live
+	pl.CycleGridLiveMute = mute
+	pl.CycleGridMap = game.GetMap()
+end
+
+function GM:CycleGridClearMuteUnder(pl, root)
+	if not pl or not pl.CycleGridMute or not root then
+		return
+	end
+	local layout = self:GetCycleGridLayout()
+	for _, n in ipairs(layout.nodes) do
+		local p = n.parent
+		while p do
+			if p.treeId == root.treeId and p.slot == root.slot then
+				pl.CycleGridMute[self:CycleGridMuteKey(n.treeId, n.slot)] = nil
+				break
+			end
+			p = p.parent
+		end
+	end
+end
+
+function GM:CycleGridMuteEntries(pl)
+	local list = {}
+	if not IsValid(pl) or not pl.CycleGridMute then
+		return list
+	end
+	for key in pairs(pl.CycleGridMute) do
+		local treeId, slot = string.match(key, "^([%w_]+):(%d+)$")
+		slot = tonumber(slot)
+		if treeId and slot and self:GetCycleGridNode(treeId, slot) then
+			list[#list + 1] = { treeId = treeId, slot = slot }
+		end
+	end
+	table.sort(list, function(a, b)
+		if a.treeId == b.treeId then
+			return a.slot < b.slot
+		end
+		return a.treeId < b.treeId
+	end)
+	return list
 end
 
 function GM:HasCycleGridSkill(pl, id)
@@ -1012,7 +1567,7 @@ function GM:ItemSkillLocked(pl, item)
 		end
 	end
 	if item.CycleGridNeed then
-		if not self:HasCycleGridSkill(pl, item.CycleGridNeed) then
+		if not self:CycleGridLiveHas(pl, item.CycleGridNeed) or self:CycleGridLiveSkillMuted(pl, item.CycleGridNeed) then
 			return true
 		end
 	end
@@ -1080,7 +1635,10 @@ function GM:GetCycleGridSPRemaining(pl)
 end
 
 function GM:HasCycleGridVault(pl)
-	return self:CycleGridTakenCount(pl) > 0
+	if self:CycleGridTakenCount(pl) > 0 then
+		return true
+	end
+	return IsValid(pl) and pl.CycleGridMute and next(pl.CycleGridMute) ~= nil
 end
 
 function GM:CycleGridNeighborOk(pl, treeId, slot)
@@ -1116,6 +1674,9 @@ function GM:CycleGridIsOffered(pl, treeId, slot)
 	if self:HasCycleGridSkill(pl, skill.id) then
 		return false
 	end
+	if self:CycleGridNodeMuted(pl, self:GetCycleGridNode(treeId, slot)) then
+		return false
+	end
 	return self:CycleGridNeighborOk(pl, treeId, slot)
 end
 
@@ -1135,11 +1696,14 @@ local GRID_SKILL_META = {
 }
 
 function GM:GetCycleGridStatAdd(pl, field)
-	if not IsValid(pl) or not pl.CycleGridTaken or not field then
+	if not IsValid(pl) or not pl.CycleGridLive or not field then
 		return 0
 	end
 	local add = 0
-	for id in pairs(pl.CycleGridTaken) do
+	for id in pairs(pl.CycleGridLive) do
+		if self:CycleGridLiveSkillMuted(pl, id) then
+			continue
+		end
 		local skill = self.CycleGridCatalog[id]
 		local v = skill and skill[field]
 		if isnumber(v) then
@@ -1184,10 +1748,11 @@ end
 
 function GM:GetCycleGridStatAdds(pl)
 	local adds = {}
-	if not IsValid(pl) or not pl.CycleGridTaken then
+	if not IsValid(pl) or not pl.CycleGridLive then
 		return adds
 	end
-	for id in pairs(pl.CycleGridTaken) do
+	for id in pairs(pl.CycleGridLive) do
+		if self:CycleGridLiveSkillMuted(pl, id) then continue end
 		local skill = self.CycleGridCatalog[id]
 		if not skill then continue end
 		for k, v in pairs(skill) do

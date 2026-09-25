@@ -10,7 +10,7 @@ GM.RelapseScarCatalog = {
 		K1 = 12,
 		KInf = 3,
 		Stat = { Kind = "k", Dec = 1 },
-		Icon = "zombiesurvival/killicons/weapon_zs_ak47_side.png"
+		Icon = "zombiesurvival/killicons/scar_mercenary.png"
 	},
 	headhunter = {
 		Order = 2,
@@ -38,7 +38,7 @@ GM.RelapseScarCatalog = {
 		Pace = 750,
 		Feed = "heal",
 		Stat = { Kind = "p", Inf = 6, Dec = 1 },
-		Icon = "zombiesurvival/killicons/weapon_zs_medkit"
+		Icon = "zombiesurvival/killicons/weapon_zs_medkit4.png"
 	},
 	orderly = {
 		Order = 5,
@@ -56,7 +56,7 @@ GM.RelapseScarCatalog = {
 		K1 = 8,
 		KInf = 2,
 		Stat = { Kind = "kmul", Mul = 200, Dec = 0 },
-		Icon = "zombiesurvival/killicons/weapon_zs_hammer2"
+		Icon = "zombiesurvival/killicons/weapon_zs_hammer3.png"
 	},
 	landlord = {
 		Order = 7,
@@ -82,7 +82,7 @@ GM.RelapseScarCatalog = {
 		Pace = 15,
 		Feed = "deploy",
 		Stat = { Kind = "p", Inf = 20, Dec = 1 },
-		Icon = "zombiesurvival/killicons/weapon_zs_resupplybox"
+		Icon = "zombiesurvival/killicons/weapon_zs_resupplybox2.png"
 	},
 	nailer = {
 		Order = 10,

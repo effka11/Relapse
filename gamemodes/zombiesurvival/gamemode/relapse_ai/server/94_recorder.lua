@@ -3,7 +3,10 @@
 -- Two files in data/relapse_ai/rec/, never deleted here:
 --   <map>_bug_<time>_<n>_<reason>_<nick>.txt  written on stuck / path fail /
 --     ladder abort / give-up / hopeless / startsolid / lua error, and only
---     while a U recording is open. The bug line itself is a full bot frame.
+--     while a U recording is open. The bug line is a full bot frame taken when
+--     that reason is scheduled. The file follows after a short wait, so the
+--     ring still holds the lines around that pose. The same reason does not
+--     open a second file for 10s; a different reason does.
 --   <map>_rec_<time>_<n>.txt  only after relapse_ai_rec, and only while U is held
 --     down as a recording. Chunks are 12s; the next chunk is a new file.
 --
@@ -44,6 +47,24 @@ local traceSelf
 local bodyStart, bodyEnd = Vector(), Vector()
 local bodyMins, bodyMaxs = Vector(-16, -16, 0), Vector(16, 16, 72)
 local bodyRes = {}
+-- Same pass-throughs as the locomotion probe: a sigil post, a dropped weapon,
+-- prop_prop_blocker (IgnoreTraces, players walk through it). Overlapping one
+-- is not a stuck hull. Return true to hit.
+local PASSABLE_GROUP = {
+	[COLLISION_GROUP_DEBRIS] = true,
+	[COLLISION_GROUP_DEBRIS_TRIGGER] = true,
+	[COLLISION_GROUP_WEAPON] = true,
+	[COLLISION_GROUP_IN_VEHICLE] = true,
+	[COLLISION_GROUP_PASSABLE_DOOR] = true,
+	[COLLISION_GROUP_DOOR_BLOCKER] = true,
+	[COLLISION_GROUP_DISSOLVING] = true,
+}
+local function BodyHits(ent)
+	if ent == traceSelf then return false end
+	if ent.IgnoreTraces or PASSABLE_GROUP[ent:GetCollisionGroup()] then return false end
+	if ent.ShouldNotCollide and ent:ShouldNotCollide(traceSelf) then return false end
+	return true
+end
 local bodyTr = {
 	mask = MASK_PLAYERSOLID,
 	collisiongroup = COLLISION_GROUP_PLAYER,
@@ -51,9 +72,7 @@ local bodyTr = {
 	endpos = bodyEnd,
 	mins = bodyMins,
 	maxs = bodyMaxs,
-	filter = function(ent)
-		return ent ~= traceSelf
-	end,
+	filter = BodyHits,
 	output = bodyRes,
 }
 local floorStart, floorEnd = Vector(), Vector()
@@ -300,8 +319,8 @@ local function Flush()
 	if not ok then Rec.Warn(err) end
 end
 
-local function Push(ev)
-	ev.t = CurTime()
+local function Push(ev, at)
+	ev.t = at or CurTime()
 	ring[#ring + 1] = ev
 	if not Rec.Recording or not Rec.Path then return end
 	local line = Line(ev, Rec.ChunkStart or ev.t)
@@ -958,6 +977,72 @@ local function QuietState(bot)
 	return st == "wait" or st == "crow" or st == "dead" or st == "down"
 end
 
+local BotFrame
+
+-- The note frame is shared with the caller, which still edits it. The bug line
+-- keeps its own copy, stamped at this moment, not when the file is written.
+-- The file name is the folded bucket (stuck). The line keeps the note's own
+-- why (stuck1:snag). first is that word from the note which opened the file.
+local function CopyBugFrame(src, firstWhy)
+	if not src then return nil end
+	local raw = util.TableToJSON(src)
+	if not raw then return nil end
+	local ok, frame = pcall(util.JSONToTable, raw)
+	if not ok or not istable(frame) then return nil end
+	frame.ev = "bug"
+	if not frame.why or frame.why == "" then
+		frame.why = firstWhy
+	end
+	if firstWhy and frame.why ~= firstWhy then
+		frame.first = firstWhy
+	end
+	return frame
+end
+
+local framing = false
+
+local function LiveBugFrame(bot, reason, firstReason)
+	if framing or not bot or not IsValid(bot.Player) then return nil end
+	framing = true
+	local ok, frame = pcall(BotFrame, bot, "bug", true)
+	framing = false
+	if not ok or not frame then return nil end
+	if not frame.why or frame.why == "" then
+		frame.why = reason
+	end
+	if firstReason and frame.why ~= firstReason then
+		frame.first = firstReason
+	end
+	return frame
+end
+
+local function Cool(pl, reason, now)
+	local bag = cooldown[pl]
+	if not bag then
+		bag = {}
+		cooldown[pl] = bag
+	end
+	bag[reason] = now + 10
+end
+
+-- One bug line per reason, at the pose where it was decided. A later different
+-- reason while this one is still waiting replaces the name and the pose.
+local function CommitBug(pl, bot, reason, firstReason, frame, now)
+	if frame then
+		Push(frame, now)
+	else
+		Push({
+			ev = "bug",
+			why = reason,
+			first = firstReason,
+			name = IsValid(pl) and pl:Nick() or "?",
+		}, now)
+	end
+	if IsValid(pl) then
+		PushScene(pl:GetPos())
+	end
+end
+
 local function ScheduleBug(bot, reason, opts)
 	opts = opts or {}
 	if not Rec.Recording then return end
@@ -968,26 +1053,39 @@ local function ScheduleBug(bot, reason, opts)
 	local delay = opts.delay or 2.2
 	local p = pending[pl]
 	if p then
-		p.reason = reason
-		p.bot = bot
+		if p.reason ~= reason then
+			local frame = opts.frame and CopyBugFrame(opts.frame, p.firstReason) or LiveBugFrame(bot, reason, p.firstReason)
+			p.reason = reason
+			p.frame = frame
+			p.frameAt = now
+			p.bot = bot
+			CommitBug(pl, bot, reason, p.firstReason, frame, now)
+		end
 		p.until_ = math.min(p.first + 4, now + delay)
 		return
 	end
-	if not opts.force and (cooldown[pl] or 0) > now then return end
+	local bag = cooldown[pl]
+	if not opts.force and bag and (bag[reason] or 0) > now then return end
+	local noteWhy = (opts.frame and opts.frame.why) or reason
+	local frame = opts.frame and CopyBugFrame(opts.frame, noteWhy) or LiveBugFrame(bot, reason, noteWhy)
 	pending[pl] = {
 		reason = reason,
-		firstReason = reason,
+		firstReason = noteWhy,
 		bot = bot,
 		name = pl:Nick(),
 		until_ = now + delay,
 		first = now,
+		frame = frame,
+		frameAt = now,
 	}
+	CommitBug(pl, bot, reason, reason, frame, now)
 end
 
-local function BotFrame(bot, ev, full)
+BotFrame = function(bot, ev, full)
 	local pl = bot.Player
 	if not IsValid(pl) then return nil end
 	if ev == "bot" and not pl:Alive() then return nil end
+	local wantSolid = false
 	local loco = bot.Loco
 	local pos = pl:GetPos()
 	local bb = bot.BB
@@ -1025,6 +1123,8 @@ local function BotFrame(bot, ev, full)
 		local mdl = gnd:GetModel()
 		if mdl and mdl ~= "" then info.gndm = mdl end
 		if gnd.IsNailed and gnd:IsNailed() then info.gndnail = 1 end
+		local phys = gnd.GetPhysicsObject and gnd:GetPhysicsObject()
+		if IsValid(phys) and not phys:IsMotionEnabled() then info.gndfr = 1 end
 	end
 
 	if loco then
@@ -1092,8 +1192,8 @@ local function BotFrame(bot, ev, full)
 			-- Overlapping a teammate is a crowd, not a stuck brush. Ladder / noclip overlap is expected.
 			local solidBug = hullSolid and along == "wish" and body.cls ~= "player"
 				and mt ~= MOVETYPE_LADDER and mt ~= MOVETYPE_NOCLIP
-			if solidBug and not w.solid and CurTime() - (bot.Created or 0) > 2 then
-				ScheduleBug(bot, "solid")
+			if solidBug and not w.solid and not framing and CurTime() - (bot.Created or 0) > 2 then
+				wantSolid = true
 			end
 			w.solid = hullSolid
 		end
@@ -1165,6 +1265,9 @@ local function BotFrame(bot, ev, full)
 		end
 	end
 
+	if wantSolid then
+		ScheduleBug(bot, "solid", {frame = info})
+	end
 	return info
 end
 
@@ -1255,29 +1358,10 @@ local function FlushPending(now)
 	for pl, p in pairs(pending) do
 		if now >= p.until_ then
 			pending[pl] = nil
-			cooldown[pl] = now + 10
-			local ok, err = pcall(function()
-				local frame
-				if IsValid(pl) and p.bot and IsValid(p.bot.Player) then
-					frame = BotFrame(p.bot, "bug", true)
-					PushScene(pl:GetPos())
-				else
-					PushScene()
-				end
-				if frame then
-					frame.why = p.reason
-					frame.first = p.firstReason
-					Push(frame)
-				else
-					Push({
-						ev = "bug",
-						why = p.reason,
-						first = p.firstReason,
-						name = p.name,
-					})
-				end
-			end)
-			if not ok then Rec.Warn(err) end
+			Cool(pl, p.reason, now)
+			if p.firstReason and p.firstReason ~= p.reason then
+				Cool(pl, p.firstReason, now)
+			end
 			local wrote, werr = pcall(WriteBug, p)
 			if not wrote then Rec.Warn(werr) end
 		end
@@ -1422,6 +1506,7 @@ end
 function Rec.OnNote(loco, why)
 	local bot = loco and loco.Bot
 	local reason = BugReason(why)
+	local frame
 	if bot and IsValid(bot.Player) then
 		local w = Watch(bot)
 		local now = CurTime()
@@ -1433,7 +1518,7 @@ function Rec.OnNote(loco, why)
 		w.noteAt = now
 		-- Every note carries the path window and the obstacle. A short frame hid
 		-- the polyline on obstacle/detour, which is where a door shows up.
-		local frame = BotFrame(bot, "note", true)
+		frame = BotFrame(bot, "note", true)
 		if frame then
 			frame.why = why
 			Push(frame)
@@ -1442,7 +1527,7 @@ function Rec.OnNote(loco, why)
 		Push({ev = "note", why = why})
 	end
 	if reason and bot then
-		ScheduleBug(bot, reason)
+		ScheduleBug(bot, reason, {frame = frame})
 	end
 end
 
@@ -1563,7 +1648,7 @@ function Rec.OnHopeless(bot, intent)
 			frame.abandoned = intent
 			Push(frame)
 		end
-		ScheduleBug(bot, "hopeless", {delay = 1.5})
+		ScheduleBug(bot, "hopeless", {delay = 1.5, frame = frame})
 	end)
 	if not ok then Rec.Warn(err) end
 end
@@ -1713,7 +1798,7 @@ hook.Add("PlayerDisconnected", "RelapseAI.Rec", function(pl)
 	local p = pending[pl]
 	if p then
 		pending[pl] = nil
-		Push({ev = "bug", why = p.reason, first = p.firstReason, name = p.name, left = 1})
+		if p.frame then p.frame.left = 1 end
 		local wrote, werr = pcall(WriteBug, p)
 		if not wrote then Rec.Warn(werr) end
 	end

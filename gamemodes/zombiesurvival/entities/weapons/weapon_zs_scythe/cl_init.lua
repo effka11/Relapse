@@ -37,6 +37,9 @@ function SWEP:GetViewModelPosition(pos, ang)
 		local offset = self:GetDTInt(10) == 1 and Vector(-200, 30, -40) or self.SwingOffset
 		local armdelay = owner:GetMeleeSpeedMul()
 		local swingtime = self.SwingTime * (owner.MeleeSwingDelayMul or 1) * armdelay
+		if GAMEMODE and GAMEMODE.GetMeleeWindupTimeMul then
+			swingtime = swingtime * GAMEMODE:GetMeleeWindupTimeMul(owner, self)
+		end
 
 		ang = Angle(ang.pitch, ang.yaw, ang.roll) -- Copy
 

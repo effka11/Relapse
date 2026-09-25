@@ -29,6 +29,16 @@ end
 function ENT:SetAmmoType(ammotype)
 	self:SetModel(GAMEMODE.AmmoModels[string.lower(ammotype)] or "models/Items/BoxMRounds.mdl")
 	self.m_AmmoType = ammotype
+
+	if self:GetModel() == "models/ammo/fas2/ammocrate.mdl" then
+		self:SetModelScale(0.75, 0)
+		local seq = self:LookupSequence("Open")
+		if seq and seq >= 0 then
+			self:ResetSequence(seq)
+			self:SetCycle(1)
+			self:SetPlaybackRate(0)
+		end
+	end
 end
 
 function ENT:GetAmmoType()

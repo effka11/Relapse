@@ -4,7 +4,7 @@
 -- and at least a T1-sized presence.
 --
 -- Worth examples (StartingWorth 100):
---   hammer 40 + T1 gun 15          → builder 24 (hammer+nails) > shooter 10
+--   hammer 40 + T1 gun 40          → builder 24 (hammer+nails) > shooter 10
 --   T1 gun + knife                 → shooter 10 = melee 10, shooter first (tie)
 --   crate 50 + T1 gun              → supplier 22 > shooter 10
 --   remantler 50 + T1 gun          → mechanic 20 > shooter 10

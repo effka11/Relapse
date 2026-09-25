@@ -1,0 +1,130 @@
+==== zs_oxygen_b4_bug_20260922_205533_1_hopeless_gena.txt
+t=10.88 hopeless hopeless why=hopeless name=Gena intent=hunt st=hunt p=[1204, 263, -96] goal=[1318, 434, -64] path=ok=1 reach=0 len=538 endp=[1193, 338, -94] goal=None door=None i=6 n=8 typ=ground comp=2120 gcomp=None
+t=10.88 bug hopeless why=hopeless name=Gena intent=hunt st=hunt p=[1204, 263, -96] goal=[1318, 434, -64] path=ok=1 reach=0 len=538 endp=[1193, 338, -94] goal=None door=None i=6 n=8 typ=ground comp=2120 gcomp=None
+t=11.94 note break:prop_door_rotating why=break:prop_door_rotating name=Oleg intent=hunt st=hunt p=[1483, 479, -64] goal=[1318, 434, -64] path=ok=1 reach=1 len=364 endp=[1318, 434, -64] goal=None door=None i=3 n=9 typ=ground comp=4049 gcomp=None
+t=12.03 note break:prop_door_rotating why=break:prop_door_rotating name=Ruslan intent=hunt st=hunt p=[1478, 467, -64] goal=[1318, 434, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=12.06 note door:use why=door:use name=Oleg intent=hunt st=break p=[1473, 468, -64] goal=[1462, 468, -64] path=ok=1 reach=1 len=364 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=12.09 note break:prop_door_rotating why=break:prop_door_rotating name=Roma intent=hunt st=hunt p=[1478, 467, -64] goal=[1318, 434, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=12.15 note door:use why=door:use name=Ruslan intent=hunt st=break p=[1473, 469, -64] goal=[1462, 469, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=12.21 note door:use why=door:use name=Roma intent=hunt st=break p=[1473, 469, -64] goal=[1462, 469, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+ deaths 0 spawns 0
+==== zs_oxygen_b4_bug_20260922_205552_2_hopeless_roma.txt
+t=0.48 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1179, -93, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=1.09 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1133, -94, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=1.82 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1181, -94, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=2.42 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1129, -87, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=3.15 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1176, -92, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=3.76 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1126, -80, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=4.36 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1168, -98, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=10.91 hopeless hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=10.91 bug hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+ deaths 2 spawns 2
+  death t=0.76 name=Roma p=[1455, 482, -64]
+  death t=4.73 name=Ruslan p=[1445, 482, -64]
+  spawn t=3.88 name=Roma p=[1432, -844, -95]
+  spawn t=7.82 name=Ruslan p=[1432, -892, -95]
+==== zs_oxygen_b4_bug_20260922_205556_3_hopeless_ruslan.txt
+t=0.24 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1168, -98, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=6.79 hopeless hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=6.79 bug hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=9.09 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1197, 23, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=9.70 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1208, -30, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=10.85 hopeless hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=10.85 bug hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+ deaths 2 spawns 2
+  death t=0.61 name=Ruslan p=[1445, 482, -64]
+  death t=8.85 name=Oleg p=[1456, 482, -64]
+  spawn t=3.70 name=Ruslan p=[1432, -892, -95]
+  spawn t=12.00 name=Oleg p=[1432, -844, -95]
+==== zs_oxygen_b4_bug_20260922_205601_4_stuck_ruslan.txt
+t=1.67 hopeless hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=1.67 bug hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=3.97 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1197, 23, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=4.58 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1208, -30, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=5.73 hopeless hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=5.73 bug hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=9.85 note stuck1:wall why=stuck1:wall name=Ruslan intent=wander st=wander p=[1157, 52, -96] goal=[1065, 50, -94] path=ok=1 reach=1 len=346 endp=[1065, 50, -94] goal=None door=None i=4 n=6 typ=ground comp=2120 gcomp=None
+t=9.85 bug stuck why=stuck name=Ruslan intent=wander st=wander p=[1157, 52, -96] goal=[1065, 50, -94] path=ok=1 reach=1 len=346 endp=[1065, 50, -94] goal=None door=None i=4 n=6 typ=ground comp=2120 gcomp=None
+t=10.58 note prop:around why=prop:around name=Ruslan intent=wander st=wander p=[1159, 44, -96] goal=[1161, -14, -94] path=ok=1 reach=1 len=363 endp=[1129, -302, -94] goal=None door=None i=1 n=6 typ=ground comp=2120 gcomp=None
+ deaths 1 spawns 1
+  death t=3.73 name=Oleg p=[1456, 482, -64]
+  spawn t=6.88 name=Oleg p=[1432, -844, -95]
+==== zs_oxygen_b4_bug_20260922_205604_5_hopeless_oleg.txt
+t=0.79 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1197, 23, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=1.39 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1208, -30, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=2.55 hopeless hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=2.55 bug hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=6.67 note stuck1:wall why=stuck1:wall name=Ruslan intent=wander st=wander p=[1157, 52, -96] goal=[1065, 50, -94] path=ok=1 reach=1 len=346 endp=[1065, 50, -94] goal=None door=None i=4 n=6 typ=ground comp=2120 gcomp=None
+t=6.67 bug stuck why=stuck name=Ruslan intent=wander st=wander p=[1157, 52, -96] goal=[1065, 50, -94] path=ok=1 reach=1 len=346 endp=[1065, 50, -94] goal=None door=None i=4 n=6 typ=ground comp=2120 gcomp=None
+t=7.39 note prop:around why=prop:around name=Ruslan intent=wander st=wander p=[1159, 44, -96] goal=[1161, -14, -94] path=ok=1 reach=1 len=363 endp=[1129, -302, -94] goal=None door=None i=1 n=6 typ=ground comp=2120 gcomp=None
+t=10.82 hopeless hopeless why=hopeless name=Oleg intent=hunt st=hunt p=[1291, 210, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=407 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=10.82 bug hopeless why=hopeless name=Oleg intent=hunt st=hunt p=[1291, 210, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=407 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+ deaths 1 spawns 1
+  death t=0.55 name=Oleg p=[1456, 482, -64]
+  spawn t=3.70 name=Oleg p=[1432, -844, -95]
+==== zs_oxygen_b4_rec_20260922_205523_1.txt
+t=8.36 hopeless hopeless why=hopeless name=Gena intent=hunt st=hunt p=[1204, 263, -96] goal=[1318, 434, -64] path=ok=1 reach=0 len=538 endp=[1193, 338, -94] goal=None door=None i=6 n=8 typ=ground comp=2120 gcomp=None
+t=8.36 bug hopeless why=hopeless name=Gena intent=hunt st=hunt p=[1204, 263, -96] goal=[1318, 434, -64] path=ok=1 reach=0 len=538 endp=[1193, 338, -94] goal=None door=None i=6 n=8 typ=ground comp=2120 gcomp=None
+t=9.42 note break:prop_door_rotating why=break:prop_door_rotating name=Oleg intent=hunt st=hunt p=[1483, 479, -64] goal=[1318, 434, -64] path=ok=1 reach=1 len=364 endp=[1318, 434, -64] goal=None door=None i=3 n=9 typ=ground comp=4049 gcomp=None
+t=9.52 note break:prop_door_rotating why=break:prop_door_rotating name=Ruslan intent=hunt st=hunt p=[1478, 467, -64] goal=[1318, 434, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=9.55 note door:use why=door:use name=Oleg intent=hunt st=break p=[1473, 468, -64] goal=[1462, 468, -64] path=ok=1 reach=1 len=364 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=9.58 note break:prop_door_rotating why=break:prop_door_rotating name=Roma intent=hunt st=hunt p=[1478, 467, -64] goal=[1318, 434, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=9.64 note door:use why=door:use name=Ruslan intent=hunt st=break p=[1473, 469, -64] goal=[1462, 469, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=9.70 note door:use why=door:use name=Roma intent=hunt st=break p=[1473, 469, -64] goal=[1462, 469, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=9.91 note door:clear why=door:clear name=Oleg intent=hunt st=break p=[1476, 468, -64] goal=[1462, 468, -64] path=ok=1 reach=1 len=364 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=9.94 note door:clear why=door:clear name=Roma intent=hunt st=break p=[1478, 470, -64] goal=[1462, 469, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=10.00 note door:clear why=door:clear name=Ruslan intent=hunt st=break p=[1483, 470, -64] goal=[1462, 469, -64] path=ok=1 reach=1 len=369 endp=[1318, 434, -64] goal=None door=None i=4 n=9 typ=ground comp=4049 gcomp=None
+t=11.39 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1199, 25, -96] goal=[1129, -78, -94] path=ok=1 reach=1 len=425 endp=[1129, -78, -94] goal=None door=None i=4 n=7 typ=ground comp=2120 gcomp=None
+t=11.61 note stuck:crowd why=stuck:crowd name=Oleg intent=hunt st=hunt p=[1488, 515, -64] goal=[1368, 437, -64] path=ok=1 reach=1 len=181 endp=[1318, 434, -64] goal=None door=None i=1 n=6 typ=ground comp=4049 gcomp=None
+t=11.64 note stuck:crowd why=stuck:crowd name=Roma intent=hunt st=hunt p=[1488, 515, -64] goal=[1368, 437, -64] path=ok=1 reach=1 len=181 endp=[1318, 434, -64] goal=None door=None i=1 n=6 typ=ground comp=4049 gcomp=None
+t=11.70 note stuck:crowd why=stuck:crowd name=Ruslan intent=hunt st=hunt p=[1488, 515, -64] goal=[1368, 437, -64] path=ok=1 reach=1 len=183 endp=[1318, 434, -64] goal=None door=None i=1 n=6 typ=ground comp=4049 gcomp=None
+ deaths 0 spawns 0
+==== zs_oxygen_b4_rec_20260922_205535_2.txt
+t=0.73 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1159, -62, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=0.91 note break:prop_physics why=break:prop_physics name=Ruslan intent=hunt st=hunt p=[1470, 471, -64] goal=[1368, 437, -64] path=ok=1 reach=1 len=203 endp=[1368, 437, -64] goal=None door=None i=3 n=8 typ=ground comp=4049 gcomp=None
+t=1.33 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1196, -44, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=1.55 note stuck:crowd why=stuck:crowd name=Oleg intent=hunt st=hunt p=[1509, 516, -64] goal=[1369, 437, -64] path=ok=1 reach=1 len=235 endp=[1368, 437, -64] goal=None door=None i=1 n=8 typ=ground comp=4049 gcomp=None
+t=1.58 note stuck:crowd why=stuck:crowd name=Roma intent=hunt st=hunt p=[1509, 516, -64] goal=[1370, 438, -64] path=ok=1 reach=1 len=235 endp=[1368, 437, -64] goal=None door=None i=1 n=8 typ=ground comp=4049 gcomp=None
+t=1.94 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1174, -84, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=2.55 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1210, -56, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=2.88 note break:prop_physics why=break:prop_physics name=Oleg intent=hunt st=hunt p=[1461, 471, -64] goal=[1368, 435, -64] path=ok=1 reach=1 len=235 endp=[1368, 437, -64] goal=None door=None i=3 n=8 typ=ground comp=4049 gcomp=None
+t=2.91 note break:prop_physics why=break:prop_physics name=Roma intent=hunt st=hunt p=[1461, 471, -64] goal=[1370, 435, -64] path=ok=1 reach=1 len=235 endp=[1368, 437, -64] goal=None door=None i=3 n=8 typ=ground comp=4049 gcomp=None
+t=3.15 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1183, -93, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=3.88 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1128, -86, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=4.48 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1179, -93, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=5.09 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1133, -94, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=5.82 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1181, -94, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=6.42 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1129, -87, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=7.15 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1176, -92, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=7.76 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1126, -80, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+t=8.36 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1168, -98, -96] goal=[1161, 178, -94] path=ok=1 reach=1 len=338 endp=[1161, 178, -94] goal=None door=None i=1 n=9 typ=ground comp=2120 gcomp=None
+ deaths 2 spawns 2
+  death t=4.76 name=Roma p=[1455, 482, -64]
+  death t=8.73 name=Ruslan p=[1445, 482, -64]
+  spawn t=7.88 name=Roma p=[1432, -844, -95]
+  spawn t=11.82 name=Ruslan p=[1432, -892, -95]
+==== zs_oxygen_b4_rec_20260922_205547_3.txt
+t=2.91 hopeless hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=2.91 bug hopeless why=hopeless name=Roma intent=hunt st=hunt p=[1285, 197, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=320 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=5.21 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1197, 23, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=5.82 note prop:around why=prop:around name=Roma intent=wander st=wander p=[1208, -30, -96] goal=[1161, -46, -94] path=ok=1 reach=1 len=300 endp=[1161, -46, -94] goal=None door=None i=3 n=6 typ=ground comp=2120 gcomp=None
+t=6.97 hopeless hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=6.97 bug hopeless why=hopeless name=Ruslan intent=hunt st=hunt p=[1287, 206, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=422 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=11.09 note stuck1:wall why=stuck1:wall name=Ruslan intent=wander st=wander p=[1157, 52, -96] goal=[1065, 50, -94] path=ok=1 reach=1 len=346 endp=[1065, 50, -94] goal=None door=None i=4 n=6 typ=ground comp=2120 gcomp=None
+t=11.09 bug stuck why=stuck name=Ruslan intent=wander st=wander p=[1157, 52, -96] goal=[1065, 50, -94] path=ok=1 reach=1 len=346 endp=[1065, 50, -94] goal=None door=None i=4 n=6 typ=ground comp=2120 gcomp=None
+t=11.82 note prop:around why=prop:around name=Ruslan intent=wander st=wander p=[1159, 44, -96] goal=[1161, -14, -94] path=ok=1 reach=1 len=363 endp=[1129, -302, -94] goal=None door=None i=1 n=6 typ=ground comp=2120 gcomp=None
+ deaths 1 spawns 1
+  death t=4.97 name=Oleg p=[1456, 482, -64]
+  spawn t=8.12 name=Oleg p=[1432, -844, -95]
+==== zs_oxygen_b4_rec_20260922_205559_4.txt
+t=3.24 hopeless hopeless why=hopeless name=Oleg intent=hunt st=hunt p=[1291, 210, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=407 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=3.24 bug hopeless why=hopeless name=Oleg intent=hunt st=hunt p=[1291, 210, -96] goal=[1379, 420, -64] path=ok=1 reach=0 len=407 endp=[1289, 274, -94] goal=None door=None i=5 n=6 typ=ground comp=2120 gcomp=None
+t=5.70 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1254, 46, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+t=6.42 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1288, 7, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+t=7.03 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1237, 22, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+t=7.64 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1281, 32, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+t=8.36 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1236, 37, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+t=9.21 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1277, 14, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+t=9.82 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1223, 11, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+t=10.42 note prop:around why=prop:around name=Gena intent=wander st=wander p=[1257, 43, -96] goal=[1097, -558, -94] path=ok=1 reach=1 len=733 endp=[1097, -558, -94] goal=None door=None i=2 n=10 typ=ground comp=2120 gcomp=None
+ deaths 0 spawns 0

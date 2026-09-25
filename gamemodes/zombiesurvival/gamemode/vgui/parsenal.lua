@@ -103,11 +103,12 @@ local function ItemPanelThink(self)
 			local stocks = GAMEMODE:GetItemStocks(self.ID)
 			if stocks ~= self.m_LastStocks then
 				self.m_LastStocks = stocks
-
-				self.StockLabel:SetText(RelapseUI.TF("shop_remaining", stocks))
+				local bought = GAMEMODE:RelapseShopUnlimited(itemtab)
+				self.StockLabel:SetVisible(not bought or stocks > 0)
+				self.StockLabel:SetText(RelapseUI.TF(bought and "shop_bought" or "shop_remaining", stocks))
 				self.StockLabel:SizeToContents()
 				self.StockLabel:AlignRight(10)
-				self.StockLabel:SetTextColor(stocks > 0 and RelapseUI.Col.Muted or RelapseUI.Col.Danger)
+				self.StockLabel:SetTextColor((not bought and stocks <= 0) and RelapseUI.Col.Danger or RelapseUI.Col.Muted)
 				self.StockLabel:InvalidateLayout()
 			end
 		end
@@ -339,14 +340,7 @@ function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
 		viewer.m_AmmoType:SizeToContents()
 		viewer.m_AmmoType:PerformLayout()
 
-		local ki = lower and RelapseUI.AmmoIconPath(lower)
-		if ki then
-			viewer.m_AmmoIcon:SetImage(ki)
-			viewer.m_AmmoIcon:SetImageColor(RelapseUI.Col.Text)
-			viewer.m_AmmoIcon:SetVisible(true)
-		else
-			viewer.m_AmmoIcon:SetVisible(false)
-		end
+		RelapseUI.SetViewerAmmoIcon(viewer, lower)
 
 		viewer.m_AmmoType:SetVisible(true)
 		viewer.m_AmmoType:MoveToFront()
@@ -355,7 +349,7 @@ function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
 		end
 	else
 		viewer.m_AmmoType:SetText("")
-		viewer.m_AmmoIcon:SetVisible(false)
+		RelapseUI.SetViewerAmmoIcon(viewer, nil)
 		viewer.m_AmmoType:SetVisible(false)
 	end
 	RelapseUI.LayoutViewerAmmo(viewer)
@@ -715,8 +709,10 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 	pricelabel:SizeToContents()
 	pricelabel:AlignRight(alignri)
 
-	if tab.MaxStock then
-		local stocklabel = EasyLabel(itempan, RelapseUI.TF("shop_remaining", tab.MaxStock), "Relapse13")
+	if tab.MaxStock or self:RelapseShopUnlimited(tab) then
+		local bought = self:RelapseShopUnlimited(tab)
+		local stocklabel = EasyLabel(itempan, RelapseUI.TF(bought and "shop_bought" or "shop_remaining", bought and 0 or tab.MaxStock), "Relapse13")
+		stocklabel:SetVisible(not bought)
 		stocklabel:SetTextColor(RelapseUI.Col.Muted)
 		stocklabel:SizeToContents()
 		stocklabel:AlignRight(alignri)
@@ -840,9 +836,25 @@ function GM:CreateItemViewerGenericElems(viewer)
 	vammot:SetContentAlignment(4)
 	viewer.m_AmmoType = vammot
 
-	local vammoi = vgui.Create("DImage", viewer)
-	vammoi:SetSize(RelapseUI.Grid15(2), RelapseUI.Grid15(2))
+	local vammoi = vgui.Create("DPanel", viewer)
+	vammoi:SetMouseInputEnabled(false)
+	vammoi:SetPaintBackground(false)
 	vammoi:SetVisible(false)
+	vammoi.Paint = function(me, w, h)
+		local class = me.AmmoId
+		if not class or w < 1 or h < 1 then return true end
+		local col = RelapseUI.Col.Text
+		local box = me.AmmoBox or w
+		local ox, oy = RelapseUI.ViewerAmmoPosValue(class)
+		local zoom = RelapseUI.CardIconZoomValue(class) * RelapseUI.ViewerAmmoZoomValue(class)
+		DisableClipping(true)
+		local cx, cy = w * 0.5 + ox, h * 0.5 + oy
+		if not RelapseUI.DrawAmmoTrio(class, cx, cy, box, box, zoom, 0, col, false, col.a or 255) then
+			RelapseUI.DrawViewerAmmoMark(class, cx, cy, box, box, zoom, col, col.a or 255)
+		end
+		DisableClipping(false)
+		return true
+	end
 	viewer.m_AmmoIcon = vammoi
 	vammot:SetVisible(false)
 	RelapseUI.LayoutViewerAmmo(viewer)
@@ -1136,12 +1148,17 @@ function ARSENAL_CARD:SetShopItem(id, tab)
 	end
 	self.PriceLabel:SizeToContents()
 
-	if tab.MaxStock then
+	local bought = GAMEMODE:RelapseShopUnlimited(tab)
+	if tab.MaxStock or bought then
 		if not IsValid(self.StockLabel) then
 			self.StockLabel = EasyLabel(self, "", "Relapse13", RelapseUI.Col.Muted)
 		end
-		self.StockLabel:SetText(RelapseUI.TF("shop_remaining", tab.MaxStock))
+		local stocks = bought and GAMEMODE:GetItemStocks(self.ID) or tab.MaxStock
+		self.StockLabel:SetVisible(not bought or stocks > 0)
+		self.StockLabel:SetText(RelapseUI.TF(bought and "shop_bought" or "shop_remaining", stocks))
+		self.StockLabel:SetTextColor(RelapseUI.Col.Muted)
 		self.StockLabel:SizeToContents()
+		self.m_LastStocks = stocks
 	elseif IsValid(self.StockLabel) then
 		self.StockLabel:SetVisible(false)
 	end
@@ -1185,13 +1202,15 @@ function ARSENAL_CARD:Think()
 		end
 	end
 
-	if IsValid(self.StockLabel) and tab.MaxStock then
+	if IsValid(self.StockLabel) and (tab.MaxStock or GAMEMODE:RelapseShopUnlimited(tab)) then
 		local stocks = GAMEMODE:GetItemStocks(self.ID)
 		if stocks ~= self.m_LastStocks then
 			self.m_LastStocks = stocks
-			self.StockLabel:SetText(RelapseUI.TF("shop_remaining", stocks))
+			local bought = GAMEMODE:RelapseShopUnlimited(tab)
+			self.StockLabel:SetVisible(not bought or stocks > 0)
+			self.StockLabel:SetText(RelapseUI.TF(bought and "shop_bought" or "shop_remaining", stocks))
 			self.StockLabel:SizeToContents()
-			self.StockLabel:SetTextColor(stocks > 0 and RelapseUI.Col.Muted or RelapseUI.Col.Danger)
+			self.StockLabel:SetTextColor((not bought and stocks <= 0) and RelapseUI.Col.Danger or RelapseUI.Col.Muted)
 			self:InvalidateLayout()
 		end
 	end
@@ -1266,11 +1285,23 @@ local function SyncArsenalDiscount(frame)
 		text = RelapseUI.T("shop_arsenal_purchase_denied", "Purchase unavailable")
 		col = RelapseUI.Col.Danger
 	else
-		local mul = 1
-		if GAMEMODE.GetArsenalPurchaseMul and IsValid(MySelf) then
-			mul = tonumber(GAMEMODE:GetArsenalPurchaseMul(MySelf)) or 1
+		local n
+		local sheet = frame.RelapseSheet
+		local tab = IsValid(sheet) and sheet.GetActiveTab and sheet:GetActiveTab()
+		local pnl = IsValid(tab) and tab.GetPanel and tab:GetPanel()
+		if IsValid(pnl) and pnl.RelapseCat == ITEMCAT_GUNS then
+			local off = 0
+			if GAMEMODE.GetUpgradePercent and IsValid(MySelf) then
+				off = tonumber(GAMEMODE:GetUpgradePercent(MySelf, "RangedShop")) or 0
+			end
+			n = math.floor(off * 100 + 0.5)
+		else
+			local mul = 1
+			if GAMEMODE.GetArsenalPurchaseMul and IsValid(MySelf) then
+				mul = tonumber(GAMEMODE:GetArsenalPurchaseMul(MySelf)) or 1
+			end
+			n = math.floor((1 - mul) * 100 + 0.5)
 		end
-		local n = math.floor((1 - mul) * 100 + 0.5)
 		if n < 1 then
 			lab:SetVisible(false)
 			return
@@ -1503,6 +1534,7 @@ function GM:OpenArsenalMenu()
 		end
 
 		host.RelapseAmmoTab = catid == ITEMCAT_AMMO
+		host.RelapseCat = catid
 
 		local sheet = propertysheet:AddSheet(RelapseUI.ShopCat(catid), host, GAMEMODE.ItemCategoryIcons[catid], false, false)
 		sheet.Panel:SetPos(0, L.tabhei + L.tabGap)

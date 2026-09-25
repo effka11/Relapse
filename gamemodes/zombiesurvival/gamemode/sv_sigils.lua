@@ -2,6 +2,11 @@ function GM:PreOnSigilCorrupted(ent, dmginfo)
 end
 
 function GM:OnSigilCorrupted(ent, dmginfo)
+	local attacker = dmginfo and dmginfo:GetAttacker()
+	if attacker and attacker:IsValid() and attacker:IsPlayer() then
+		attacker.SigilsCorrupted = (attacker.SigilsCorrupted or 0) + 1
+	end
+
 	net.Start("zs_sigilcorrupted")
 		net.WriteUInt(self:NumCorruptedSigils(), 8)
 	net.Broadcast()
@@ -11,6 +16,11 @@ function GM:PreOnSigilUncorrupted(ent, dmginfo)
 end
 
 function GM:OnSigilUncorrupted(ent, dmginfo)
+	local attacker = dmginfo and dmginfo:GetAttacker()
+	if attacker and attacker:IsValid() and attacker:IsPlayer() then
+		attacker.SigilsRestored = (attacker.SigilsRestored or 0) + 1
+	end
+
 	net.Start("zs_sigiluncorrupted")
 		--net.WriteUInt(self:NumCorruptedSigils(), 8)
 	net.Broadcast()

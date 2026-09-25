@@ -1,7 +1,9 @@
 local PANEL = {}
 
--- Scratch buffer for HealthCol. Colours come from sh_relapse_theme.lua.
+-- Scratch buffers for HealthCol / noise. Colours come from sh_relapse_theme.lua.
 local colHealth = Color(0, 0, 0, 255)
+local colNoise = Color(0, 0, 0, 255)
+local colStam = Color(0, 0, 0, 150)
 local colAloeIcon = Color(0, 0, 0, 255)
 local matAloeFicus
 
@@ -98,21 +100,46 @@ function PANEL:Paint(w, h)
 	local barRight = x + barw
 
 	local stam = 1
-	local spending = false
-	if lp:Team() == TEAM_HUMAN and lp:Alive() and not GAMEMODE.ZombieEscape and lp.GetStamina then
+	local showStam = lp:Team() == TEAM_HUMAN and lp:Alive() and not GAMEMODE.ZombieEscape and lp.GetStamina
+	if showStam then
 		stam = lp:GetStamina()
-		spending = GAMEMODE.IsHumanRunning and GAMEMODE:IsHumanRunning(lp)
 	end
-	-- Appear while stamina is being spent. Stay until full so the remaining pool is readable.
-	local showStam = spending or stam < 0.995
 	self.StaminaAlpha = Lerp(FrameTime() * 8, self.StaminaAlpha or 0, showStam and 1 or 0)
 	self.LerpStamina = Lerp(FrameTime() * 10, self.LerpStamina or stam, stam)
+
+	-- Audibility follows the sound itself (sh_relapse_hearing.lua). No extra smoothing: a loud shot is already gone.
+	local noise = 0
+	if lp:Team() == TEAM_HUMAN and lp:Alive() and GAMEMODE.GetHumanNoise then
+		noise = GAMEMODE:GetHumanNoise(lp) / 100
+	end
+	local showNoise = noise > 0.03
+
+	-- 3px tall so 1px corners have a middle row.
+	local stamh = math.max(3, RelapseUI.sPx(3))
+	local stamy = y + RelapseUI.sPx(4) + 1
+	local stamCol = c.Stamina or c.Muted
 	if self.StaminaAlpha > 0.02 then
-		-- 3px tall so 1px corners have a middle row.
-		local stamh = math.max(3, RelapseUI.sPx(3))
-		surface.SetAlphaMultiplier(self.StaminaAlpha)
-		RelapseUI.PaintHudHairBar(x, y + RelapseUI.sPx(4) + 1, barw, stamh, self.LerpStamina, c.Stamina or c.Muted, nil, nil, 4, 1)
-		surface.SetAlphaMultiplier(1)
+		local frac = self.LerpStamina
+		local fw = frac >= 0.995 and barw or math.floor(barw * frac + 0.5)
+		-- Gutter only on the empty side. A track under the fill hides the alpha.
+		if fw < barw - 1 then
+			local gutter = c.HudTrack
+			colStam.r, colStam.g, colStam.b = gutter.r, gutter.g, gutter.b
+			colStam.a = math.floor((gutter.a or 80) * self.StaminaAlpha)
+			RelapseUI.RoundFill(1, x + fw, stamy, barw - fw, stamh, colStam)
+		end
+		colStam.r, colStam.g, colStam.b = stamCol.r, stamCol.g, stamCol.b
+		colStam.a = math.floor(150 * self.StaminaAlpha)
+		if fw >= 2 then
+			RelapseUI.RoundFill(1, x, stamy, fw, stamh, colStam)
+		end
+	end
+	-- Opaque, darker than stamina, one third of the bar. Drawn after so it sits on top.
+	if showNoise then
+		local nw = math.max(2, math.floor(barw * noise / 3 + 0.5))
+		RelapseUI.LerpCol(stamCol, c.Ink, 0.55, colNoise)
+		colNoise.a = 255
+		RelapseUI.RoundFill(1, x, stamy, nw, stamh, colNoise)
 	end
 
 	y = y - barh - RelapseUI.sPx(15)

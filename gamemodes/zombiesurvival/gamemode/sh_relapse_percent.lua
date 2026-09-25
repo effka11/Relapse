@@ -50,6 +50,41 @@ function GM:GetRepairPercentMul(pl)
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill)
 end
 
+function GM:CountOwnNails(pl, ent)
+	if not IsValid(pl) or not IsValid(ent) or not ent.GetNails then
+		return 0
+	end
+	local nails = ent:GetNails()
+	if not nails then
+		return 0
+	end
+	local n = 0
+	for _, nail in pairs(nails) do
+		if IsValid(nail) and nail.GetOwner and nail:GetOwner() == pl then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+-- Flat repair plus +1% per rank for each of your nails in this prop. Same Σp.
+function GM:GetPropRepairPercentMul(pl, ent)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.RepairRateMul) then
+		skill = pl.RepairRateMul - 1
+	end
+	local perNail = self:GetUpgradePercent(pl, "RepairPerNail") * self:CountOwnNails(pl, ent)
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill, perNail)
+end
+
+function GM:GetDeployPercentMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.DeploySpeedMultiplier) then
+		skill = pl.DeploySpeedMultiplier - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "Deploy"), skill)
+end
+
 function GM:GetHammerSwingPercentMul(pl)
 	local skill = 0
 	if IsValid(pl) and isnumber(pl.HammerSwingDelayMul) then
@@ -84,6 +119,64 @@ function GM:GetMeleeAttackDelayMul(pl, wep)
 		delay = delay * self:GetHumanStaminaMeleeDelayMul(pl, wep)
 	end
 	return delay
+end
+
+function GM:GetBarricadeDamageMul(pl)
+	if not IsValid(pl) or not pl:IsPlayer() or pl:Team() ~= TEAM_UNDEAD then
+		return 1
+	end
+	return self:GetUpgradePercentMul(pl, "BarricadeDamage")
+end
+
+function GM:UndeadDamageDealer(attacker)
+	if not IsValid(attacker) then return end
+	if attacker.PBAttacker and IsValid(attacker.PBAttacker) then
+		attacker = attacker.PBAttacker
+	end
+	if attacker:IsPlayer() and attacker:Team() == TEAM_UNDEAD then
+		return attacker
+	end
+end
+
+-- prop_physics / func_physbox with no nails. Doors and nailed barricades are other skills.
+function GM:IsLooseProp(ent)
+	if not IsValid(ent) or ent:IsPlayer() then return false end
+	if ent.IsNailed and ent:IsNailed() then return false end
+	local class = ent:GetClass()
+	return string.sub(class, 1, 12) == "prop_physics" or string.sub(class, 1, 12) == "func_physbox"
+end
+
+function GM:ApplyUndeadOutgoingDamage(attacker, ent, dmginfo)
+	local zombie = self:UndeadDamageDealer(attacker)
+	if not zombie or not IsValid(ent) or not dmginfo or ent == zombie then return end
+	local field
+	if ent:IsPlayer() then
+		if ent:Team() == TEAM_HUMAN then
+			field = "ZombieHumanDamage"
+		end
+	elseif ent:GetClass() == "prop_door_rotating" or ent:GetClass() == "func_door_rotating" then
+		field = "ZombieDoorDamage"
+	elseif self:IsLooseProp(ent) then
+		field = "LoosePropDamage"
+	end
+	if not field then return end
+	local mul = self:GetUpgradePercentMul(zombie, field)
+	if mul ~= 1 then
+		dmginfo:ScaleDamage(mul)
+	end
+end
+
+-- SwingTime only. Primary.Delay stays on GetMeleeAttackDelayMul.
+-- MeleeWindup is swing speed: duration = SwingTime / (1+Σp).
+function GM:GetMeleeWindupTimeMul(pl, wep)
+	if not IsValid(wep) or not self.IsMeleeDamageInflictor or not self:IsMeleeDamageInflictor(wep) then
+		return 1
+	end
+	if wep.GetClass and wep:GetClass() == "weapon_zs_hammer" then
+		return 1
+	end
+	local speed = self:GetUpgradePercentMul(pl, "MeleeWindup")
+	return 1 / math.max(speed, 0.01)
 end
 
 -- Chance, not 1+Σp. 0.03 = 3% of connecting melee swings miss.
@@ -126,6 +219,23 @@ function GM:GetZombieHitSlowMul(pl)
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "HitSlow"), skill)
 end
 
+-- Medkit charge recovery speed. Time = base / (1+Σp). Old MedicCooldownMul is a time mul; fold it as 1/mul−1.
+function GM:GetMedkitChargeSpeedMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.MedicCooldownMul) and pl.MedicCooldownMul > 0 then
+		skill = (1 / pl.MedicCooldownMul) - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "MedkitCharge"), skill)
+end
+
+function GM:GetMedkitChargeDelay(pl, delay)
+	delay = tonumber(delay) or 0
+	if delay <= 0 or not IsValid(pl) then
+		return delay
+	end
+	return delay / math.max(self:GetMedkitChargeSpeedMul(pl), 0.01)
+end
+
 function GM:GetMedicHealPercentMul(pl)
 	local skill = 0
 	if IsValid(pl) and isnumber(pl.MedicHealMul) then
@@ -157,6 +267,63 @@ function GM:GetMeleeDamagePercentMul(pl, victim)
 		end
 	end
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "MeleeDamage"), skill, scar)
+end
+
+-- Share of a hit that blood armor eats. Base 0.5. Grid and old skills add onto it.
+function GM:GetBloodArmorAbsorbRatio(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.BloodArmorDamageReductionAdd) then
+		skill = pl.BloodArmorDamageReductionAdd
+	end
+	return 0.5 + skill + self:GetUpgradePercent(pl, "BloodAbsorb")
+end
+
+-- All blood armor gained. Old BloodarmorGainMul is the same sum, not a second mul.
+function GM:GetBloodArmorGainMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.BloodarmorGainMul) then
+		skill = pl.BloodarmorGainMul - 1
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "BloodGain"), skill)
+end
+
+-- Meal converted to blood (Glutton). Metabolism joins BloodGain on this channel only.
+function GM:GetFoodBloodArmorMul(pl)
+	local skill = 0
+	if IsValid(pl) and isnumber(pl.BloodarmorGainMul) then
+		skill = pl.BloodarmorGainMul - 1
+	end
+	return self:StackPercentMul(
+		self:GetUpgradePercent(pl, "BloodGain"),
+		self:GetUpgradePercent(pl, "FoodBlood"),
+		skill
+	)
+end
+
+-- Extra blood from a normal meal: meal × (FoodBlood + BloodGain). 0 without Metabolism.
+function GM:GetNormalFoodBloodAmount(pl, meal)
+	meal = tonumber(meal) or 0
+	if meal <= 0 or not IsValid(pl) then
+		return 0
+	end
+	local extra = self:GetUpgradePercent(pl, "FoodBlood")
+	if extra <= 0 then
+		return 0
+	end
+	local skill = 0
+	if isnumber(pl.BloodarmorGainMul) then
+		skill = pl.BloodarmorGainMul - 1
+	end
+	local amount = meal * (extra + self:GetUpgradePercent(pl, "BloodGain") + skill)
+	if amount <= 0 then
+		return 0
+	end
+	return math.floor(amount + 0.5)
+end
+
+-- Share of blood-armor absorb that comes back as HP. Rate, not 1+Σp.
+function GM:GetBloodArmorReturnRate(pl)
+	return math.max(0, self:GetUpgradePercent(pl, "BloodReturn"))
 end
 
 -- Conversion rate, not 1+Σp. 0.01 = 1% of melee damage to blood armor.
@@ -283,11 +450,250 @@ GM.MechanicsHealthSkip = {
 	prop_remantler = true
 }
 
+-- Place and pack speed. Not crates, plants, lamps, or cade kits.
+GM.MechanicsDeviceClasses = {
+	prop_gunturret = true,
+	prop_gunturret_assault = true,
+	prop_gunturret_buckshot = true,
+	prop_gunturret_rocket = true,
+	prop_drone = true,
+	prop_drone_pulse = true,
+	prop_drone_hauler = true,
+	prop_ffemitter = true,
+	prop_repairfield = true,
+	prop_manhack = true,
+	prop_manhack_saw = true,
+	prop_zapper = true,
+	prop_zapper_arc = true,
+	prop_rollermine = true
+}
+
 function GM:IsMechanicsDeviceEnt(ent)
 	if not IsValid(ent) then
 		return false
 	end
 	return not self.MechanicsHealthSkip[ent:GetClass()]
+end
+
+function GM:IsMechanicsDeviceClass(class)
+	return class and self.MechanicsDeviceClasses and self.MechanicsDeviceClasses[class] == true
+end
+
+-- Speed. Time = base / (1+Σp). Old pack mul stays a time factor beside it.
+function GM:GetDeviceHandleSpeedMul(pl)
+	return self:GetUpgradePercentMul(pl, "DeviceHandle")
+end
+
+function GM:GetDevicePlaceDelay(pl, wep, delay)
+	delay = tonumber(delay) or 0
+	if delay <= 0 or not IsValid(wep) or not self:IsMechanicsDeviceClass(wep.DeployClass) then
+		return delay
+	end
+	return delay / math.max(self:GetDeviceHandleSpeedMul(pl), 0.01)
+end
+
+function GM:GetTurretFireDelay(pl, delay)
+	delay = tonumber(delay) or 0
+	if delay <= 0 or not IsValid(pl) then
+		return delay
+	end
+	return delay / math.max(self:GetUpgradePercentMul(pl, "TurretFire"), 0.01)
+end
+
+-- Forced mode. Heat is real seconds of continuous engagement.
+-- Damage uses heat / durability. Durability is the same sum as max health:
+-- 1 + DeviceHealth + old deployable and turret health mods.
+-- +15% reliability stretches the whole curve by 1.15 (break ~93 s, not 81 s).
+-- Silence sheds TurretForcedCool heat per second and does not restore health.
+GM.TurretForcedGrace = 6
+GM.TurretForcedWear = 0.00036
+GM.TurretForcedCool = 0.35
+
+function GM:GetTurretForcedDurability(pl, ent)
+	local mul = 1
+	if self.GetMechanicsDeviceHealthMul then
+		mul = self:GetMechanicsDeviceHealthMul(pl, ent, "DeployableHealthMul", "TurretHealthMul")
+	end
+	return math.max(tonumber(mul) or 1, 0.01)
+end
+
+function GM:HasTurretForcedMode(pl)
+	if not (IsValid(pl) and self.CycleGridLiveHas and self:CycleGridLiveHas(pl, "mechanics_10")) then
+		return false
+	end
+	if self.CycleGridLiveSkillMuted and self:CycleGridLiveSkillMuted(pl, "mechanics_10") then
+		return false
+	end
+	return true
+end
+
+function GM:ApplyTurretForcedWear(ent, owner, engaging)
+	if not IsValid(ent) or ent.Destroyed then
+		return
+	end
+	if not self:HasTurretForcedMode(owner) then
+		ent.ForcedHeat = nil
+		ent.ForcedHeatTick = nil
+		return
+	end
+
+	local now = CurTime()
+	local prev = ent.ForcedHeatTick or now
+	ent.ForcedHeatTick = now
+	local dt = math.Clamp(now - prev, 0, 0.25)
+	if dt <= 0 then
+		return
+	end
+
+	local heat = ent.ForcedHeat or 0
+	local mul = self:GetTurretForcedDurability(owner, ent)
+	if engaging then
+		heat = heat + dt
+		local over = heat / mul - self.TurretForcedGrace
+		if over > 0 then
+			local maxhp = ent:GetMaxObjectHealth()
+			local hp = ent:GetObjectHealth()
+			if maxhp > 0 and hp > 0 then
+				ent:SetObjectHealth(hp - maxhp * self.TurretForcedWear * over * dt / mul)
+			end
+		end
+	else
+		heat = math.max(0, heat - dt * self.TurretForcedCool)
+	end
+	ent.ForcedHeat = heat
+end
+
+function GM:GetGunFireDelay(pl, delay)
+	delay = tonumber(delay) or 0
+	if delay <= 0 or not IsValid(pl) then
+		return delay
+	end
+	return delay / math.max(self:GetUpgradePercentMul(pl, "GunFire"), 0.01)
+end
+
+-- Arsenal and resupply. Remantler stays out of the supply tree.
+GM.SupplyDeployClasses = {
+	prop_arsenalcrate = true,
+	prop_resupplybox = true
+}
+
+function GM:IsSupplyDeployClass(class)
+	return class and self.SupplyDeployClasses and self.SupplyDeployClasses[class] == true
+end
+
+function GM:GetSupplyHandleSpeedMul(pl)
+	return self:GetUpgradePercentMul(pl, "SupplyHandle")
+end
+
+function GM:GetSupplyPlaceDelay(pl, delay)
+	delay = tonumber(delay) or 0
+	if delay <= 0 then
+		return delay
+	end
+	return delay / math.max(self:GetSupplyHandleSpeedMul(pl), 0.01)
+end
+
+function GM:GetSupplySellRate(pl)
+	return math.max(0, self:GetUpgradePercent(pl, "SupplySell"))
+end
+
+function GM:GetSupplyDeployPointPrice(class)
+	local info = self.DeployableInfo and self.DeployableInfo[class]
+	local wep = info and info.WepClass
+	if not wep or not self.Items then
+		return 0
+	end
+	for _, item in pairs(self.Items) do
+		if istable(item) and item.PointShop and item.SWEP == wep then
+			return tonumber(item.Price) or 0
+		end
+	end
+	return 0
+end
+
+function GM:GetSupplySellPoints(pl, class)
+	if not self:IsSupplyDeployClass(class) then
+		return 0
+	end
+	local rate = self:GetSupplySellRate(pl)
+	if rate <= 0 then
+		return 0
+	end
+	return math.max(0, math.floor(self:GetSupplyDeployPointPrice(class) * rate + 0.5))
+end
+
+function GM:GetSupplySellHint(pl, class)
+	local pts = self:GetSupplySellPoints(pl, class)
+	if pts <= 0 or not translate or not translate.Format then
+		return
+	end
+	return translate.Format("supply_sell_hint", pts)
+end
+
+function GM:BeginSupplySell(pl, ent)
+	if not IsValid(pl) or not IsValid(ent) or not ent.PackUp then
+		return false
+	end
+	if pl:Team() ~= TEAM_HUMAN or not pl:Alive() then
+		return false
+	end
+	local class = ent:GetClass()
+	if not self:IsSupplyDeployClass(class) then
+		return false
+	end
+	if self:GetSupplySellPoints(pl, class) <= 0 then
+		return false
+	end
+	local owner = ent.GetObjectOwner and ent:GetObjectOwner()
+	if owner ~= pl then
+		return false
+	end
+	ent:PackUp(pl, true)
+	return true
+end
+
+function GM:CompleteSupplySell(pl, ent)
+	if not IsValid(pl) or not IsValid(ent) then
+		return false
+	end
+	if pl:Team() ~= TEAM_HUMAN or not pl:Alive() then
+		return false
+	end
+	local class = ent:GetClass()
+	local pts = self:GetSupplySellPoints(pl, class)
+	if pts <= 0 then
+		return false
+	end
+	local owner = ent.GetObjectOwner and ent:GetObjectOwner()
+	if owner ~= pl then
+		return false
+	end
+	ent:Remove()
+	pl:AddPoints(pts, nil, nil, true)
+	if translate and translate.ClientFormat then
+		pl:CenterNotify(COLOR_GREEN, translate.ClientFormat(pl, "supply_sold", pts))
+	end
+	return true
+end
+
+function GM:GetDevicePackTimeMul(pl, ent)
+	local old = 1
+	if IsValid(pl) and isnumber(pl.DeployablePackTimeMul) and not (IsValid(ent) and ent.IgnorePackTimeMul) then
+		old = pl.DeployablePackTimeMul
+	end
+	if not IsValid(ent) then
+		return old
+	end
+	local class = ent:GetClass()
+	local speed = 1
+	if self:IsMechanicsDeviceClass(class) then
+		speed = self:GetDeviceHandleSpeedMul(pl)
+	elseif self:IsSupplyDeployClass(class) then
+		speed = self:GetSupplyHandleSpeedMul(pl)
+	else
+		return old
+	end
+	return old / math.max(speed, 0.01)
 end
 
 function GM:GetMechanicsDeviceHealthMul(pl, ent, ...)
@@ -562,10 +968,32 @@ function GM:GetWorthShopCost(pl, item)
 	return price
 end
 
+-- Ranged guns, and a future component row that sets RangedComponent.
+-- Crate margin and ArsenalDiscount stay on melee, ammo, tools, and deploys.
+function GM:IsRangedGearShopItem(item)
+	if not item then
+		return false
+	end
+	if item.Category == ITEMCAT_GUNS then
+		return true
+	end
+	return item.RangedComponent == true
+end
+
+function GM:GetRangedGearShopMul(pl)
+	local off = 0
+	if self.GetUpgradePercent then
+		off = self:GetUpgradePercent(pl, "RangedShop")
+	end
+	return math.max(0, 1 - off)
+end
+
 function GM:GetArsenalShopCost(pl, price, item)
 	price = tonumber(price) or 0
 	local mul = 1
-	if self.GetArsenalPurchaseMul then
+	if self:IsRangedGearShopItem(item) then
+		mul = self:GetRangedGearShopMul(pl)
+	elseif self.GetArsenalPurchaseMul then
 		local ok, v = pcall(self.GetArsenalPurchaseMul, self, pl)
 		if ok then
 			mul = tonumber(v) or 1

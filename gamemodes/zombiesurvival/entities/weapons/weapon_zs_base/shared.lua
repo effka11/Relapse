@@ -325,7 +325,11 @@ end
 
 function SWEP:GetFireDelay()
 	local owner = self:GetOwner()
-	return self.Primary.Delay / (owner:GetStatus("frost") and 0.7 or 1)
+	local delay = self.Primary.Delay / (owner:GetStatus("frost") and 0.7 or 1)
+	if GAMEMODE and GAMEMODE.GetGunFireDelay then
+		delay = GAMEMODE:GetGunFireDelay(owner, delay)
+	end
+	return delay
 end
 
 function SWEP:ShootBullets(dmg, numbul, cone)
@@ -343,6 +347,11 @@ function SWEP:ShootBullets(dmg, numbul, cone)
 
 	if self.PointsMultiplier then
 		POINTSMULTIPLIER = self.PointsMultiplier
+	end
+
+	-- FireBulletsLua never reaches EntityFireBullets, so the shot tells hearing here.
+	if SERVER and GAMEMODE.EmitWeaponNoise then
+		GAMEMODE:EmitWeaponNoise(owner, self)
 	end
 
 	owner:LagCompensation(true)
