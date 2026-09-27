@@ -6,11 +6,11 @@ include("mg_melee_shared.lua")
 include("animations.lua")
 
 if CLIENT then
-	killicon.Add("mg_me_t9bat", "zombiesurvival/killicons/weapon_zs_cwbat2.png", Color(255, 255, 255))
-	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwbat2.png")
+	killicon.Add("mg_me_t9bat", "zombiesurvival/killicons/weapon_zs_cwbat3.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwbat3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwbat2.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwbat3.png"
 -- WM already has the bat mesh (shaft along +Z). No default attachments.
 SWEP.RelapsePreviewBoneMerge = true
 SWEP.RelapsePreviewHullBounds = true

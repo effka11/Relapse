@@ -6,11 +6,11 @@ include("mg_melee_shared.lua")
 include("animations.lua")
 
 if CLIENT then
-	killicon.Add("mg_me_t9machete", "zombiesurvival/killicons/weapon_zs_cwmachete2.png", Color(255, 255, 255))
-	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwmachete2.png")
+	killicon.Add("mg_me_t9machete", "zombiesurvival/killicons/weapon_zs_cwmachete3.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwmachete3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwmachete2.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwmachete3.png"
 -- WM already has the machete mesh (hull along +Z). No default attachments.
 SWEP.RelapsePreviewBoneMerge = true
 SWEP.RelapsePreviewHullBounds = true

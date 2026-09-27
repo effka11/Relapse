@@ -6,11 +6,11 @@ include("mg_melee_shared.lua")
 include("animations.lua")
 
 if CLIENT then
-	killicon.Add("mg_me_t9wakizashi", "zombiesurvival/killicons/weapon_zs_cwwakizashi.png", Color(255, 255, 255))
-	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwwakizashi.png")
+	killicon.Add("mg_me_t9wakizashi", "zombiesurvival/killicons/weapon_zs_cwwakizashi2.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwwakizashi2.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwwakizashi.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwwakizashi2.png"
 -- WM already has the sword mesh (blade along +X). No default attachments.
 -- Studio hull is the pack's +Z dummy (same box as the machete); VVD/DrawModel is +X.
 SWEP.RelapsePreviewBoneMerge = true

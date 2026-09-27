@@ -45,7 +45,7 @@ local GRID_STAT_INFO = {
 	Repair = { key = "repair", name = "char_stat_repair", fallback = "Repair rate", kind = "pct" },
 	RepairPerNail = { key = "repairpernail", name = "char_stat_repairpernail", fallback = "Repair per own nail", kind = "pct" },
 	Phase = { key = "phase", name = "char_stat_phase", fallback = "Barricade phase speed", kind = "pct" },
-	DeviceHealth = { key = "devicehealth", name = "char_stat_devicehealth", fallback = "Device durability", kind = "pct" },
+	DeviceHealth = { key = "devicehealth", name = "char_stat_devicehealth", fallback = "Mechanical device durability", kind = "pct" },
 	DeviceHandle = { key = "devicehandle", name = "char_stat_devicehandle", fallback = "Device setup speed", kind = "pct" },
 	TurretFire = { key = "turretfire", name = "char_stat_turretfire", fallback = "Turret attack speed", kind = "pct" },
 	GunFire = { key = "gunfire", name = "char_stat_gunfire", fallback = "Fire rate", kind = "pct" },
@@ -568,13 +568,12 @@ local function DrawScarGain(id, rank, x, y)
 		surface.SetFont(GAIN_FONT)
 		x = x + surface.GetTextSize(text)
 	end
-	ink(label, c.Muted)
+	ink(string.gsub(label, "%s+$", ""), c.Muted)
+	ink("  ", c.Muted)
 	ink(cur, c.Text)
 	ink("  –  ", c.Muted)
 	ink(nxt, c.Muted)
-	if unit == "%" then
-		ink("%", c.Text)
-	elseif unit ~= "" then
+	if unit ~= "" then
 		ink(" " .. unit, c.Text)
 	end
 end
@@ -911,14 +910,14 @@ local GRID_ZOOM_START = 980
 local GRID_RT_SIZE = 2048
 local skillsDev = false
 
-concommand.Add("relapse_skillsdev", function(_, _, args)
+concommand.Add("relapse_skills_dev", function(_, _, args)
 	if args[1] ~= nil and args[1] ~= "" then
 		local a = string.lower(tostring(args[1]))
 		skillsDev = a == "1" or a == "true" or a == "on"
 	else
 		skillsDev = not skillsDev
 	end
-	MsgN("relapse_skillsdev " .. (skillsDev and "1" or "0"))
+	MsgN("relapse_skills_dev " .. (skillsDev and "1" or "0"))
 end)
 
 local gridRT
@@ -1055,6 +1054,28 @@ function GRID:StepPan(dt)
 	end
 	if self.CamZ <= -lim or self.CamZ >= lim then
 		self.PanVZ = 0
+	end
+end
+
+function GRID:NodeShown(n)
+	if not n then
+		return false
+	end
+	if n.tree == nil or skillsDev then
+		return true
+	end
+	local gm = GAMEMODE
+	return gm and gm.GetCycleGridSkill and gm:GetCycleGridSkill(n.treeId, n.slot) ~= nil
+end
+
+-- Nearest drawn ancestor. Empty nests are skipped, so the line does not end in the air.
+function GRID:ShownParent(n)
+	local p = n and n.parent
+	while p do
+		if self:NodeShown(p) then
+			return p
+		end
+		p = p.parent
 	end
 end
 
@@ -1239,15 +1260,32 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 	local dim = remort and self:GridGray(75)
 	local litPulse = remort and self:GridLit(120, true)
 	local lit = remort and Color(litPulse.r, litPulse.g, litPulse.b, 105)
-	for _, e in ipairs(layout.edges) do
-		local pa = self:DrawPos(e[1].x, e[1].y)
-		local pb = self:DrawPos(e[2].x, e[2].y)
-		if self:NodeWine(e[2]) and not self:NodeWine(e[1]) then
+	local function drawEdge(a, b, hub)
+		local e = { a, b, hub = hub }
+		local pa = self:DrawPos(a.x, a.y)
+		local pb = self:DrawPos(b.x, b.y)
+		if self:NodeWine(b) and not self:NodeWine(a) then
 			DrawFadeBeam(pa, pb, self:GridLit(105), self:GridWine(105))
-		elseif remort and e.hub and self:NodeOwned(e[2]) and not self:NodeMuted(e[2]) then
+		elseif remort and hub and self:NodeOwned(b) and not self:NodeMuted(b) then
 			DrawFadeBeam(pa, pb, dim, lit)
 		else
 			DrawGridBeam(pa, pb, self:GridEdgeInk(e), 0, 1)
+		end
+	end
+	if skillsDev then
+		for _, e in ipairs(layout.edges) do
+			drawEdge(e[1], e[2], e.hub)
+		end
+	else
+		for _, n in ipairs(layout.nodes) do
+			if self:NodeShown(n) then
+				local parent = self:ShownParent(n)
+				if parent then
+					drawEdge(parent, n, false)
+				else
+					drawEdge(layout.hub, n, true)
+				end
+			end
 		end
 	end
 
@@ -1275,7 +1313,9 @@ function GRID:DrawWeb3D(campos, ang, to_camera, layout, hoverNode, realtime, vx,
 	end
 	paintDot(layout.hub)
 	for _, n in ipairs(layout.nodes) do
-		paintDot(n)
+		if self:NodeShown(n) then
+			paintDot(n)
+		end
 	end
 
 	render.OverrideBlend(false)
@@ -1487,10 +1527,12 @@ function GRID:Paint(w, h)
 			hoverNode = layout.hub
 		end
 		for _, n in ipairs(layout.nodes) do
-			local d = self:WorldPos(n.x, n.y):DistToSqr(hit)
-			if d <= nearest then
-				nearest = d
-				hoverNode = n
+			if self:NodeShown(n) then
+				local d = self:WorldPos(n.x, n.y):DistToSqr(hit)
+				if d <= nearest then
+					nearest = d
+					hoverNode = n
+				end
 			end
 		end
 	end
@@ -2089,7 +2131,7 @@ function LayoutCharacter(frame)
 	gainH = math.max(1, gainH)
 	local sketchExtra = 0
 	local scar = frame.SelectedId and GAMEMODE:GetRelapseScar(frame.SelectedId)
-	if scar and not scar.InPool then
+	if scar and scar.Rare then
 		surface.SetFont("Relapse15")
 		local _, sketchH = surface.GetTextSize("Ay")
 		sketchExtra = RelapseUI.Grid15() + math.max(1, sketchH or 0)
@@ -2111,17 +2153,37 @@ function LayoutCharacter(frame)
 	end
 	local descH = gainY + gainH + sketchExtra
 	frame.ScarGainY = gainY
+	local nCards = 0
+	for _, sid in ipairs(GAMEMODE.RelapseScarOrder or {}) do
+		if GAMEMODE:GetRelapseScar(sid) then
+			nCards = nCards + 1
+		end
+	end
+	-- Width stays inside the 90px inset. Extra scars wrap onto the next row and scroll.
+	local windowRight = frame:GetWide() - body:GetX()
+	local margin = RelapseUI.sPx(90)
+	local avail = math.max(card, windowRight - margin - rightX)
+	local fit = math.max(1, math.floor((avail + gap) / (card + gap)))
+	local cols = math.min(fit, math.max(1, nCards))
+	local cardsW = cols * card + math.max(0, cols - 1) * gap
+	local layoutX = windowRight - margin - cardsW - rightX
+	layoutX = math.max(0, math.min(layoutX, math.max(0, rightW - cardsW)))
+	local blockX = rightX + layoutX
 	if IsValid(frame.Desc) then
-		frame.Desc:SetPos(rightX, descTop)
-		frame.Desc:SetSize(rightW, math.max(0, descH))
+		frame.Desc:SetPos(blockX, descTop)
+		frame.Desc:SetSize(math.max(1, cardsW), math.max(0, descH))
 	end
 	if IsValid(frame.InvScroll) then
 		frame.InvScroll:SetPos(rightX, cardsY)
 		frame.InvScroll:SetSize(rightW, math.max(1, bh - cardsY))
 	end
 	if IsValid(frame.InvLayout) then
-		frame.InvLayout:SetPos(0, 0)
-		frame.InvLayout:SetWide(math.max(1, frame.InvScroll:GetWide()))
+		frame.InvLayout:SetPos(layoutX, 0)
+		frame.InvLayout:SetWide(math.max(1, cardsW))
+		frame.InvLayout:InvalidateLayout(true)
+	end
+	if IsValid(frame.InvScroll) then
+		frame.InvScroll:InvalidateLayout(true)
 	end
 	GAMEMODE:LayoutCharacterFooter(frame)
 end
@@ -2389,10 +2451,10 @@ function GM:OpenCharacterSheet()
 			y = titleCell - RelapseUI.sPx(6) + RelapseUI.Grid15() - RelapseUI.sPx(5)
 		end
 		DrawScarGain(id, RankOf(id), 0, y)
-		if scar and not scar.InPool then
+		if scar and scar.Rare then
 			surface.SetFont(GAIN_FONT)
 			local lineH = select(2, surface.GetTextSize("Ay"))
-			DrawWrapped(Phrase("char_sketch", ""), "Relapse15", 0, y + lineH + RelapseUI.Grid15(), w, c.Muted)
+			DrawWrapped(Phrase("char_rare", ""), "Relapse15", 0, y + lineH + RelapseUI.Grid15(), w, c.Muted)
 		end
 		return true
 	end

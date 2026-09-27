@@ -740,9 +740,10 @@ end
 -- ended at the near wall, and nobody walked up to the leaf. Only the open
 -- axis, and only when the chord itself is a walk. A doorway the paint skipped
 -- is the other case: the body hull clips the frame, so the islands stay split
--- and the leaf is never an edge. The narrow box may cross that frame only
--- when a door stands on the chord. A narrow chord with no door is the slit
--- beside a frame.
+-- and the leaf is never an edge. A door on that chord is the edge. The narrow
+-- box is only the slit test: with no door it stays a wall, and a jamb bevel
+-- that clips the narrow box too does not hide the leaf when the floor under
+-- the chord is still there.
 local GAP_CELLS = 7
 -- No paint under a bridge means no clearance promise there. The narrow link
 -- box slipped through a 20u slit beside a doorway and every bot walked into
@@ -758,15 +759,18 @@ local function BridgeOK(a, b)
 	return ok, crouch
 end
 
--- Body hull failed. The link box is restored, so this is the narrow chord.
--- It counts only with a door on it: that leaf is the gap the paint skipped.
+-- Body hull failed. A door on the chord is the opening the paint skipped.
+-- The narrow box stays the slit test when it is clear. A jamb bevel still
+-- clips that box, so the leaf was never asked; the floor under the chord is
+-- what a solid wall does not have.
 local function DoorBridge(a, b)
+	local ax, ay, az = a.pos.x, a.pos.y, a.pos.z
+	local bx, by, bz = b.pos.x, b.pos.y, b.pos.z
+	if not DoorOnChord(ax, ay, az, bx, by, bz) then return false end
 	local ok, crouch = WalkOK(a, b)
-	if not ok then return false end
-	if not DoorOnChord(a.pos.x, a.pos.y, a.pos.z, b.pos.x, b.pos.y, b.pos.z) then
-		return false
-	end
-	return true, crouch
+	if ok then return true, crouch end
+	if not GroundContinuous(ax, ay, az, bx, by, bz, WALK_LIFT) then return false end
+	return true, false
 end
 
 local function BridgeGaps()
@@ -892,6 +896,99 @@ function Mesh.ComputeComponents()
 	Mesh.ComponentCount = count
 	Mesh.BiggestComponent = biggest
 	Mesh.BiggestId = bigId
+
+	-- A pure drop has no way back up. Union-find on every edge still glues
+	-- that balcony to the ground, and the nearest sigil is then the one you
+	-- can only fall from. Walk islands keep an edge only when the reverse
+	-- exists (a jump, a ladder, a walk). Forward reach follows the drop
+	-- downward, so a sigil in the hole is still a target from the street.
+	local wparent = {}
+	for i = 1, n do wparent[i] = i end
+	local function wfind(x)
+		while wparent[x] ~= x do
+			wparent[x] = wparent[wparent[x]]
+			x = wparent[x]
+		end
+		return x
+	end
+	local function reversed(i, j)
+		local back = cells[j].nbs
+		if not back then return false end
+		for t = 1, #back do
+			if back[t].j == i then return true end
+		end
+		return false
+	end
+	for i = 1, n do
+		local nbs = cells[i].nbs
+		if nbs then
+			for k = 1, #nbs do
+				local j = nbs[k].j
+				if j > i and reversed(i, j) then
+					local ri, rj = wfind(i), wfind(j)
+					if ri ~= rj then wparent[ri] = rj end
+				end
+			end
+		end
+	end
+	for i = 1, n do
+		cells[i].wcomp = wfind(i)
+	end
+	local nxt, seenE = {}, {}
+	for i = 1, n do
+		local nbs = cells[i].nbs
+		local a = cells[i].wcomp
+		if nbs and a then
+			for k = 1, #nbs do
+				local b = cells[nbs[k].j].wcomp
+				if b and a ~= b then
+					local bag = seenE[a]
+					if not bag then
+						bag = {}
+						seenE[a] = bag
+					end
+					if not bag[b] then
+						bag[b] = true
+						local list = nxt[a]
+						if not list then
+							list = {}
+							nxt[a] = list
+						end
+						list[#list + 1] = b
+					end
+				end
+			end
+		end
+	end
+	local reach = {}
+	local function flood(from)
+		local got = {[from] = true}
+		reach[from] = got
+		local stack = {from}
+		while #stack > 0 do
+			local x = stack[#stack]
+			stack[#stack] = nil
+			local list = nxt[x]
+			if list then
+				for t = 1, #list do
+					local y = list[t]
+					if not got[y] then
+						got[y] = true
+						stack[#stack + 1] = y
+					end
+				end
+			end
+		end
+		return got
+	end
+	function Mesh.Reaches(fromW, toW)
+		if not fromW or not toW then return true end
+		if fromW == toW then return true end
+		local got = reach[fromW]
+		if not got then got = flood(fromW) end
+		return got[toW] == true
+	end
+
 	return count, biggest
 end
 
@@ -914,6 +1011,7 @@ function Mesh.StartLink()
 		c.i = i
 		c.nbs = {}
 		c.comp = nil
+		c.wcomp = nil
 		c.gx = math.floor(c.pos.x / size)
 		c.gy = math.floor(c.pos.y / size)
 		GridAdd(c.gx, c.gy, i)
@@ -968,6 +1066,12 @@ function Mesh.LinkStep()
 		Mesh.Linked = true
 		AI.Log("mesh linked %d cells: %d walk (%d crouch), %d door, %d jump, %d drop, %d ladders, %d gaps; %d components (largest %d) in %.1fs",
 			n, walks, crouches, doors, jumps, drops, Mesh.LadderCount or 0, gaps, comps, biggest, elapsed)
+		-- Quota may have waited on the link; refill without waiting for the 5 s timer.
+		timer.Simple(0, function()
+			if AI.Manager and AI.Manager.Maintain then
+				AI.Manager.Maintain("mesh")
+			end
+		end)
 		return
 	end
 	if CurTime() >= job.ping then
@@ -1348,8 +1452,21 @@ local function DoorLeafInChord(doorId, ax, ay, az, bx, by, bz)
 	if not hitPos then return true end
 	local hinge = hit:GetPos()
 	local dx, dy = hitPos.x - hinge.x, hitPos.y - hinge.y
-	if dx * dx + dy * dy <= DOOR_HINGE * DOOR_HINGE then return false end
-	return true
+	if dx * dx + dy * dy > DOOR_HINGE * DOOR_HINGE then return true end
+	-- First contact is the hinge. A leaf swung along the corridor still
+	-- stands further down the chord; a chord that only grazes the hinge
+	-- is clear once it is past that point.
+	local vx, vy, vz = bx - ax, by - ay, bz - az
+	local len = math.sqrt(vx * vx + vy * vy)
+	if len < 1 then return false end
+	local ux, uy = vx / len, vy / len
+	local sx = hitPos.x + ux * (DOOR_HINGE + DOOR_HINGE)
+	local sy = hitPos.y + uy * (DOOR_HINGE + DOOR_HINGE)
+	local along = (sx - ax) * ux + (sy - ay) * uy
+	if along >= len then return false end
+	local sz = az + vz * (along / len)
+	local hit2 = DoorOnChord(sx, sy, sz, bx, by, bz)
+	return hit2 ~= nil and hit2:EntIndex() == doorId
 end
 
 -- True when a body can use this edge without breaking the leaf. One side of an
@@ -1435,7 +1552,9 @@ end
 -- An open leaf swings out of its hole and across a plain walk that was traced
 -- while the leaf was shut. That walk is still in the graph. The body stops in
 -- the leaf (reach 1, no door on the path). The door's own edge stays a walk:
--- the hole beside the hinge is the way through. Only a plain walk is dropped.
+-- the hole beside the hinge is the way through. A hit on the hinge itself is
+-- not the leaf only when the chord is clear of the leaf past that point.
+-- Only a plain walk is dropped.
 local searchDoors
 local LEAF_REACH = 96
 local LEAF_HULL = 16
@@ -1851,7 +1970,11 @@ local function BuildPath(from, goal, ids, edges)
 	end
 	local lastCell = cells[ids[#ids]].pos
 	local onFloor = math.abs(goal.z - lastCell.z) < 48 and goal:DistToSqr(lastCell) <= 128 * 128
-	if onFloor then
+	-- Closest approach on this floor can sit just short of a wall, with the
+	-- player on the far side still inside the snap. That leg is a waypoint
+	-- only when a body can walk it; otherwise the path ends at the cell.
+	if onFloor and SpanClear(lastCell, goal, false)
+		and GroundContinuous(lastCell.x, lastCell.y, lastCell.z, goal.x, goal.y, goal.z, WALK_LIFT) then
 		pts[#pts + 1] = {pos = Vector(goal.x, goal.y, goal.z)}
 	end
 	-- The start snaps to the nearest centre, which can sit behind us: the first

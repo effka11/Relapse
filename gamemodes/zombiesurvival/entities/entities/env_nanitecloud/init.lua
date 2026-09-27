@@ -24,7 +24,6 @@ function ENT:AcceptInput(name, activator, caller, arg)
 
 	local pos = self:GetPos()
 	local healer = self:GetOwner()
-	local flatHeal = self.HealPower * GAMEMODE:GetRepairPercentMul(healer)
 
 	for _, hitent in pairs(ents.FindInSphere(pos, self.Radius * (owner.CloudRadius or 1))) do
 		if not hitent:IsValid() or hitent == self or not WorldVisible(pos, hitent:NearestPoint(pos)) then
@@ -49,8 +48,12 @@ function ENT:AcceptInput(name, activator, caller, arg)
 			local oldhealth = hitent:GetObjectHealth()
 			if oldhealth <= 0 or oldhealth >= hitent:GetMaxObjectHealth() or hitent.m_LastDamaged and CurTime() < hitent.m_LastDamaged + 4 then continue end
 
-			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + flatHeal/2))
+			local add = self.HealPower * GAMEMODE:GetRepairPercentMul(healer, hitent) / 2
+			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + add))
 			healed = hitent:GetObjectHealth() - oldhealth
+			if GAMEMODE.CreditRelapseScarMechanic then
+				GAMEMODE:CreditRelapseScarMechanic(healer, hitent, healed)
+			end
 		end
 
 		if healed and owner:IsValidLivingHuman() then

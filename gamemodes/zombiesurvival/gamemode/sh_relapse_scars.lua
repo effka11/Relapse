@@ -1,5 +1,5 @@
 -- Relapse scars. Law: documents/scars.md
--- Only mercenary is in the lottery pool. Other names are locked teasers.
+-- Thirteen regular names in the weight draw. Honor is rare and replaces the third card.
 
 GM.RelapseScarCatalog = {
 	mercenary = {
@@ -12,117 +12,128 @@ GM.RelapseScarCatalog = {
 		Stat = { Kind = "k", Dec = 1 },
 		Icon = "zombiesurvival/killicons/scar_mercenary.png"
 	},
-	headhunter = {
-		Order = 2,
-		InPool = false,
-		Pace = 20,
-		Feed = "last_hit",
-		K1 = 8,
-		KInf = 2,
-		Stat = { Kind = "k", Dec = 1 },
-		Icon = "zombiesurvival/killicons/zs_headshot"
-	},
-	carver = {
-		Order = 3,
-		InPool = false,
-		Pace = 25,
-		Feed = "last_hit",
-		K1 = 6,
-		KInf = 2,
-		Stat = { Kind = "k", Dec = 1 },
-		Icon = "zombiesurvival/killicons/weapon_zs_cwknife2.png"
-	},
-	surgeon = {
-		Order = 4,
-		InPool = false,
-		Pace = 750,
-		Feed = "heal",
-		Stat = { Kind = "p", Inf = 6, Dec = 1 },
-		Icon = "zombiesurvival/killicons/weapon_zs_medkit4.png"
-	},
-	orderly = {
+	stakhanovite = {
 		Order = 5,
-		InPool = false,
-		Pace = 6,
-		Feed = "heal",
-		Stat = { Kind = "on" },
-		Icon = "zombiesurvival/killicons/weapon_zs_medicgun2"
+		InPool = true,
+		Pace = 10000,
+		Feed = "repair",
+		Stat = { Kind = "p", Floor = 3, Inf = 9, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_stakhanovite.png"
 	},
-	foreman = {
+	demiurge = {
 		Order = 6,
-		InPool = false,
-		Pace = 10000,
-		Feed = "cade",
-		K1 = 8,
-		KInf = 2,
-		Stat = { Kind = "kmul", Mul = 200, Dec = 0 },
-		Icon = "zombiesurvival/killicons/weapon_zs_hammer3.png"
-	},
-	landlord = {
-		Order = 7,
-		InPool = false,
-		Pace = 10000,
-		Feed = "cade",
-		K1 = 6,
-		KInf = 2,
-		Stat = { Kind = "kmul", Mul = 400, Dec = 0 },
-		Icon = "zombiesurvival/killicons/weapon_zs_plank"
-	},
-	spark = {
-		Order = 8,
-		InPool = false,
-		Pace = 15000,
+		InPool = true,
+		Pace = 300,
 		Feed = "deploy",
-		Stat = { Kind = "p", Inf = 2, Dec = 1 },
-		Icon = "zombiesurvival/killicons/weapon_zs_zapper"
+		Stat = { Kind = "p", Floor = 5, Inf = 15, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_demiurge.png"
+	},
+	mechanic = {
+		Order = 7,
+		InPool = true,
+		Pace = 400,
+		Feed = "repair",
+		Stat = { Kind = "p", Floor = 5, Inf = 15, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_mechanic.png"
+	},
+	turner = {
+		Order = 8,
+		InPool = true,
+		Pace = 50,
+		Feed = "craft",
+		Stat = { Kind = "p", Inf = 20, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_turner.png"
+	},
+	leader = {
+		Order = 12,
+		InPool = true,
+		Pace = 830,
+		Feed = "lead",
+		Stat = { Kind = "p", Inf = 8, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_leader.png"
 	},
 	quartermaster = {
-		Order = 9,
-		InPool = false,
-		Pace = 15,
-		Feed = "deploy",
-		Stat = { Kind = "p", Inf = 20, Dec = 1 },
-		Icon = "zombiesurvival/killicons/weapon_zs_resupplybox2.png"
-	},
-	nailer = {
 		Order = 10,
-		InPool = false,
-		Pace = 20,
-		Feed = "cade",
-		Stat = { Kind = "p", Inf = 20, Dec = 1 },
-		Icon = "zombiesurvival/killicons/nail_ammo_icon_2"
+		InPool = true,
+		Pace = 15,
+		Feed = "supply",
+		Stat = { Kind = "p", Inf = 25, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_quartermaster.png"
 	},
-	rot = {
+	swift = {
+		Order = 4,
+		InPool = true,
+		Pace = 50000,
+		Feed = "move",
+		Stat = { Kind = "p", Floor = 3, Inf = 7, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_swift.png"
+	},
+	breaker = {
+		Order = 2,
+		InPool = true,
+		Pace = 3000,
+		Feed = "melee",
+		Stat = { Kind = "p", Floor = 2, Inf = 10, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_breaker.png"
+	},
+	anchor = {
+		Order = 3,
+		InPool = true,
+		Pace = 200,
+		Feed = "sigil",
+		Stat = { Kind = "p", Floor = 5, Inf = 15, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_anchor2.png"
+	},
+	engineer = {
+		Order = 9,
+		InPool = true,
+		Pace = 400,
+		Feed = "deploy",
+		Stat = { Kind = "p", Floor = 5, Inf = 15, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_engineer_wire.png"
+	},
+	scavenger = {
 		Order = 11,
-		InPool = false,
-		Pace = 12000,
-		Feed = "undead",
-		Stat = { Kind = "p", Inf = 25, Dec = 1 },
-		Icon = "zombiesurvival/killicons/zombie"
+		InPool = true,
+		Pace = 80,
+		Feed = "scrap",
+		Stat = { Kind = "p", Floor = 0, Inf = 8, Dec = 2 },
+		Icon = "zombiesurvival/killicons/scar_scavenger.png"
 	},
-	zero = {
-		Order = 12,
-		InPool = false,
-		Pace = 2,
-		Feed = "undead",
-		Stat = { Kind = "p", Inf = 4, Dec = 1 },
-		Icon = "zombiesurvival/killicons/fresh_dead"
+	bole = {
+		Order = 14,
+		InPool = true,
+		Pace = 250,
+		Feed = "body",
+		Stat = { Kind = "step", Dec = 0 },
+		Icon = "zombiesurvival/killicons/scar_bole.png"
+	},
+	honor = {
+		Order = 13,
+		InPool = true,
+		Rare = true,
+		Pace = 1000,
+		Feed = "xp",
+		Stat = { Kind = "step", Dec = 0 },
+		Icon = "zombiesurvival/killicons/scar_honor_book.png"
 	}
 }
 
 GM.RelapseScarOrder = {
 	"mercenary",
-	"headhunter",
-	"carver",
-	"surgeon",
-	"orderly",
-	"foreman",
-	"landlord",
-	"spark",
+	"breaker",
+	"anchor",
+	"swift",
+	"stakhanovite",
+	"demiurge",
+	"mechanic",
+	"turner",
+	"engineer",
 	"quartermaster",
-	"nailer",
-	"rot",
-	"zero"
+	"scavenger",
+	"leader",
+	"honor",
+	"bole"
 }
 
 local ROMAN = {
@@ -163,6 +174,74 @@ function GM:RelapseScarK(n, k1, kInf)
 	return kInf + (k1 - kInf) / (1 + 0.18 * (n - 1))
 end
 
+function GM:RelapseScarAdd(n)
+	n = math.floor(tonumber(n) or 0)
+	if n < 1 then
+		return 0
+	end
+	if n <= 5 then
+		local step = { 3, 3, 2, 2, 2 }
+		local sum = 0
+		for i = 1, n do
+			sum = sum + step[i]
+		end
+		return sum
+	end
+	return 12 + math.floor(10 * (n - 5) / (n + 3) + 0.5)
+end
+
+function GM:RelapseScrapBonus(pl)
+	if not (IsValid(pl) and pl:IsPlayer() and pl:Team() == TEAM_HUMAN) then
+		return 0
+	end
+	if not (self.GetRelapseScarRank and self.RelapseScarP) then
+		return 0
+	end
+	local n = self:GetRelapseScarRank("scavenger", pl)
+	if n < 1 then
+		return 0
+	end
+	return self:RelapseScarP(n, 0.08, 0)
+end
+
+function GM:RelapseScrapPaid(pl, amount)
+	amount = math.max(0, math.floor(tonumber(amount) or 0))
+	if amount <= 0 then
+		return 0
+	end
+	local p = self:RelapseScrapBonus(pl)
+	if p <= 0 then
+		return amount
+	end
+	return amount + math.ceil(amount * p)
+end
+
+function GM:RelapseTurnerCut(pl)
+	if not (IsValid(pl) and pl:IsPlayer() and pl:Team() == TEAM_HUMAN) then
+		return 0
+	end
+	if not (self.GetRelapseScarRank and self.RelapseScarP) then
+		return 0
+	end
+	local n = self:GetRelapseScarRank("turner", pl)
+	if n < 1 then
+		return 0
+	end
+	return self:RelapseScarP(n, 0.20, 0)
+end
+
+function GM:RelapseTurnerPay(pl, cost)
+	cost = math.max(0, math.floor(tonumber(cost) or 0))
+	if cost <= 0 then
+		return 0
+	end
+	local p = self:RelapseTurnerCut(pl)
+	if p <= 0 then
+		return cost
+	end
+	return math.max(1, math.ceil(cost * (1 - p)))
+end
+
 function GM:RelapseScarP(n, pInf, p0)
 	n = math.floor(tonumber(n) or 0)
 	if n < 1 then
@@ -191,10 +270,26 @@ function GM:RelapseScarStatValue(id, n)
 	if kind == "p" then
 		return self:RelapseScarP(n, st.Inf, st.Floor)
 	end
+	if kind == "step" then
+		return self:RelapseScarAdd(n)
+	end
 	if kind == "on" then
 		return 1
 	end
 	return 0
+end
+
+local function ScarDecText(v, dec)
+	local text = string.format("%." .. tostring(dec) .. "f", v)
+	local dot = string.find(text, ".", 1, true) or string.find(text, ",", 1, true)
+	if not dot then
+		return text
+	end
+	local frac = string.gsub(string.sub(text, dot + 1), "0+$", "")
+	if frac == "" then
+		return string.sub(text, 1, dot - 1)
+	end
+	return string.sub(text, 1, dot) .. frac
 end
 
 function GM:RelapseScarStatText(id, n)
@@ -212,14 +307,28 @@ function GM:RelapseScarStatText(id, n)
 	if dec <= 0 then
 		return tostring(math.floor(v + 0.5))
 	end
-	return string.format("%." .. tostring(dec) .. "f", v)
+	if id == "leader" then
+		return ScarDecText(v, dec) .. " / " .. ScarDecText(v * 2 / 3, dec) .. " / " .. ScarDecText(v / 3, dec)
+	end
+	return ScarDecText(v, dec)
 end
 
 function GM:RelapseScarPool()
 	local pool = {}
 	for _, id in ipairs(self.RelapseScarOrder) do
 		local scar = self.RelapseScarCatalog[id]
-		if scar and scar.InPool then
+		if scar and scar.InPool and not scar.Rare then
+			pool[#pool + 1] = id
+		end
+	end
+	return pool
+end
+
+function GM:RelapseScarRarePool()
+	local pool = {}
+	for _, id in ipairs(self.RelapseScarOrder) do
+		local scar = self.RelapseScarCatalog[id]
+		if scar and scar.Rare then
 			pool[#pool + 1] = id
 		end
 	end

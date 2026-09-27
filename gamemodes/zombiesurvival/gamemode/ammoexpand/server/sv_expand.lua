@@ -33,6 +33,13 @@ function M_Player:GetAmmoCount(id_or_name)
 end
 
 function M_Player:GiveAmmo(amount, id_or_name, suppress_sound)
+	if id_or_name == "scrap" and GAMEMODE and GAMEMODE.RelapseScrapPaid then
+		local base = math.max(0, math.floor(tonumber(amount) or 0))
+		if base > 0 and GAMEMODE.CreditRelapseScarScavenger then
+			GAMEMODE:CreditRelapseScarScavenger(self, base)
+		end
+		amount = GAMEMODE:RelapseScrapPaid(self, amount)
+	end
 	local id = GetIDFromNameOrID(id_or_name)
 	if id then
 		local et = E_GetTable(self)

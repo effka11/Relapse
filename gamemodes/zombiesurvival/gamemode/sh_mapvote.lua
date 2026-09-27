@@ -6,7 +6,9 @@
 GM.MapVoteSlots = 5
 
 GM.MapVotePool = {
-	-- { Map = "zs_oxygen_b4", MinPlayers = 4, MaxPlayers = 16 },
+	{ Map = "zs_oxygen_b4" },
+	{ Map = "zs_antarctic_hospital_v7" },
+	{ Map = "zs_jail_b2" },
 }
 
 GM.MapVoteRules = {

@@ -10,7 +10,7 @@ local function MapThumb(map)
 	if cached ~= nil then
 		return cached or nil
 	end
-	local path = "maps/thumb/" .. map .. ".png"
+	local path = "maps/thumb/" .. map .. ".jpg"
 	local found = file.Exists("materials/" .. path, "GAME") or file.Exists(path, "GAME")
 	if not found then
 		thumbs[map] = false
@@ -41,6 +41,51 @@ local function FitText(text, font, maxW)
 		shown = trial .. ell
 	end
 	return shown
+end
+
+local function NameLines(text, font, lineW, lastW)
+	surface.SetFont(font)
+	if surface.GetTextSize(text) <= lastW then
+		return { text }
+	end
+	local words = {}
+	for word in string.gmatch(text, "%S+") do
+		words[#words + 1] = word
+	end
+	if #words <= 1 then
+		return { FitText(text, font, lastW) }
+	end
+	local function joined(a, b)
+		return table.concat(words, " ", a, b)
+	end
+	local function wide(s)
+		return surface.GetTextSize(s)
+	end
+	local best
+	for i = 1, #words - 1 do
+		local top = joined(1, i)
+		local bot = joined(i + 1, #words)
+		if wide(top) <= lineW and wide(bot) <= lastW then
+			best = { top, bot }
+		end
+	end
+	if best then return best end
+	local cut = 1
+	local top = words[1]
+	for i = 2, #words - 1 do
+		local trial = top .. " " .. words[i]
+		if wide(trial) > lineW then break end
+		top = trial
+		cut = i
+	end
+	local bot = joined(cut + 1, #words)
+	if wide(top) > lineW then
+		top = FitText(top, font, lineW)
+	end
+	if wide(bot) > lastW then
+		bot = FitText(bot, font, lastW)
+	end
+	return { top, bot }
 end
 
 local function CardHeight()
@@ -421,10 +466,16 @@ function PANEL:Paint(w, h)
 		th = RelapseUI.sPx(25)
 	end
 	local gap = RelapseUI.Grid5(2)
-	local nameMax = math.max(0, w - pad * 2 - countW - gap)
-	local ty = h - pad - th
-	draw.SimpleText(FitText(label, "Relapse25", nameMax), "Relapse25", pad, ty, RelapseUI.Col.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
-	draw.SimpleText(count, "Relapse25", w - pad, ty, RelapseUI.Col.Text, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+	local fullW = math.max(0, w - pad * 2)
+	local nameMax = math.max(0, fullW - countW - gap)
+	local lines = label ~= "" and NameLines(label, "Relapse25", fullW, nameMax) or { "" }
+	local topY = h - pad - th * #lines
+	for i, line in ipairs(lines) do
+		if line ~= "" then
+			draw.SimpleText(line, "Relapse25", pad, topY + (i - 1) * th, RelapseUI.Col.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+		end
+	end
+	draw.SimpleText(count, "Relapse25", w - pad, topY + (#lines - 1) * th, RelapseUI.Col.Text, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
 	return true
 end
 
@@ -724,5 +775,13 @@ end)
 concommand.Add("relapse_votemap_dev", function()
 	if util.NetworkStringToID("zs_mapvote_dev") == 0 then return end
 	net.Start("zs_mapvote_dev")
+	net.SendToServer()
+end)
+
+concommand.Add("relapse_changelevel", function(_, _, _, argStr)
+	argStr = string.Trim(tostring(argStr or ""))
+	if argStr == "" or util.NetworkStringToID("zs_mapvote_level") == 0 then return end
+	net.Start("zs_mapvote_level")
+		net.WriteString(string.sub(argStr, 1, 128))
 	net.SendToServer()
 end)

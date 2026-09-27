@@ -78,7 +78,7 @@ SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side7.png"
 
 Новое basename: `side6` → `side7`, `makarov` → `makarov3`. Старый PNG можно оставить.
 
-Класс в `RelapseUI.CardIconSmooth` — подпись iconsdev «Иконка сглажена».
+Класс в `RelapseUI.CardIconSmooth` — подпись icons_dev «Иконка сглажена».
 
 ## Полка
 
@@ -93,7 +93,7 @@ SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_mp5_side7.png"
 
 Инвентарь / HUD 1–9: зеркало, потом наклон. Дефолт **45°** (дуло вверх-влево). Маркеры стоя (`weapon_zs_aloe = 0`). Не мешать 0° у пистолетов и 45° у винтовок. `InvSlotIconZoom` / `InvSlotIconShift` (extra-grid) / `InvSlotIconTilt`.
 
-Живая подгонка: `relapse_iconsdev`. Ползунки — дельты. **Копировать** → lua таблица. **Сброс** — только дельты выбранного. Пока команда включена, Q открывает инвентарь нажатием. Вставить числа в `relapse_ui.lua` только по таблице юзера. Не переписывать чужие стволы в той же таблице.
+Живая подгонка: `relapse_icons_dev`. Ползунки — дельты. **Копировать** → lua таблица. **Сброс** — только дельты выбранного. Пока команда включена, Q открывает инвентарь нажатием. Вставить числа в `relapse_ui.lua` только по таблице юзера. Не переписывать чужие стволы в той же таблице.
 
 Не поднимать зум «потому что ствол дороже». Не трогать 1 px контура.
 

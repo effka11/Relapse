@@ -1,5 +1,5 @@
 -- Relapse stamina. 0..1. Spend: ground run, ladder sprint, noclip sprint.
--- Swift run stays IN_SPEED / ground / not crouch / not ghost. ZE skips.
+-- Speedwalker run stays IN_SPEED / ground / not crouch / not ghost. ZE skips.
 
 local IN_SPEED = IN_SPEED
 local MOVETYPE_WALK = MOVETYPE_WALK
@@ -113,7 +113,7 @@ function GM:HumanCanSprint(pl)
 	return self:HumanStaminaEffortReady(pl)
 end
 
--- Same ground-run test as scars.md Swift. Standing / air / wall / ghost / crouch do not spend.
+-- Same ground-run test as scars.md Speedwalker. Standing / air / wall / ghost / crouch do not spend.
 function GM:IsHumanRunning(pl, move)
 	if not IsValid(pl) or not P_Alive(pl) then return false end
 	if P_Team(pl) ~= TEAM_HUMAN then return false end

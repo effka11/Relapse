@@ -265,8 +265,17 @@ RelapseUI.CardIconZoom = {
 	weapon_zs_resupplybox = 1.71,
 	weapon_zs_arsenalcrate = 1.4,
 	weapon_zs_remantler = 1.43,
-	weapon_zs_hammer = 1.36,
-	weapon_zs_wrench = 1.54,
+	weapon_zs_hammer = 1.46,
+	weapon_zs_wrench = 1.6,
+	mg_me_t9bat = 1.76,
+	mg_me_t9wakizashi = 1.97,
+	mg_me_t9scythe = 1.44,
+	mg_me_t9sledgehammer = 1.53,
+	mg_me_t9etool = 1.29,
+	mg_me_t9machete = 1.59,
+	mg_me_t9loadout = 1.44,
+	mg_me_t9cane = 1.75,
+	mg_cinderblock = 1.05,
 	weapon_zs_medicalkit = 1.8,
 	["3030win"] = 0.78,
 	["357mag"] = 0.63,
@@ -312,6 +321,15 @@ RelapseUI.CardIconPos = {
 	weapon_zs_remantler = { 0, 1 },
 	weapon_zs_medicalkit = { 0, -2 },
 	weapon_zs_wrench = { 0, 1 },
+	mg_me_t9bat = { -10, -3 },
+	mg_me_t9wakizashi = { -4, -4 },
+	mg_me_t9scythe = { -10, 1 },
+	mg_me_t9sledgehammer = { -14, -3 },
+	mg_me_t9etool = { -10, -4 },
+	mg_me_t9machete = { -7, -3 },
+	mg_me_t9loadout = { -3, -4 },
+	mg_me_t9cane = { -5, -1 },
+	mg_cinderblock = { -1, -2 },
 	["3030win"] = { 0, 1 },
 	["357mag"] = { 0, 4 },
 	["45acp"] = { 0, 9 },
@@ -356,6 +374,15 @@ RelapseUI.CardIconSmooth = {
 	weapon_zs_hammer = true,
 	weapon_zs_wrench = true,
 	weapon_zs_medicalkit = true,
+	mg_me_t9loadout = true,
+	mg_me_t9bat = true,
+	mg_me_t9etool = true,
+	mg_me_t9cane = true,
+	mg_cinderblock = true,
+	mg_me_t9machete = true,
+	mg_me_t9wakizashi = true,
+	mg_me_t9scythe = true,
+	mg_me_t9sledgehammer = true,
 }
 
 do
@@ -402,12 +429,39 @@ function RelapseUI.CardIconPosValue(class)
 end
 
 RelapseUI.ScarIconZoom = {
-	mercenary = 0.88,
+	mercenary = 0.92, -- Наёмник
+	breaker = 0.96, -- Боец
+	anchor = 0.95, -- Опорник
+	swift = 1.38, -- Скороход
+	stakhanovite = 0.85, -- Стахановец
+	demiurge = 0.94, -- Наладчик
+	mechanic = 1.08, -- Слесарь
+	turner = 1.24, -- Токарь
+	engineer = 1.09, -- Инженер
+	quartermaster = 1.01, -- Интендант
+	scavenger = 1.11, -- Мусорщик
+	leader = 0.86, -- Лидер
+	honor = 0.98, -- Отличник
+	bole = 1.33, -- Кряж
 }
 RelapseUI.ScarIconAng = {
+	scavenger = 4.6, -- Мусорщик
 }
 RelapseUI.ScarIconPos = {
-	mercenary = { 0, 2 },
+	mercenary = { 0, 5 }, -- Наёмник
+	breaker = { 0, 4 }, -- Боец
+	anchor = { 0, 3 }, -- Опорник
+	swift = { 0, 7 }, -- Скороход
+	stakhanovite = { 0, 3 }, -- Стахановец
+	demiurge = { 0, 5 }, -- Наладчик
+	mechanic = { 0, 5 }, -- Слесарь
+	turner = { 0, 5 }, -- Токарь
+	engineer = { -2, 8 }, -- Инженер
+	quartermaster = { -2, 5 }, -- Интендант
+	scavenger = { 1, 3 }, -- Мусорщик
+	leader = { 0, 4 }, -- Лидер
+	honor = { 0, 6 }, -- Отличник
+	bole = { 0, 7 }, -- Кряж
 }
 
 function RelapseUI.ScarIconZoomValue(id)
@@ -679,7 +733,7 @@ RelapseUI.InvSlotIconZoom = {
 	mg_m1911 = 1.27,
 	mg_makarov = 1.32,
 	mg_357 = 1.32,
-	mg_sksierra = 1.33,
+	mg_sksierra = 1.37,
 	mg_p320 = 1.34,
 	mg_sbeta = 1.35,
 	mg_mpapa5 = 1.32,
@@ -690,9 +744,18 @@ RelapseUI.InvSlotIconZoom = {
 	weapon_zs_resupplybox = 0.88,
 	weapon_zs_arsenalcrate = 0.88,
 	weapon_zs_remantler = 0.88,
-	weapon_zs_medicalkit = 0.88,
+	weapon_zs_medicalkit = 1.56,
 	mg_me_t9cane = 1.4,
-	mg_mike4 = 1.2,
+	mg_mike4 = 1.32,
+	mg_alpha50 = 1.34,
+	mg_falima = 1.36,
+	mg_sierrax = 1.27,
+	mg_aalpha12 = 1.24,
+	mg_oscar12 = 1.2,
+	mg_scharlie = 1.33,
+	mg_akilo47 = 1.36,
+	mg_valpha = 1.32,
+	mg_pkilo = 1.44,
 	["3030win"] = 0.57,
 	["357mag"] = 0.54,
 	["45acp"] = 0.6,
@@ -723,7 +786,17 @@ RelapseUI.InvSlotIconShift = {
 	mg_cinderblock = { -3, 0 },
 	weapon_zs_wrench = { -1, 0 },
 	mg_me_t9cane = { -1, 2 },
-	mg_mike4 = { -4, 1 },
+	mg_mike4 = { -3, 0 },
+	mg_alpha50 = { -2, 0 },
+	mg_falima = { -3, 1 },
+	mg_sierrax = { -2, 1 },
+	mg_aalpha12 = { -2, 1 },
+	mg_oscar12 = { -2, 1 },
+	mg_scharlie = { -3, 1 },
+	mg_akilo47 = { -3, 2 },
+	mg_valpha = { -3, 1 },
+	weapon_zs_medicalkit = { -1, 0 },
+	mg_pkilo = { -2, 1 },
 	["3030win"] = { 0, -2 },
 	["357mag"] = { 0, -1 },
 	["45acp"] = { 0, 1 },
@@ -4805,17 +4878,31 @@ end
 function RelapseUI.PaintCreditsRow(self, w, h)
 	local c = RelapseUI.Col
 	local name = self.RelapseName or ""
+	surface.SetFont("Relapse20")
 	draw.SimpleText(name, "Relapse20", 0, 0, c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	local x = surface.GetTextSize(name)
+	local track = self.RelapseTrack or ""
+	if track ~= "" then
+		local gap = "\194\160\194\160"
+		local sep = gap .. "–" .. gap
+		draw.SimpleText(sep, "Relapse20", x, 0, c.Muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+		x = x + surface.GetTextSize(sep)
+		draw.SimpleText(track, "Relapse20", x, 0, c.Muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+		x = x + surface.GetTextSize(track)
+		local mapName = self.RelapseMap or ""
+		if mapName ~= "" then
+			draw.SimpleText(gap .. "(" .. mapName .. ")", "Relapse20", x, 0, c.Text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+		end
+		return true
+	end
 	local role = self.RelapseRole or ""
 	if role ~= "" then
-		surface.SetFont("Relapse20")
-		local nw = surface.GetTextSize(name)
-		draw.SimpleText(role, "Relapse20", nw + RelapseUI.Grid15(2), 0, c.Muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+		draw.SimpleText(role, "Relapse20", x + RelapseUI.Grid15(2), 0, c.Muted, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
 	end
 	return true
 end
 
-function RelapseUI.CreditsRow(parent, name, role)
+function RelapseUI.CreditsRow(parent, name, role, track, mapName)
 	local row = vgui.Create("DPanel", parent)
 	row:SetTall(RelapseUI.sPx(20))
 	row:Dock(TOP)
@@ -4823,6 +4910,8 @@ function RelapseUI.CreditsRow(parent, name, role)
 	row:SetPaintBackground(false)
 	row.RelapseName = name or ""
 	row.RelapseRole = role or ""
+	row.RelapseTrack = track or ""
+	row.RelapseMap = mapName or ""
 	row.Paint = RelapseUI.PaintCreditsRow
 	return row
 end

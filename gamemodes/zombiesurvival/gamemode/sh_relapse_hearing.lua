@@ -53,7 +53,7 @@ GM.Hearing = {
 	RadiusPow = 1.5,
 	WallMul = 0.6, -- one world hit between ear and source
 
-	Footstep = {Still = 5, Walk = 15, Run = 40, CrouchMul = 0.6},
+	Footstep = {Still = 5, Walk = 15, Run = 40, CrouchMul = 0.6}, -- unladen. Mass scales these in GetFootstepNoise.
 	Land = {Min = 12, Max = 30, SpeedMin = 64, SpeedMax = 500},
 	Hurt = 25,
 	HurtMinDamage = 5,
@@ -311,6 +311,8 @@ function M_Player:GetNoiseRadius()
 end
 
 -- Speed against the player's own walk / run: a slow creep is quieter than a walk.
+-- The foot plants the whole body plus the pack, so the same gait is louder by
+-- total mass / HumanBodyMass. Unladen walk 15, run 40. +15 kg: 18 and 48. +30 kg: 21 and 56.
 function GM:GetFootstepNoise(pl, speed, crouching)
 	local F = self.Hearing.Footstep
 	local walk = math_max(1, pl:GetWalkSpeed())
@@ -323,11 +325,17 @@ function GM:GetFootstepNoise(pl, speed, crouching)
 		n = Lerp(math_Clamp((speed - walk) / (run - walk), 0, 1), F.Walk, F.Run)
 	end
 
+	local body = self.HumanBodyMass or 75
+	local extra = pl.GetExtraWeight and pl:GetExtraWeight() or 0
+	if body > 0 and extra > 0 then
+		n = n * (body + extra) / body
+	end
+
 	if crouching then
 		n = n * F.CrouchMul
 	end
 
-	return n
+	return math_Clamp(n, 0, 100)
 end
 
 -- MW customization swaps Primary.Sound for the suppressed cue; legacy ZS silencers

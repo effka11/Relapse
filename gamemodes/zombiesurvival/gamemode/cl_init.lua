@@ -79,7 +79,12 @@ include("cl_relapse_breath.lua")
 include("cl_relapse_iconsdev.lua")
 include("cl_relapse_viewmodel_dev.lua")
 include("cl_relapse_hitboxes.lua")
+include("cl_relapse_coordinates.lua")
+include("cl_relapse_sigils.lua")
+include("cl_relapse_sigils_dev.lua")
 include("cl_relapse_hearing.lua")
+include("cl_relapse_endmusic.lua")
+include("cl_relapse_oxygen_music.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -1342,6 +1347,13 @@ function GM:DrawSigilIndicators()
 end
 
 function GM:RestartRound()
+	self.OxygenHoldStop = nil
+	hook.Remove("EntityEmitSound", "RelapseOxygenEndMute")
+
+	if self.StopZombieWinMusic then
+		self:StopZombieWinMusic()
+	end
+
 	self.TheLastHuman = nil
 	self.RoundEnded = nil
 	LASTHUMAN = nil
@@ -2242,6 +2254,30 @@ local function EndRoundShouldDrawLocalPlayer(pl)
 	hook.Remove("ShouldDrawLocalPlayer", "EndRoundShouldDrawLocalPlayer")
 end
 
+function GM:PlayEndRoundMusic(winner, immediate)
+	-- Zombie win plays beyond_arrival and fades out on the end-round clock.
+	-- Human win stays quiet unless the map set its own winmusic.
+	-- After stopsound the new track waits 0.5s so the command does not cut it.
+	local function start()
+		if not GAMEMODE.RoundEnded then return end
+		if winner == TEAM_UNDEAD then
+			if GAMEMODE.StartZombieWinMusic then
+				GAMEMODE:StartZombieWinMusic()
+			end
+		else
+			local snd = GetGlobalString("winmusic", "")
+			if snd ~= "" and snd ~= "default" and snd ~= "none" then
+				surface_PlaySound(snd)
+			end
+		end
+	end
+	if immediate then
+		start()
+	else
+		timer.Simple(0.5, start)
+	end
+end
+
 function GM:EndRound(winner, nextmap)
 	if self.RoundEnded then return end
 	self.RoundEnded = true
@@ -2250,7 +2286,17 @@ function GM:EndRound(winner, nextmap)
 
 	self.EndTime = CurTime()
 
-	RunConsoleCommand("stopsound")
+	-- OxygenHoldStop is set by the wave bed before this runs. stopsound
+	-- would cut that short fade, so the end track starts over it instead.
+	if self.OxygenHoldStop then
+		hook.Add("EntityEmitSound", "RelapseOxygenEndMute", function()
+			return true
+		end)
+		self:PlayEndRoundMusic(winner, true)
+	else
+		RunConsoleCommand("stopsound")
+		self:PlayEndRoundMusic(winner, false)
+	end
 
 	self.HUDPaint = self.HUDPaintEndRound
 	self.HUDPaintBackground = self.HUDPaintBackgroundEndRound
@@ -2258,15 +2304,6 @@ function GM:EndRound(winner, nextmap)
 	if winner == TEAM_UNDEAD and GetGlobalBool("endcamera", true) then
 		hook.Add("CalcView", "EndRoundCalcView", EndRoundCalcView)
 		hook.Add("ShouldDrawLocalPlayer", "EndRoundShouldDrawLocalPlayer", EndRoundShouldDrawLocalPlayer)
-	end
-
-	-- Stock ZS win/lose cues stay quiet. A map can still set its own via logic_winlose.
-	local snd = GetGlobalString(winner == TEAM_UNDEAD and "losemusic" or "winmusic", "")
-	if snd == "" or snd == "default" or snd == "none" then
-		snd = nil
-	end
-	if snd then
-		timer.Simple(0.5, function() surface_PlaySound(snd) end)
 	end
 
 	timer.Simple(5, function()

@@ -6,11 +6,11 @@ include("mg_melee_shared.lua")
 include("animations.lua")
 
 if CLIENT then
-	killicon.Add("mg_cinderblock", "zombiesurvival/killicons/weapon_zs_cinderblock.png", Color(255, 255, 255))
-	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cinderblock.png")
+	killicon.Add("mg_cinderblock", "zombiesurvival/killicons/weapon_zs_cinderblock2.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cinderblock2.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cinderblock.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cinderblock2.png"
 -- WM already has the block mesh (long axis +Y, holes through Y). No default attachments.
 SWEP.RelapsePreviewBoneMerge = true
 SWEP.RelapsePreviewHullBounds = true

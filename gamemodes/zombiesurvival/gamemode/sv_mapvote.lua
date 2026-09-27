@@ -3,6 +3,7 @@ util.AddNetworkString("zs_mapvote_cast")
 util.AddNetworkString("zs_mapvote_uncast")
 util.AddNetworkString("zs_mapvote_open")
 util.AddNetworkString("zs_mapvote_dev")
+util.AddNetworkString("zs_mapvote_level")
 
 local function TrimMap(name)
 	name = string.lower(string.Trim(tostring(name or "")))
@@ -366,6 +367,113 @@ end)
 
 concommand.Add("relapse_votemap_dev", function(pl)
 	GAMEMODE:EnableMapVoteDev(pl)
+end)
+
+local function FoldMapQuery(text)
+	text = string.lower(string.Trim(tostring(text or "")))
+	text = string.gsub(text, "%.bsp$", "")
+	text = string.gsub(text, "[^%w]+", "")
+	return text
+end
+
+local function ContainScore(hay, needle)
+	if hay == "" or needle == "" then return 0 end
+	if hay == needle then return 800 end
+	local at = string.find(hay, needle, 1, true)
+	if not at then return 0 end
+	return 400 + math.floor(100 * #needle / #hay) + (at == 1 and 40 or 0)
+end
+
+function GM:ChangelevelCandidates()
+	local list, seen = {}, {}
+	if istable(self.MapVotePool) then
+		for _, entry in ipairs(self.MapVotePool) do
+			self:AddMapVoteCandidate(list, seen, entry)
+		end
+	end
+	for _, pattern in ipairs({ "maps/zs_*.bsp", "maps/ze_*.bsp", "maps/zm_*.bsp" }) do
+		local files = file.Find(pattern, "GAME")
+		for _, fn in ipairs(files or {}) do
+			self:AddMapVoteCandidate(list, seen, fn)
+		end
+	end
+	return list
+end
+
+function GM:ScoreChangelevelMap(map, query)
+	local q = string.lower(string.Trim(tostring(query or "")))
+	q = string.gsub(q, "%.bsp$", "")
+	if q == "" then return 0 end
+	local name = string.lower(map)
+	if name == q then return 1000 end
+	local bare = string.match(name, "^z[sem]_(.+)$")
+	if bare and bare == q then return 900 end
+
+	local best = ContainScore(FoldMapQuery(name), FoldMapQuery(q))
+	local key = "map_" .. name
+	for short, _ in pairs(translate.GetLanguages() or {}) do
+		local pack = translate.GetTranslations(short)
+		local label = pack and pack[key]
+		if label and label ~= "" then
+			if string.lower(label) == q then
+				best = math.max(best, 950)
+			end
+			best = math.max(best, ContainScore(FoldMapQuery(label), FoldMapQuery(q)))
+		end
+	end
+	return best
+end
+
+function GM:RelapseChangelevel(pl, query)
+	if IsValid(pl) then
+		local Mesh = RelapseAI and RelapseAI.Mesh
+		local owner = Mesh and Mesh.IsOwner and Mesh.IsOwner(pl)
+		if not pl:IsSuperAdmin() and not owner then return end
+	end
+
+	query = string.Trim(tostring(query or ""))
+	local function reply(msg)
+		print(msg)
+		if IsValid(pl) then
+			pl:PrintMessage(HUD_PRINTCONSOLE, msg)
+			pl:ChatPrint(msg)
+		end
+	end
+	if query == "" then
+		reply("relapse_changelevel <карта>")
+		return
+	end
+
+	local best, bestScore, tied = nil, 0, {}
+	for _, entry in ipairs(self:ChangelevelCandidates()) do
+		local score = self:ScoreChangelevelMap(entry.Map, query)
+		if score > bestScore then
+			bestScore = score
+			best = entry.Map
+			tied = { entry.Map }
+		elseif score > 0 and score == bestScore then
+			tied[#tied + 1] = entry.Map
+		end
+	end
+	if not best then
+		reply("Нет такой карты.")
+		return
+	end
+	if #tied > 1 then
+		reply("Подходят несколько: " .. table.concat(tied, ", "))
+		return
+	end
+
+	reply("Смена карты: " .. best)
+	RunConsoleCommand("changelevel", best)
+end
+
+net.Receive("zs_mapvote_level", function(_, pl)
+	GAMEMODE:RelapseChangelevel(pl, net.ReadString())
+end)
+
+concommand.Add("relapse_changelevel", function(pl, _, _, argStr)
+	GAMEMODE:RelapseChangelevel(pl, argStr)
 end)
 
 hook.Add("PlayerDisconnected", "RelapseMapVote", function(pl)

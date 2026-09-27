@@ -17,10 +17,13 @@ function SWEP:OnMeleeHit(hitent, hitflesh, tr)
 		local oldhealth = hitent:GetObjectHealth()
 		if oldhealth <= 0 or oldhealth >= hitent:GetMaxObjectHealth() or hitent.m_LastDamaged and CurTime() < hitent.m_LastDamaged + 4 then return end
 
-		local healstrength = self.HealStrength * GAMEMODE:GetRepairPercentMul(owner) * (hitent.WrenchRepairMultiplier or 1)
+		local healstrength = self.HealStrength * GAMEMODE:GetRepairPercentMul(owner, hitent) * (hitent.WrenchRepairMultiplier or 1)
 
 		hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + healstrength))
 		local healed = hitent:GetObjectHealth() - oldhealth
+		if GAMEMODE.CreditRelapseScarMechanic then
+			GAMEMODE:CreditRelapseScarMechanic(owner, hitent, healed)
+		end
 		self:PlayRepairSound(hitent)
 		gamemode.Call("PlayerRepairedObject", owner, hitent, healed / 2, self)
 

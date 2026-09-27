@@ -189,6 +189,13 @@ function GM:RollRelapseScarOffer(pl)
 		end
 	end
 
+	if #chosen >= 3 then
+		local rares = self:RelapseScarRarePool()
+		if #rares > 0 and math.Rand(0, 1) < 0.15 then
+			chosen[3] = rares[math.random(#rares)]
+		end
+	end
+
 	return chosen
 end
 
@@ -260,6 +267,9 @@ function GM:TakeRelapseScar(pl, id)
 	if not self:RelapseScarOfferHas(pl.RelapseScarOffer, id) then return false end
 
 	pl.RelapseScarRanks[id] = (pl.RelapseScarRanks[id] or 0) + 1
+	if id == "demiurge" and self.ApplyCycleGridDeviceHealth then
+		self:ApplyCycleGridDeviceHealth(pl)
+	end
 	pl.RelapseScarPicks = pl.RelapseScarPicks - 1
 	pl.RelapseScarOffer = {}
 	if pl.RelapseScarPicks > 0 then
@@ -269,6 +279,105 @@ function GM:TakeRelapseScar(pl, id)
 	self:SendRelapseScars(pl)
 	self:SaveVault(pl)
 	return true
+end
+
+function GM:CreditRelapseScarTurner(pl, cost)
+	cost = math.floor(tonumber(cost) or 0)
+	if cost <= 0 then
+		return
+	end
+	if not (IsValid(pl) and pl:IsPlayer() and pl:Team() == TEAM_HUMAN) then
+		return
+	end
+	self:InitRelapseScars(pl)
+	local meters = pl.RelapseScarMeters
+	local row = meters.turner or { count = 0, meter = 0 }
+	row.count = (row.count or 0) + 1
+	row.meter = (row.meter or 0) + cost
+	meters.turner = row
+end
+
+function GM:CreditRelapseScarScavenger(pl, scrap)
+	scrap = math.floor(tonumber(scrap) or 0)
+	if scrap <= 0 then
+		return
+	end
+	if not (IsValid(pl) and pl:IsPlayer() and pl:Team() == TEAM_HUMAN) then
+		return
+	end
+	self:InitRelapseScars(pl)
+	local meters = pl.RelapseScarMeters
+	local row = meters.scavenger or { count = 0, meter = 0 }
+	row.count = (row.count or 0) + scrap
+	row.meter = (row.meter or 0) + scrap
+	meters.scavenger = row
+end
+
+function GM:CreditRelapseScarQuartermaster(owner)
+	if not (IsValid(owner) and owner:IsPlayer() and owner:Team() == TEAM_HUMAN) then
+		return
+	end
+	self:InitRelapseScars(owner)
+	local meters = owner.RelapseScarMeters
+	local row = meters.quartermaster or { count = 0, meter = 0 }
+	row.count = (row.count or 0) + 1
+	row.meter = (row.meter or 0) + 1
+	meters.quartermaster = row
+end
+
+function GM:CreditRelapseScarDemiurge(ent, damage)
+	damage = tonumber(damage) or 0
+	if damage <= 0 or self:GetWave() <= 0 then
+		return
+	end
+	if not (IsValid(ent) and self.IsMechanicsDeviceClass and self:IsMechanicsDeviceClass(ent:GetClass())) then
+		return
+	end
+	local owner = ent.GetObjectOwner and ent:GetObjectOwner()
+	if not (IsValid(owner) and owner:IsPlayer() and owner:Team() == TEAM_HUMAN) then
+		return
+	end
+
+	self:InitRelapseScars(owner)
+	local meters = owner.RelapseScarMeters
+	local row = meters.demiurge or { count = 0, meter = 0 }
+	row.count = (row.count or 0) + damage
+	row.meter = (row.meter or 0) + damage
+	meters.demiurge = row
+end
+
+function GM:CreditRelapseScarMechanic(pl, ent, hp)
+	hp = tonumber(hp) or 0
+	if hp <= 0 or self:GetWave() <= 0 then
+		return
+	end
+	if not (IsValid(pl) and pl:IsPlayer() and pl:Team() == TEAM_HUMAN) then
+		return
+	end
+	if not (IsValid(ent) and self.IsMechanicsDeviceClass and self:IsMechanicsDeviceClass(ent:GetClass())) then
+		return
+	end
+	self:InitRelapseScars(pl)
+	local meters = pl.RelapseScarMeters
+	local row = meters.mechanic or { count = 0, meter = 0 }
+	row.count = (row.count or 0) + 1
+	row.meter = (row.meter or 0) + hp
+	meters.mechanic = row
+end
+
+function GM:CreditRelapseScarRepair(pl, health)
+	if not (IsValid(pl) and pl:IsPlayer() and pl:Team() == TEAM_HUMAN) then
+		return
+	end
+	health = tonumber(health) or 0
+	if health <= 0 then return end
+
+	self:InitRelapseScars(pl)
+	local meters = pl.RelapseScarMeters
+	local row = meters.stakhanovite or { count = 0, meter = 0 }
+	row.count = (row.count or 0) + 1
+	row.meter = (row.meter or 0) + health
+	meters.stakhanovite = row
 end
 
 function GM:CreditRelapseScarLastHit(attacker, zombie)

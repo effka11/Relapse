@@ -30,6 +30,9 @@ function ENT:OnTakeDamage(dmginfo)
 	if not (attacker:IsValid() and attacker:IsPlayer() and attacker:Team() == TEAM_HUMAN) then
 		local parent = self:GetParent()
 		if parent and parent:IsValid() then
+			if GAMEMODE.CreditRelapseScarDemiurge then
+				GAMEMODE:CreditRelapseScarDemiurge(parent, dmginfo:GetDamage())
+			end
 			parent:SetObjectHealth(parent:GetObjectHealth() - dmginfo:GetDamage())
 			parent:ResetLastBarricadeAttacker(attacker, dmginfo)
 		end

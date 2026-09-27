@@ -1,4 +1,4 @@
--- Shop card icon editor. `relapse_iconsdev` toggles; sliders are live deltas.
+-- Shop card icon editor. `relapse_icons_dev` toggles; sliders are live deltas.
 -- Kind `shop` writes CardIcon*; `inv` writes InvSlotIcon*; `view` writes ViewerAmmo*.
 -- Kind `scar` writes ScarIcon*. With the command on, the scars tab sits the window on the left.
 
@@ -1046,13 +1046,13 @@ function RelapseUI.IconsDevSelect(tab, kind)
 	end
 end
 
-concommand.Add("relapse_iconsdev", function(_, _, args)
+concommand.Add("relapse_icons_dev", function(_, _, args)
 	if args[1] ~= nil and args[1] ~= "" then
 		local v = string.lower(tostring(args[1]))
 		RelapseUI.IconsDevOn = not (v == "0" or v == "false" or v == "off")
 	else
 		RelapseUI.IconsDevOn = not RelapseUI.IconsDevOn
 	end
-	print("relapse_iconsdev = " .. (RelapseUI.IconsDevOn and "1" or "0"))
+	print("relapse_icons_dev = " .. (RelapseUI.IconsDevOn and "1" or "0"))
 	RelapseUI.IconsDevRefresh()
 end)

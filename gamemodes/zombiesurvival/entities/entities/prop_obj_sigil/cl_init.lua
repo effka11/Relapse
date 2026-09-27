@@ -68,9 +68,11 @@ function ENT:DrawTranslucent()
 
 	RelapseUI.SigilFromEnt(self, cSigil)
 	local r, g, b = cSigil.r / 255, cSigil.g / 255, cSigil.b / 255
+	local fade = (RelapseSigilDevArmed and RelapseSigilDevArmed()) and 0.25 or 1
 
 	render_SuppressEngineLighting(true)
 	render_SetColorModulation(r ^ 0.5, g ^ 0.5, b ^ 0.5)
+	render_SetBlend(fade)
 
 	self:SetModelScaleVector(Vector(1, 1, 1) * scale)
 
@@ -79,14 +81,14 @@ function ENT:DrawTranslucent()
 	render_SetColorModulation(r, g, b)
 
 	render_ModelMaterialOverride(matWhite)
-	render_SetBlend(0.1 * healthperc)
+	render_SetBlend(0.1 * healthperc * fade)
 
 	self:DrawModel()
 
 	render_SetColorModulation(r, g, b)
 
 	self:SetModelScaleVector(Vector(0.1, 0.1, 0.9 * math.max(0.02, healthperc)) * scale)
-	render_SetBlend(1)
+	render_SetBlend(fade)
 	cam_Start3D(eyepos + forwardoffset + rightoffset, eyeangles)
 	self:DrawModel()
 	cam_End3D()
@@ -113,6 +115,8 @@ function ENT:DrawTranslucent()
 
 	cDraw.r, cDraw.g, cDraw.b = cSigil.r, cSigil.g, cSigil.b
 	RelapseUI.LerpCol(RelapseUI.Col.Ink, RelapseUI.Col.Text, healthperc, cDrawCore)
+	cDraw.a = 255 * fade
+	cDrawCore.a = 255 * fade
 
 	render.SetMaterial(matGlow)
 	if not corrupt then
@@ -140,7 +144,7 @@ function ENT:DrawTranslucent()
 	particle:SetDieTime(math.Rand(1.5, 4))
 	particle:SetVelocity(Vector(0, 0, math.Rand(32, 64) * scale))
 	particle:SetStartAlpha(0)
-	particle:SetEndAlpha(255)
+	particle:SetEndAlpha(255 * fade)
 	particle:SetStartSize(math.Rand(2, 4) * (corrupt and 3 or 1) * scale)
 	particle:SetEndSize(0)
 	particle:SetRoll(math.Rand(0, 360))

@@ -1,0 +1,36 @@
+---
+description: Relapse лестница по примерным x/y — найти шахту в BSP и снять лаз, не соседние.
+alwaysApply: true
+---
+
+# Relapse лестница по координатам
+
+«5/4» и «x/y» — мир из `relapse_coordinates` (`GetPos`, целые). Игрок стоит **рядом** с шахтой, не в её центре. Ближайший источник в радиусе **80** (`LADDER_DENY_R`). Дальше 80 — это другая лестница, её не трогать.
+
+BSP: `D:\Relapse\server\garrysmod\maps\<map>.bsp`. Не по памяти прошлого раунда.
+
+| Откуда лаз | Где искать |
+|---|---|
+| Металл | static prop, в имени модели `ladder`. Game lump 35, `prps`. Колонка — одна точка XY на стопку |
+| Уличная / func | lump 0: `func_useableladder` (`point0`/`point1`), `func_ladder`, `info_ladder` |
+| Браш | contents `0x20000000`. Detail в листьях нет. Плита ниже 40 по Z — не шахта, лаз даёт модель рядом |
+| Невидимая | тонкий `func_brush` / `func_breakable` / `func_illusionary`: `WorldSpaceAABB`, меньшая сторона XY ≤ 8, высота 48–160. Жирный `trigger_hurt` не лестница |
+
+Код уже режет точку: `GM.RelapseLadderDeny` в `maps/<map>.lua`, `RelapseLadderDeniedXY` в `relapse_ladder.lua` (пробы, модели, клипы) и `Nav.BuildLadders` в `10_nav.lua`. Новый фильтр в `SpawnClips` не писать.
+
+«Отключи» — не лазить. Видимые прутья остаются. Спрятать меш — только если попросили убрать модель.
+
+Невидимый столб дополнительно снять в `InitPostEntityMap` этой карты: `Remove` только тонких брашей, чей центр в ~120 от точки. Хук и так зовётся после `CleanUpMap`.
+
+Не трогать другую шахту карты, `OpenFaceSlabs`, `STAND_OFF`, `IN_DUCK`, `ClimbZRange`. Не возвращать `FLY`. `changelevel`, не `restart`. В логе колонка модели пропадает из `model columns`, чужой `sample climb` остаётся.
+
+```lua
+-- ❌ разовый if под одну карту в общем лазе
+if game.GetMap() == "zs_oxygen_b4" and math.abs(cy - 736) < 40 then return end
+
+-- ✅ точка игрока в карте; радиус 80 уже в RelapseLadderDeniedXY
+GM.RelapseLadderDeny = {
+	{5, 4},
+	{-4, 718},
+}
+```

@@ -1,6 +1,7 @@
 -- Relapse AI zombie brain.
 -- Utility-based intent selection with hysteresis: Hunt (visible or remembered humans),
--- Sigil (nearest uncorrupted sigil, balanced across bots), Break (something blocks
+-- Sigil (nearest uncorrupted sigil, balanced across bots; a floor you can
+-- only fall off is not a choice), Break (something blocks
 -- the way), Wander (horde instinct) and Crow (crow class only). Perception, locomotion,
 -- view and combat are shared services; this file only decides.
 
@@ -190,10 +191,15 @@ local function PickSigil(bot, bb, now)
 				end
 			end
 			if not gaveUp then
-				-- Another island has no edge. Picking it walks everyone into the same cliff.
+				-- Another island has no edge. A balcony glued on by a one-way
+				-- drop has the same comp and still no way up: that walks
+				-- everyone to the landing under it.
 				if mine and mine.comp then
 					local cell = CellAt(sigil:GetPos())
 					if cell and cell.comp and cell.comp ~= mine.comp then
+						gaveUp = true
+					elseif cell and mine.wcomp and cell.wcomp and AI.Mesh.Reaches
+						and not AI.Mesh.Reaches(mine.wcomp, cell.wcomp) then
 						gaveUp = true
 					end
 				end
@@ -317,23 +323,24 @@ end
 -- drops, so "he is above us" is not a reason to keep pushing the same request.
 -- A one-way drop keeps the pit on the same island, so the path ends on the pit
 -- floor and never arrives. No human and no sigil on that floor: die and respawn
--- instead of standing there. A path that does arrive is a stuck body, not an
--- empty floor.
+-- instead of standing there. Another island is not that pit: the human is still
+-- alive under the roof, so the goal is dropped and they walk away.
 local function HandleHopeless(bot, bb, intent, data, now)
 	local loco = bot.Loco
 	local pl = bot.Player
 	local classtab = pl:GetZombieClassTable()
+	local mine = CellAt(pl:GetPos())
+	local theirs = (intent == "hunt" or intent == "sigil") and IsValid(data) and CellAt(data:GetPos())
+	local otherIsland = mine and theirs and mine.comp and theirs.comp and mine.comp ~= theirs.comp
 	if pl:Alive() and not bb.Suicide and not (classtab and classtab.Boss)
-		and not loco.PathReached and not SurfaceHasTarget(pl) then
+		and not loco.PathReached and not SurfaceHasTarget(pl) and not otherIsland then
 		bb.Suicide = true
 		loco:Note("suicide")
 		pl:Kill()
 		return
 	end
 	if intent == "hunt" and IsValid(data) then
-		local mine = CellAt(bot.Player:GetPos())
-		local theirs = CellAt(data:GetPos())
-		if mine and theirs and mine.comp and theirs.comp and mine.comp ~= theirs.comp then
+		if otherIsland then
 			bb.UnreachComp = bb.UnreachComp or {}
 			bb.UnreachComp[data] = theirs.comp
 			bb.IgnoreHumans[data] = now + HOPELESS_ISLAND_COOLDOWN

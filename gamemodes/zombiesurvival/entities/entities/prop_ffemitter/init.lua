@@ -81,6 +81,9 @@ function ENT:OnTakeDamage(dmginfo)
 
 	local attacker = dmginfo:GetAttacker()
 	if not (attacker:IsValid() and attacker:IsPlayer() and attacker:Team() == TEAM_HUMAN) then
+		if GAMEMODE.CreditRelapseScarDemiurge then
+			GAMEMODE:CreditRelapseScarDemiurge(self, dmginfo:GetDamage())
+		end
 		self:SetObjectHealth(self:GetObjectHealth() - dmginfo:GetDamage())
 		self:ResetLastBarricadeAttacker(attacker, dmginfo)
 	end

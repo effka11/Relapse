@@ -8,8 +8,17 @@
 --   cursor      closest point on the polyline, in a window around the last cursor
 --   lookahead   the furthest path point ahead a body hull can see (no corner cuts)
 --   slide       wish is projected off any wall the body would push into
---   specials    DROP walks off the lip, CLIMB/GAP jump at the launch, LADDER is a
---               four-phase state machine over the Relapse ladder (E, W/S, E)
+--   specials    DROP walks off the lip, CLIMB/GAP jump at the launch. The
+--               climb hop is at the lip (ahead 24). Aiming at the landing
+--               from the approach cuts into the frame, and a probe from the
+--               40-window jumps early so the arc falls back on the near side.
+--               A drop onto another floor, while the body is
+--               still up, steers at the landing's place on the lip's height.
+--               A lip cell that sits on the jamb is not the aim: the opening
+--               beside it is, or the jump stops on the frame.
+--               A short step stays on an inset lip. The air chord and the
+--               point a storey down pull the cursor across the roof.
+--               LADDER is a four-phase state machine (E, W/S, E)
 --
 -- Think only calls these. A new condition belongs in the layer function, not
 -- in a new branch of Think.
@@ -30,7 +39,10 @@
 --   prop:around prop:past giveup:<class>
 --   ladder:approach ladder:mount ladder:climb ladder:leave ladder:done
 --   ladder:abort:<approach|mount|stall|fell|leave|unplanned>
---   suicide    hopeless, this floor has no living human and no living sigil
+--   suicide    hopeless, this floor has no living human and no living sigil.
+--              A sigil you can only fall from is not that hole: PickSigil
+--              skips it (directed reach). comp still glues the drop, so an
+--              empty pit suicides.
 -- solid is a recorder bug, not a note: the hull started inside a solid a player
 -- body does not pass. IgnoreTraces, passable groups and ShouldNotCollide(player)
 -- are not that (the sigil prop blocker).
@@ -93,6 +105,7 @@ Loco.Defaults = {
 	SlideProbe = 22, -- body sweep along the wish; a wall inside it bends the wish
 	SlideHold = 0.8, -- seconds a head-on slide keeps its side before re-choosing
 	ProbeDist = 56,
+	ClimbSlot = 32, -- lip cell on a jamb: look this far sideways for a chest-height opening
 	ObstacleAccept = 40, -- a breakable further than this from our centre is not "in the way" yet
 	ExhaustedAccept = 64, -- standing at a path end that fell short: a breakable this far toward the goal is the way
 	DuckProbe = 96,
@@ -104,6 +117,7 @@ Loco.Defaults = {
 	DoorUseInterval = 1.5,
 	DoorUseDist = 84,
 	LadderNear = 72, -- start the ladder SM this far (2D) from the foot cell
+	LadderFace = 32, -- E only this close to the climb face. The hint radius is 104, so the foot cell already counts as near and the hold never starts
 	LadderApproachTime = 6,
 	LadderMountTries = 3,
 	LadderStallTime = 2, -- on the rungs without gaining height
@@ -519,31 +533,53 @@ end
 -- Ties go to the point further along: the path starts under our feet, and a
 -- leg that comes back past us must not pull the cursor to its start.
 local CURSOR_SLACK = 10 * 10
+-- The body has reached the landing's place in the plane of the climb.
+-- Until then the chord past that landing is not where they are: an arc
+-- above the lip is closer to it in 3D, the cursor steps onto the far
+-- cell, and the body falls back on the near side.
+local function ReachedLanding(lip, land, px, py)
+	local lx, ly = land.x - lip.x, land.y - lip.y
+	local llen2 = lx * lx + ly * ly
+	if llen2 < 1 then return true end
+	return (px - lip.x) * lx + (py - lip.y) * ly >= llen2
+end
+
 local function ClosestOnPath(segs, pos, i0, i1)
 	local bestD, bestI, bestDist = 0, i0, math.huge
 	local px, py, pz = pos.x, pos.y, pos.z
 	for i = i0, i1 do
 		local a, b = segs[i], segs[i + 1]
 		local ax, ay, az = a.pos.x, a.pos.y, a.pos.z
-		local d, dist
-		if not b then
-			local dx, dy, dz = px - ax, py - ay, pz - az
-			dist = dx * dx + dy * dy + dz * dz
-			d = a.distanceFromStart
-		else
-			local ex, ey, ez = b.pos.x - ax, b.pos.y - ay, b.pos.z - az
-			local len2 = ex * ex + ey * ey + ez * ez
-			local t = 0
-			if len2 > 0.001 then
-				t = ((px - ax) * ex + (py - ay) * ey + (pz - az) * ez) / len2
-				if t < 0 then t = 0 elseif t > 1 then t = 1 end
+		local prev = i > 1 and segs[i - 1]
+		-- This chord starts where a climb lands. The body is still short of
+		-- that landing, so the far cell must not take the cursor.
+		local pastClimb = prev and prev.type == SEG_CLIMB and not ReachedLanding(prev.pos, a.pos, px, py)
+		if not pastClimb then
+			local d, dist
+			if not b then
+				local dx, dy, dz = px - ax, py - ay, pz - az
+				dist = dx * dx + dy * dy + dz * dz
+				d = a.distanceFromStart
+			else
+				local ex, ey, ez = b.pos.x - ax, b.pos.y - ay, b.pos.z - az
+				local len2 = ex * ex + ey * ey + ez * ez
+				local t = 0
+				if len2 > 0.001 then
+					t = ((px - ax) * ex + (py - ay) * ey + (pz - az) * ez) / len2
+					if t < 0 then t = 0 elseif t > 1 then t = 1 end
+				end
+				-- The drop chord is air. On the high floor the closest point lies
+				-- on that line and the cursor walks off the lip before the body does.
+				if a.type == SEG_DROP and (az - b.pos.z) > 48 and (pz - b.pos.z) > 48 then
+					t = 0
+				end
+				local dx, dy, dz = px - (ax + ex * t), py - (ay + ey * t), pz - (az + ez * t)
+				dist = dx * dx + dy * dy + dz * dz
+				d = a.distanceFromStart + (b.distanceFromStart - a.distanceFromStart) * t
 			end
-			local dx, dy, dz = px - (ax + ex * t), py - (ay + ey * t), pz - (az + ez * t)
-			dist = dx * dx + dy * dy + dz * dz
-			d = a.distanceFromStart + (b.distanceFromStart - a.distanceFromStart) * t
-		end
-		if dist < bestDist - CURSOR_SLACK or (dist <= bestDist + CURSOR_SLACK and d > bestD) then
-			bestDist, bestD, bestI = dist, d, i
+			if dist < bestDist - CURSOR_SLACK or (dist <= bestDist + CURSOR_SLACK and d > bestD) then
+				bestDist, bestD, bestI = dist, d, i
+			end
 		end
 	end
 	return bestD, bestI, bestDist
@@ -673,6 +709,14 @@ local seeTrace = {
 	collisiongroup = COLLISION_GROUP_PLAYER,
 	mins = Vector(-14, -14, 0),
 	maxs = Vector(14, 14, 38),
+	filter = ProbeFilter,
+}
+-- Chest band through a window: above the wall under the sill, short of the header.
+local slotTrace = {
+	mask = MASK_PLAYERSOLID,
+	collisiongroup = COLLISION_GROUP_PLAYER,
+	mins = Vector(-14, -14, 0),
+	maxs = Vector(14, 14, 0),
 	filter = ProbeFilter,
 }
 -- Real body width, lifted by the step: what would we push into this tick?
@@ -1734,8 +1778,11 @@ function Loco:StepLadder(cmd, viewYaw, buttons, now, pos)
 		local fx, fy = L.Foot.x - pos.x, L.Foot.y - pos.y
 		local atFoot = fx * fx + fy * fy <= 28 * 28 and math_abs(L.Foot.z - pos.z) < 40
 		if atFoot or now - L.Since > 1.5 then
-			-- Close enough: E seats if a climb face is within reach; else press into the shaft.
-			if gm.RelapseLadderIsNear and gm:RelapseLadderIsNear(pl) then
+			-- The hint radius reaches the foot cell. E from there never seats,
+			-- and mount then freezes the wish, so they stand until the tries run out.
+			-- Walk into the shaft until the face itself is in reach.
+			local face = gm.RelapseLadderUseDist and gm:RelapseLadderUseDist(pl)
+			if face and face <= self.P.LadderFace and gm:RelapseLadderIsNear(pl) then
 				L.Tries = L.Tries + 1
 				L.MountAt = now
 				self:PressUse()
@@ -1830,10 +1877,13 @@ function Loco:SpecialAction(s, nxt, pos, ahead, now)
 	local t = s.type
 	if t == SEG_CLIMB and nxt then
 		local rise = nxt.pos.z - pos.z
-		if rise > P.StepHeight + 2 and rise <= P.JumpHeight + 12 and ahead <= 40 then
+		-- The sill is the landing, a cell past the lip. Probing it from the
+		-- 40-window hops on the approach: the arc peaks on the near side
+		-- and they fall back, then the next hop is from a standstill.
+		if rise > P.StepHeight + 2 and rise <= P.JumpHeight + 12 and ahead <= 24 and ahead >= 0 then
 			local dx, dy = nxt.pos.x - pos.x, nxt.pos.y - pos.y
 			local l = math_sqrt(dx * dx + dy * dy)
-			if l > 1 and (ahead <= 24 or self:ProbeLedge(pos, dx / l, dy / l, 48) == LEDGE_JUMP) then
+			if l > 1 and self:ProbeLedge(pos, dx / l, dy / l, 48) == LEDGE_JUMP then
 				self:HopAt("climb", s, nxt)
 			end
 		end
@@ -1847,6 +1897,57 @@ function Loco:SpecialAction(s, nxt, pos, ahead, now)
 			self:Jump("rail")
 		end
 	end
+end
+
+-- Landing's place, still at the lip height. The lip cell sits in from the
+-- edge, so a short step stops on the roof. The landing itself is a storey
+-- down; aiming at that point cuts back across the roof.
+local function DropOffPoint(lip, land)
+	return Vector(land.x, land.y, lip.z)
+end
+
+local function DropSteer(s, nxt, pos, ahead, target)
+	if s.type ~= SEG_DROP or not nxt or ahead > 40 then return target end
+	if (s.pos.z - nxt.pos.z) <= 48 or (pos.z - nxt.pos.z) <= 48 then return target end
+	return DropOffPoint(s.pos, nxt.pos)
+end
+
+-- Lip cell on the frame: the straight chest line hits the jamb, a line a
+-- step to the side goes through the opening and still has a raised sill.
+-- A clear side with the same floor is a way around a crate, not a window.
+local function ClimbOpening(self, pos, lip, land)
+	local P = self.P
+	local dx, dy = land.x - lip.x, land.y - lip.y
+	local flat = math_sqrt(dx * dx + dy * dy)
+	if flat < 1 then return 0, 0 end
+	dx, dy = dx / flat, dy / flat
+	local rx, ry = -dy, dx
+	SetProbeContext(self)
+	local z = pos.z + P.StepHeight * 2
+	slotTrace.maxs.z = P.StepHeight + 2
+	local function openAt(off)
+		local ox, oy = rx * off, ry * off
+		slotTrace.start = Vector(lip.x + ox - dx * P.ProbeDist, lip.y + oy - dy * P.ProbeDist, z)
+		slotTrace.endpos = Vector(land.x + ox, land.y + oy, z)
+		local tr = util_TraceHull(slotTrace)
+		return not tr.StartSolid and not tr.Hit
+	end
+	local function raised(off)
+		local mx = (lip.x + land.x) * 0.5 + rx * off
+		local my = (lip.y + land.y) * 0.5 + ry * off
+		groundTrace.start = Vector(mx, my, z + P.StepHeight)
+		groundTrace.endpos = Vector(mx, my, pos.z - P.StepHeight)
+		local tr = util_TraceLine(groundTrace)
+		return tr.Hit and not tr.StartSolid and (tr.HitPos.z - pos.z) > P.StepHeight
+	end
+	if openAt(0) then return 0, 0 end
+	local step = P.ClimbSlot / 4
+	for n = 1, 4 do
+		local off = step * n
+		if openAt(off) and raised(off) then return rx * off, ry * off end
+		if openAt(-off) and raised(-off) then return -rx * off, -ry * off end
+	end
+	return 0, 0
 end
 
 -- Steer target while following the path. Also owns the cursor and the
@@ -1889,6 +1990,10 @@ function Loco:PathTarget(pos, now)
 		local nxt = segs[special + 1]
 		local sd = s.distanceFromStart
 		local ahead = sd - d
+		local ox, oy = 0, 0
+		if s.type == SEG_CLIMB and nxt then
+			ox, oy = ClimbOpening(self, pos, s.pos, nxt.pos)
+		end
 		if IsLadderSeg(s) then
 			-- Walk to the foot; the SM takes over when close and on that floor.
 			local fx, fy = s.pos.x - pos.x, s.pos.y - pos.y
@@ -1906,12 +2011,26 @@ function Loco:PathTarget(pos, now)
 		elseif ahead <= 6 then
 			-- On the special waypoint: aim at the far side and act.
 			target = nxt and nxt.pos or s.pos
+			if ox ~= 0 or oy ~= 0 then
+				target = Vector(target.x + ox, target.y + oy, target.z)
+			end
+			target = DropSteer(s, nxt, pos, ahead, target)
 			self:SpecialAction(s, nxt, pos, ahead, now)
 		else
 			local look = self:UpdateLookDist(pos, segs, d, i, ahead, now)
 			target = PointAt(segs, d + look, i)
 			if s.type == SEG_CLIMB then
+				-- The landing is past the frame. Aiming at it on the way in
+				-- cuts the corner into the jamb. Walk to the lip, shifted
+				-- into the opening when the lip cell itself is the frame.
+				if ox ~= 0 or oy ~= 0 then
+					target = Vector(s.pos.x + ox, s.pos.y + oy, s.pos.z)
+				else
+					target = s.pos
+				end
 				self:SpecialAction(s, nxt, pos, ahead, now)
+			elseif s.type == SEG_DROP then
+				target = DropSteer(s, nxt, pos, ahead, target)
 			end
 		end
 	else

@@ -42,12 +42,51 @@ function GM:GetReloadPercentMul(pl)
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "Reload"), skill)
 end
 
-function GM:GetRepairPercentMul(pl)
+function GM:RelapseRepairScar(pl)
+	if not (self.GetRelapseScarRank and self.RelapseScarP) then
+		return 0
+	end
+	local n = self:GetRelapseScarRank("stakhanovite", pl)
+	if n < 1 then
+		return 0
+	end
+	return self:RelapseScarP(n, 0.09, 0.03)
+end
+
+-- Fitter (Наладчик). Same sum as Reliability (DeviceHealth).
+function GM:RelapseDeviceHealthScar(pl)
+	if not (self.GetRelapseScarRank and self.RelapseScarP) then
+		return 0
+	end
+	local n = self:GetRelapseScarRank("demiurge", pl)
+	if n < 1 then
+		return 0
+	end
+	return self:RelapseScarP(n, 0.15, 0.05)
+end
+
+-- Слесарь. Same repair sum, and only while the target is a mechanics device.
+function GM:RelapseMechanicsRepairScar(pl)
+	if not (self.GetRelapseScarRank and self.RelapseScarP) then
+		return 0
+	end
+	local n = self:GetRelapseScarRank("mechanic", pl)
+	if n < 1 then
+		return 0
+	end
+	return self:RelapseScarP(n, 0.15, 0.05)
+end
+
+function GM:GetRepairPercentMul(pl, ent)
 	local skill = 0
 	if IsValid(pl) and isnumber(pl.RepairRateMul) then
 		skill = pl.RepairRateMul - 1
 	end
-	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill)
+	local device = 0
+	if IsValid(ent) and self.IsMechanicsDeviceClass and self:IsMechanicsDeviceClass(ent:GetClass()) then
+		device = self:RelapseMechanicsRepairScar(pl)
+	end
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill, self:RelapseRepairScar(pl), device)
 end
 
 function GM:CountOwnNails(pl, ent)
@@ -74,7 +113,7 @@ function GM:GetPropRepairPercentMul(pl, ent)
 		skill = pl.RepairRateMul - 1
 	end
 	local perNail = self:GetUpgradePercent(pl, "RepairPerNail") * self:CountOwnNails(pl, ent)
-	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill, perNail)
+	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill, perNail, self:RelapseRepairScar(pl))
 end
 
 function GM:GetDeployPercentMul(pl)
@@ -257,13 +296,13 @@ function GM:GetMeleeDamagePercentMul(pl, victim)
 	if IsValid(pl) and isnumber(pl.MeleeDamageMultiplier) then
 		skill = pl.MeleeDamageMultiplier - 1
 	end
-	-- Bonebreaker p(n) only on undead. Same Σp as Strength, not a second mul.
+	-- Fighter p(n) only on undead. Same Σp as Strength, not a second mul.
 	local scar = 0
 	if IsValid(victim) and victim:IsPlayer() and victim:Team() == TEAM_UNDEAD
 		and self.GetRelapseScarRank and self.RelapseScarP then
 		local n = self:GetRelapseScarRank("breaker", pl)
 		if n >= 1 then
-			scar = self:RelapseScarP(n, 0.16, 0.04)
+			scar = self:RelapseScarP(n, 0.10, 0.02)
 		end
 	end
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "MeleeDamage"), skill, scar)
@@ -502,7 +541,7 @@ end
 
 -- Forced mode. Heat is real seconds of continuous engagement.
 -- Damage uses heat / durability. Durability is the same sum as max health:
--- 1 + DeviceHealth + old deployable and turret health mods.
+-- 1 + DeviceHealth + Fitter + old deployable and turret health mods.
 -- +15% reliability stretches the whole curve by 1.15 (break ~93 s, not 81 s).
 -- Silence sheds TurretForcedCool heat per second and does not restore health.
 GM.TurretForcedGrace = 6
@@ -704,6 +743,7 @@ function GM:GetMechanicsDeviceHealthMul(pl, ent, ...)
 		end
 		if self:IsMechanicsDeviceEnt(ent) then
 			total = total + self:GetUpgradePercent(pl, "DeviceHealth")
+			total = total + self:RelapseDeviceHealthScar(pl)
 		end
 	end
 	return total
@@ -719,6 +759,12 @@ function GM:GetResupplyBoxAmmoGive(amount, owner, obj)
 		return amount
 	end
 	local add = self:GetUpgradePercent(owner, "ResupplyAmmo")
+	if self.GetRelapseScarRank and self.RelapseScarP then
+		local n = self:GetRelapseScarRank("quartermaster", owner)
+		if n >= 1 then
+			add = add + self:RelapseScarP(n, 0.25, 0)
+		end
+	end
 	if add <= 0 then
 		return amount
 	end

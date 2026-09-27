@@ -65,8 +65,13 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 		return
 	end
 
+	local scraplist
 	if usescrap then
 		cost = math.ceil(GAMEMODE:PointsToScrap(cost))
+		scraplist = cost
+		if GAMEMODE.RelapseTurnerPay then
+			cost = GAMEMODE:RelapseTurnerPay(sender, scraplist)
+		end
 	elseif GAMEMODE.GetArsenalShopCost then
 		local ok, priced = pcall(GAMEMODE.GetArsenalShopCost, GAMEMODE, sender, cost, itemtab)
 		if ok then
@@ -137,6 +142,9 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 
 	if usescrap then
 		sender:RemoveAmmo(cost, "scrap")
+		if GAMEMODE.CreditRelapseScarTurner and scraplist then
+			GAMEMODE:CreditRelapseScarTurner(sender, scraplist)
+		end
 		sender:SendLua("surface.PlaySound(\"buttons/lever"..math.random(5)..".wav\")")
 	else
 		sender:TakePoints(cost)
@@ -156,7 +164,7 @@ concommand.Add("zs_pointsshopbuy", function(sender, command, arguments)
 		if nearest then
 			local owner = nearest.GetObjectOwner and nearest:GetObjectOwner() or nearest:GetOwner()
 			if owner:IsValid() and owner ~= sender then
-				local scrapcom = math.ceil(cost / 8)
+				local scrapcom = math.ceil((scraplist or cost) / 8)
 				nearest:SetScraps(nearest:GetScraps() + scrapcom)
 				nearest:GetObjectOwner():CenterNotify(COLOR_GREEN, translate.Format("remantle_used", scrapcom))
 			end
@@ -224,8 +232,9 @@ concommand.Add("zs_dismantle", function(sender, command, arguments)
 	end
 
 	local scrap = GAMEMODE:GetDismantleScrap(wtbl or GAMEMODE.ZSInventoryItemData[invitem], invitem)
+	local shown = GAMEMODE.RelapseScrapPaid and GAMEMODE:RelapseScrapPaid(sender, scrap) or scrap
 	net.Start("zs_ammopickup")
-		net.WriteUInt(scrap, 16)
+		net.WriteUInt(shown, 16)
 		net.WriteString("scrap")
 	net.Send(sender)
 	sender:GiveAmmo(scrap, "scrap")
@@ -276,7 +285,8 @@ concommand.Add("zs_upgrade", function(sender, command, arguments)
 	if not (nearest and nearest:IsValid() and contents) then return end
 
 	local wtbl = weapons.Get(contents)
-	local scrapcost = GAMEMODE:GetUpgradeScrap(wtbl, desiredqua)
+	local scraplist = GAMEMODE:GetUpgradeScrap(wtbl, desiredqua)
+	local scrapcost = GAMEMODE.RelapseTurnerPay and GAMEMODE:RelapseTurnerPay(sender, scraplist) or scraplist
 
 	if wtbl.AmmoIfHas and sender:GetAmmoCount(wtbl.Primary.Ammo) == 0 then
 		sender:SendLua("surface.PlaySound(\"buttons/button10.wav\")")
@@ -301,6 +311,9 @@ concommand.Add("zs_upgrade", function(sender, command, arguments)
 	sender:CenterNotify(COLOR_CYAN, translate.ClientGet(sender, "remantle_success"), color_white, " "..upgname)
 	sender:SendLua("surface.PlaySound(\"buttons/lever"..math.random(5)..".wav\")")
 	sender:RemoveAmmo(scrapcost, "scrap")
+	if GAMEMODE.CreditRelapseScarTurner then
+		GAMEMODE:CreditRelapseScarTurner(sender, scraplist)
+	end
 
 	local wep = sender:GiveEmptyWeapon(upgclass)
 	if wep and wep:IsValid() then
@@ -323,10 +336,10 @@ concommand.Add("zs_upgrade", function(sender, command, arguments)
 	end
 
 	local owner = nearest.GetObjectOwner and nearest:GetObjectOwner() or nearest:GetOwner()
-	if owner:IsValid() and owner ~= sender then
-		local scrapcom = math.ceil(scrapcost * 0.08)
+	if IsValid(owner) and owner ~= sender then
+		local scrapcom = math.ceil(scraplist * 0.08)
 		nearest:SetScraps(nearest:GetScraps() + scrapcom)
-		nearest:GetObjectOwner():CenterNotify(COLOR_GREEN, translate.Format("remantle_used", scrapcom))
+		owner:CenterNotify(COLOR_GREEN, translate.Format("remantle_used", scrapcom))
 	end
 end)
 
@@ -800,4 +813,148 @@ concommand.Add("relapse_skipend", function(pl)
 
 	local _, why = GAMEMODE:SkipEndDelay()
 	RelapseAddPointsReply(pl, "[Relapse] " .. why)
+end)
+
+-- Higher score is a closer nick. Exact beats a prefix, a prefix beats a nick that only contains the text.
+local function RelapseNickScore(name, needle)
+	if name == needle then return 1000 end
+	local at = string.find(name, needle, 1, true)
+	if not at then return 0 end
+	return 400 + math.floor(200 * #needle / math.max(#name, 1)) + (at == 1 and 80 or 0)
+end
+
+local function RelapseBestPlayer(query)
+	local needle = string.lower(string.Trim(query or ""))
+	if needle == "" then return nil, {} end
+
+	local bestScore, tied = 0, {}
+	for _, ply in ipairs(player.GetAll()) do
+		if IsValid(ply) then
+			local score = RelapseNickScore(string.lower(ply:Nick() or ""), needle)
+			if score > bestScore then
+				bestScore = score
+				tied = { ply }
+			elseif score > 0 and score == bestScore then
+				tied[#tied + 1] = ply
+			end
+		end
+	end
+	return tied[1], tied
+end
+
+local function RelapseSlayPlayer(pl)
+	if not IsValid(pl) or not pl:Alive() then return false end
+	if pl:HasGodMode() then
+		pl:GodDisable()
+	end
+	pl.SpawnProtection = nil
+	pl:SetLastAttacker()
+
+	local dmg = DamageInfo()
+	dmg:SetDamage(math.max(pl:Health(), 0) + 10000)
+	dmg:SetDamageType(DMG_DIRECT)
+	local world = game.GetWorld()
+	dmg:SetAttacker(world)
+	dmg:SetInflictor(world)
+	dmg:SetDamageForce(vector_origin)
+	dmg:SetDamagePosition(pl:WorldSpaceCenter())
+	pl:TakeDamageInfo(dmg)
+
+	if pl:Alive() then
+		pl:Kill()
+	end
+	return not pl:Alive()
+end
+
+local function RelapseSlayGroup(caller, list, label)
+	local killed, failed = 0, {}
+	for i = 1, #list do
+		local ply = list[i]
+		if IsValid(ply) and ply:Alive() then
+			if RelapseSlayPlayer(ply) then
+				killed = killed + 1
+			else
+				failed[#failed + 1] = ply:Nick()
+			end
+		end
+	end
+	if killed == 0 and #failed == 0 then
+		RelapseAddPointsReply(caller, "[Relapse] некого убивать")
+		return
+	end
+	local msg = string.format("[Relapse] убито %d (%s)", killed, label)
+	if #failed > 0 then
+		msg = msg .. ". не умерли: " .. table.concat(failed, ", ")
+	end
+	RelapseAddPointsReply(caller, msg)
+end
+
+concommand.Add("relapse_slay", function(pl, _, args, argStr)
+	if not RelapseAddPointsAllowed(pl) then return end
+
+	local query = string.Trim(tostring(argStr or ""))
+	if query == "" then
+		query = string.Trim(table.concat(args or {}, " "))
+	end
+	if query == "" then
+		RelapseAddPointsReply(pl, "[Relapse] relapse_slay <ник|all|humans|zombies>")
+		return
+	end
+
+	local key = string.lower(query)
+	if key == "all" or key == "humans" or key == "zombies" then
+		local list = {}
+		for _, ply in ipairs(player.GetAll()) do
+			if IsValid(ply) and ply:Alive() then
+				local teamid = ply:Team()
+				if key == "all" or (key == "humans" and teamid == TEAM_HUMAN) or (key == "zombies" and teamid == TEAM_UNDEAD) then
+					list[#list + 1] = ply
+				end
+			end
+		end
+		RelapseSlayGroup(pl, list, key)
+		return
+	end
+
+	local _, tied = RelapseBestPlayer(query)
+	if #tied == 0 then
+		RelapseAddPointsReply(pl, "[Relapse] нет игрока «" .. query .. "»")
+		return
+	end
+	if #tied > 1 then
+		local names = {}
+		for i = 1, #tied do
+			names[i] = tied[i]:Nick()
+		end
+		RelapseAddPointsReply(pl, "[Relapse] подходят несколько: " .. table.concat(names, ", "))
+		return
+	end
+
+	local target = tied[1]
+	if not target:Alive() then
+		RelapseAddPointsReply(pl, "[Relapse] " .. target:Nick() .. " уже мёртв")
+		return
+	end
+	if RelapseSlayPlayer(target) then
+		RelapseAddPointsReply(pl, "[Relapse] убит " .. target:Nick())
+	else
+		RelapseAddPointsReply(pl, "[Relapse] " .. target:Nick() .. " не умер")
+	end
+end)
+
+concommand.Add("relapse_suicide", function(pl)
+	if not RelapseAddPointsAllowed(pl) then return end
+	if not IsValid(pl) then
+		RelapseAddPointsReply(pl, "[Relapse] relapse_suicide запускается игроком")
+		return
+	end
+	if not pl:Alive() then
+		RelapseAddPointsReply(pl, "[Relapse] " .. pl:Nick() .. " уже мёртв")
+		return
+	end
+	if RelapseSlayPlayer(pl) then
+		RelapseAddPointsReply(pl, "[Relapse] самоубийство")
+	else
+		RelapseAddPointsReply(pl, "[Relapse] " .. pl:Nick() .. " не умер")
+	end
 end)

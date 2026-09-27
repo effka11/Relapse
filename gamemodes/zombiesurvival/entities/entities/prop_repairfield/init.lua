@@ -88,6 +88,9 @@ function ENT:OnTakeDamage(dmginfo)
 
 	local attacker = dmginfo:GetAttacker()
 	if not (attacker:IsValid() and attacker:IsPlayer() and attacker:Team() == TEAM_HUMAN) then
+		if GAMEMODE.CreditRelapseScarDemiurge then
+			GAMEMODE:CreditRelapseScarDemiurge(self, dmginfo:GetDamage())
+		end
 		self:SetObjectHealth(self:GetObjectHealth() - dmginfo:GetDamage())
 		self:ResetLastBarricadeAttacker(attacker, dmginfo)
 	end
@@ -141,7 +144,6 @@ function ENT:Think()
 	local count = 0
 
 	local owner = self:GetObjectOwner()
-	local flatHeal = self.HealValue * GAMEMODE:GetRepairPercentMul(owner)
 
 	for _, hitent in pairs(ents.FindInSphere(pos, self.MaxDistance * (self:GetObjectOwner().FieldRangeMul or 1))) do
 		if not hitent:IsValid() or hitent == self or not WorldVisible(pos, hitent:NearestPoint(pos)) then
@@ -166,8 +168,12 @@ function ENT:Think()
 			local oldhealth = hitent:GetObjectHealth()
 			if oldhealth <= 0 or oldhealth >= hitent:GetMaxObjectHealth() or hitent.m_LastDamaged and CurTime() < hitent.m_LastDamaged + 4 then continue end
 
-			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + flatHeal/2))
+			local add = self.HealValue * GAMEMODE:GetRepairPercentMul(owner, hitent) / 2
+			hitent:SetObjectHealth(math.min(hitent:GetMaxObjectHealth(), hitent:GetObjectHealth() + add))
 			healed = hitent:GetObjectHealth() - oldhealth
+			if GAMEMODE.CreditRelapseScarMechanic then
+				GAMEMODE:CreditRelapseScarMechanic(owner, hitent, healed)
+			end
 		end
 
 		if healed then

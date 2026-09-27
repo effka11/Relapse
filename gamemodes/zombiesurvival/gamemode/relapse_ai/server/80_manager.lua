@@ -140,18 +140,23 @@ function Mgr.Maintain(reason)
 	local have = AI.Count("zombie")
 
 	if have < want then
+		-- Do not wait for the skin to finish linking. Antarctic has ~45k cells and
+		-- no Source .nav: at 4 ms/tick the link runs past a minute, and wave 1
+		-- would otherwise open with zero AI zombies. Bots stand at spawn until
+		-- Mesh.IsReady; Path then works. Human spawn already uses needNav=false.
 		if not AI.Nav or not AI.Nav.IsReady() then
 			if not Mgr.WarnedNav then
 				Mgr.WarnedNav = true
-				AI.Log("no AI zombies: %s", AI.Nav and AI.Nav.Status() or "nav module missing")
+				AI.Log("AI zombies spawning while nav is not ready (%s)",
+					AI.Nav and AI.Nav.Status() or "nav module missing")
 			end
-			return
+		else
+			Mgr.WarnedNav = false
 		end
-		Mgr.WarnedNav = false
 
 		local n = math.min(want - have, Mgr.MaxCreatePerPass)
 		for _ = 1, n do
-			if not Mgr.CreateBot("zombie") then break end
+			if not Mgr.CreateBot("zombie", false) then break end
 		end
 	elseif have > want then
 		-- Drop dead ones first, then the newest.
@@ -192,9 +197,11 @@ hook.Add("InitPostEntity", "RelapseAI.Manager", function()
 	end)
 end)
 
--- CreateNextBot is safe once a real client is in; do not wait for wave 1.
+-- CreateNextBot is safe once a real client is in. Do not wait out the mesh
+-- link: on Antarctic that join was the whole minute the skin takes to link.
 hook.Add("PlayerReady", "RelapseAI.Manager", function(pl)
 	if not IsValid(pl) or pl:IsBot() then return end
+	Mgr.Maintain("ready")
 	timer.Simple(1, function() Mgr.Maintain("ready") end)
 end)
 

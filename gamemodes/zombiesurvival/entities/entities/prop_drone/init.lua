@@ -111,6 +111,9 @@ function ENT:OnTakeDamage(dmginfo)
 		dmginfo:SetDamage(dmginfo:GetDamage() * 2)
 	end
 
+	if GAMEMODE.CreditRelapseScarDemiurge then
+		GAMEMODE:CreditRelapseScarDemiurge(self, dmginfo:GetDamage())
+	end
 	self:SetObjectHealth(self:GetObjectHealth() - dmginfo:GetDamage())
 
 	self:EmitSound("npc/scanner/scanner_pain"..math.random(2)..".wav", 65, math.Rand(120, 130))

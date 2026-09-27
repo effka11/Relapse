@@ -1,0 +1,29 @@
+---
+description: Map-vote avatars are 720 JPEG. A raw 1080 PNG is heavier than the card can show.
+alwaysApply: true
+---
+
+# Relapse аватар карты
+
+Карточка голосования рисует файл на всю карту (`MapThumb` в `pmapvote.lua`). На 1080p карта около 200×180, на 4K около 380×360. Сторона 1080 на карточке не читается.
+
+| | |
+|---|---|
+| Куда | `gamemodes/zombiesurvival/content/materials/maps/thumb/<map>.jpg` |
+| Имя | имя карты: `zs_oxygen_b4.jpg` |
+| Сторона | длинная **720**. Пропорции не резать и не дополнять. Короче 720 не увеличивать |
+| Файл | JPEG baseline, quality **92**, 4:4:4, RGB, без прогрессива |
+| Ресайз | LANCZOS |
+| Раздача | `resource.AddFile("materials/maps/thumb/<map>.jpg")` в `init.lua` |
+
+Альфа не используется: карточка непрозрачная.
+
+```lua
+-- ❌ сырой скрин 1080 PNG, полтора мегабайта на карточку ~200 px
+resource.AddFile("materials/maps/thumb/zs_oxygen_b4.png")
+
+-- ✅ 720 JPEG, на карточке та же картинка
+resource.AddFile("materials/maps/thumb/zs_oxygen_b4.jpg")
+```
+
+Pillow: `convert("RGB")`, LANCZOS если длинная сторона больше 720, `save(..., quality=92, subsampling=0, optimize=True)`.

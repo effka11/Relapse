@@ -121,7 +121,26 @@ if not LADDER_BITS or LADDER_BITS == 0 then
 	LADDER_BITS = 0x20000000
 end
 
+-- Map scripts list shafts to leave unclimbable: {x, y} columns. Radius covers
+-- the player standing beside the rungs, not the whole floor.
+local LADDER_DENY_R = 80
+local LADDER_DENY_R_SQR = LADDER_DENY_R * LADDER_DENY_R
+
+function GM:RelapseLadderDeniedXY(x, y)
+	local list = self.RelapseLadderDeny
+	if not list then return false end
+	for i = 1, #list do
+		local spot = list[i]
+		local dx, dy = x - spot[1], y - spot[2]
+		if dx * dx + dy * dy <= LADDER_DENY_R_SQR then
+			return true
+		end
+	end
+	return false
+end
+
 local function PointHasLadder(x, y, z)
+	if GAMEMODE:RelapseLadderDeniedXY(x, y) then return false end
 	if bit.band(util.PointContents(Vector(x, y, z)), LADDER_BITS) ~= 0 then
 		return true
 	end
@@ -195,8 +214,18 @@ local function ClipWorldBox(clip)
 	if wm and wx and (wx.z - wm.z) > 8 then
 		return wm, wx
 	end
+	-- The error model is a few units tall until the slab bounds replicate.
+	-- Calling a missing accessor here kills FinishMove for every player.
 	local pos = clip:GetPos()
-	return pos + clip:GetBoxMins(), pos + clip:GetBoxMaxs()
+	local mins = clip.GetBoxMins and clip:GetBoxMins()
+	local maxs = clip.GetBoxMaxs and clip:GetBoxMaxs()
+	if mins and maxs then
+		return pos + mins, pos + maxs
+	end
+	if wm and wx then
+		return wm, wx
+	end
+	return pos, pos
 end
 
 -- Same U-column: NW inward is quantized, next column is ~20-40u away.
@@ -279,6 +308,8 @@ local function ClipNearest(clip, pos)
 end
 
 -- World brushes only. The 4u climb slab is not a wall; nailed props are not.
+-- The BSP ladder brush is the face itself. Standing against it, the line to
+-- the clip hits that brush and used to hide the face, so E never happened.
 local function WorldWallBlocks(pl, dest)
 	if not IsValid(pl) then return true end
 	local eye = pl.EyePos and pl:EyePos() or (pl:GetPos() + Vector(0, 0, 64))
@@ -286,15 +317,30 @@ local function WorldWallBlocks(pl, dest)
 	local len = dir:Length()
 	if len < 12 then return false end
 	dir:Mul(1 / len)
-	local tr = util.TraceLine({
-		start = eye,
-		endpos = dest - dir * 6,
-		mask = MASK_SOLID_BRUSHONLY,
-		filter = function(ent)
-			return ent == pl or (IsValid(ent) and ent.RelapseLadderClip)
-		end,
-	})
-	return tr.Hit and not tr.HitSky
+	local filter = function(ent)
+		return ent == pl or (IsValid(ent) and ent.RelapseLadderClip)
+	end
+	local start = eye
+	local endpos = dest - dir * 6
+	for _ = 1, 3 do
+		local tr = util.TraceLine({
+			start = start,
+			endpos = endpos,
+			mask = MASK_SOLID_BRUSHONLY,
+			filter = filter,
+		})
+		if tr.StartSolid then
+			if bit.band(tr.Contents or 0, LADDER_BITS) ~= 0 then return false end
+			-- The step after a ladder face lands inside that brush.
+			if start ~= eye then return false end
+			return true
+		end
+		if not tr.Hit or tr.HitSky then return false end
+		if bit.band(tr.Contents or 0, LADDER_BITS) == 0 then return true end
+		start = tr.HitPos + dir * 4
+		if (endpos - start):Dot(dir) <= 0 then return false end
+	end
+	return false
 end
 
 local function HintAlpha(dist)
@@ -716,8 +762,9 @@ local function ClipMoveAgainstProps(pl, mv)
 	local origin = mv:GetOrigin()
 	local mins, maxs = pl:GetHull()
 	local vel = mv:GetVelocity()
+	local tick = engine.TickInterval()
 	local dt = FrameTime()
-	if dt <= 0 then dt = engine.TickInterval() end
+	if dt <= 0 or dt > tick then dt = tick end
 	local filt = ClimbMoveFilter(pl, false)
 
 	local stuck = util.TraceHull({
@@ -1102,6 +1149,14 @@ hook.Add("SetupMove", "RelapseLadder", function(pl, mv, cmd)
 	local cd = pl.RelapseLadderCooldown or 0
 	local hold = Holding(pl)
 
+	-- CONTENTS_LADDER in the BSP mounts the engine ladder on contact. That
+	-- climb is the run speed, before E. FinishMove puts the move type back
+	-- and has to undo the shift, so keep the origin from before it.
+	if not hold then
+		pl.RelapseLadderFreeOrigin = Vector(pos)
+		pl.RelapseLadderFreeVel = Vector(mv:GetVelocity())
+	end
+
 	local use = bit.band(cmd:GetButtons(), IN_USE) ~= 0
 	local pressed = use and not pl.RelapseLadderUseDown
 	pl.RelapseLadderUseDown = use
@@ -1214,8 +1269,11 @@ function GM:RelapseLadderClimb(pl, mv)
 		wish = ClimbWishFromInput(pl, mv:GetButtons(), mv:GetForwardSpeed(), pitch, true)
 	end
 
+	local tick = engine.TickInterval()
 	local dt = FrameTime()
-	if dt <= 0 then dt = engine.TickInterval() end
+	-- A stalled frame is several ticks long. Spending it all on one step
+	-- throws the body to the top of the shaft.
+	if dt <= 0 or dt > tick then dt = tick end
 	local gm = GAMEMODE or GM
 	local sprint = pl.RelapseLadderSprint
 	if sprint == nil then
@@ -1267,6 +1325,20 @@ hook.Add("FinishMove", "RelapseLadder", function(pl, mv)
 	if pl:GetMoveType() == NOCLIP then return end
 	if pl:GetMoveType() == LADDER then
 		KickOff(pl)
+	end
+	-- The engine already wrote the climb into this tick and often returned
+	-- to walk. OnGround stays set, z velocity stays at run speed, and the
+	-- body ratchets up the shaft before E. Put the tick back.
+	if not Holding(pl) then
+		local pre = pl.RelapseLadderFreeOrigin
+		local origin = mv:GetOrigin()
+		local vel = mv:GetVelocity()
+		local gm = GAMEMODE or GM
+		local near = gm.RelapseLadderIsNear and gm:RelapseLadderIsNear(pl)
+		if pre and near and pl:OnGround() and vel.z > 160 and origin.z > pre.z + 4 then
+			mv:SetOrigin(pre)
+			mv:SetVelocity(pl.RelapseLadderFreeVel or vector_origin)
+		end
 	end
 	if not Holding(pl) and (pl.RelapseLadderPropClipUntil or 0) > CurTime() then
 		ClipMoveAgainstProps(pl, mv)
@@ -1790,16 +1862,18 @@ local function ReadStaticLadders()
 				DecodeFloat(blob, base + 4),
 				DecodeFloat(blob, base + 8)
 			)
-			local ang = Angle(
-				DecodeFloat(blob, base + 12),
-				DecodeFloat(blob, base + 16),
-				DecodeFloat(blob, base + 20)
-			)
-			local wmins, wmaxs = ModelWorldBox(mdl, origin, ang)
-			if wmins then
-				props[#props + 1] = {mins = wmins, maxs = wmaxs}
-			else
-				waiting = true
+			if not GAMEMODE:RelapseLadderDeniedXY(origin.x, origin.y) then
+				local ang = Angle(
+					DecodeFloat(blob, base + 12),
+					DecodeFloat(blob, base + 16),
+					DecodeFloat(blob, base + 20)
+				)
+				local wmins, wmaxs = ModelWorldBox(mdl, origin, ang)
+				if wmins then
+					props[#props + 1] = {mins = wmins, maxs = wmaxs}
+				else
+					waiting = true
+				end
 			end
 		end
 	end
@@ -1984,7 +2058,9 @@ local function SpawnClips()
 	local all = {}
 	for i = 1, #boxes do
 		local b = boxes[i]
-		if b.mins and b.maxs and not IsRampBox(b.mins, b.maxs) then
+		local cx = b.mins and (b.mins.x + b.maxs.x) * 0.5
+		local cy = b.mins and (b.mins.y + b.maxs.y) * 0.5
+		if b.mins and b.maxs and not GAMEMODE:RelapseLadderDeniedXY(cx, cy) and not IsRampBox(b.mins, b.maxs) then
 			local maxs = b.maxs
 			local top = LadderColumnTop(b.mins, b.maxs)
 			if top > maxs.z + 1 then

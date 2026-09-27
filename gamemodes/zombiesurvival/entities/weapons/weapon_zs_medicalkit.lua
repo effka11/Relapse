@@ -22,6 +22,12 @@ SWEP.WorldModel = "models/weapons/w_medkit.mdl"
 SWEP.ViewModel = "models/weapons/c_medkit.mdl"
 SWEP.UseHands = true
 
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_medkit4.png"
+if CLIENT then
+	killicon.Add("weapon_zs_medicalkit", "zombiesurvival/killicons/weapon_zs_medkit4.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_medkit4.png")
+end
+
 -- One claw is about 35. A charge covers the flesh of an armored hit and
 -- leaves an unarmored claw standing. AllyPointBonus is the point payout of
 -- one full charge on someone else: less than the 2.5-point cost of a charge

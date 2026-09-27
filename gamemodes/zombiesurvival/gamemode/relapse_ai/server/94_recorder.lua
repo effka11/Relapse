@@ -1152,6 +1152,19 @@ BotFrame = function(bot, ev, full)
 				if loco.GoalEnt:IsPlayer() then g.name = loco.GoalEnt:Nick() end
 			end
 			info.goal = g
+			-- Same island fields as the path line. A note used to carry the
+			-- goal point and not the island, so a hopeless frame could not
+			-- say whether the hunt was on another component.
+			if full then
+				local there = CellInfo(loco.Goal, false)
+				if there and not there.miss then
+					info.gcell = there.i
+					info.gcomp = there.comp
+					info.gcsz = there.csz
+				else
+					info.gmiss = 1
+				end
+			end
 		end
 		if loco.WalkDest then info.dest = vec(loco.WalkDest) end
 		if loco.SteerPos then info.steer = vec(loco.SteerPos) end

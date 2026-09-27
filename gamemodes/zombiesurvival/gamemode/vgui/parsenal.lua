@@ -43,7 +43,7 @@ local function CanBuy(item, pan)
 	local packPts = (pan and pan.RelapseAmmoPackPts) or GAMEMODE:GetPointShopAmmoPrice(item)
 	if not pan.NoPoints and MySelf:GetPoints() < ShopPointsCost(packPts, item) then
 		return false
-	elseif pan.NoPoints and MySelf:GetAmmoCount("scrap") < math.ceil(GAMEMODE:PointsToScrap(item.Price)) then
+	elseif pan.NoPoints and MySelf:GetAmmoCount("scrap") < GAMEMODE:RelapseTurnerPay(MySelf, math.ceil(GAMEMODE:PointsToScrap(item.Price))) then
 		return false
 	end
 
@@ -480,7 +480,7 @@ SetupViewerPurchase = function(self, viewer, shoptbl, sweptable)
 	purl:SetVisible(true)
 
 	local ppurbl = viewer.m_PurchasePrice
-	local price = self.NoPoints and math.ceil(GAMEMODE:PointsToScrap(GAMEMODE:GetPointShopAmmoPrice(shoptbl))) or ShopPointsCost(GAMEMODE:GetPointShopAmmoPrice(shoptbl), shoptbl)
+	local price = self.NoPoints and GAMEMODE:RelapseTurnerPay(MySelf, math.ceil(GAMEMODE:PointsToScrap(GAMEMODE:GetPointShopAmmoPrice(shoptbl)))) or ShopPointsCost(GAMEMODE:GetPointShopAmmoPrice(shoptbl), shoptbl)
 	ppurbl:SetText(self.NoPoints and RelapseUI.TF("shop_price_scrap", price) or RelapseUI.TF("shop_price_points", price))
 	ppurbl:SizeToContents()
 	ppurbl:SetPos(purb:GetWide() / 2 - ppurbl:GetWide() / 2, purb:GetTall() * 0.75 - ppurbl:GetTall() * 0.5)
@@ -701,7 +701,7 @@ function GM:AddShopItem(list, i, tab, issub, nopointshop)
 		local points = ShopPointsCost(tab.Price, tab)
 		local price = tostring(points)
 		if nopointshop then
-			price = tostring(math.ceil(self:PointsToScrap(tab.Price)))
+			price = tostring(GAMEMODE:RelapseTurnerPay(MySelf, math.ceil(self:PointsToScrap(tab.Price))))
 		end
 		pricelabel:SetText(nopointshop and RelapseUI.TF("shop_price_scrap", price) or RelapseUI.TF("shop_price_points", price))
 		pricelabel:SetTextColor(RelapseUI.Col.Accent)

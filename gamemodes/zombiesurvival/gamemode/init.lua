@@ -67,7 +67,12 @@ AddCSLuaFile("cl_relapse_breath.lua")
 AddCSLuaFile("cl_relapse_iconsdev.lua")
 AddCSLuaFile("cl_relapse_viewmodel_dev.lua")
 AddCSLuaFile("cl_relapse_hitboxes.lua")
+AddCSLuaFile("cl_relapse_coordinates.lua")
+AddCSLuaFile("cl_relapse_sigils.lua")
+AddCSLuaFile("cl_relapse_sigils_dev.lua")
 AddCSLuaFile("cl_relapse_hearing.lua")
+AddCSLuaFile("cl_relapse_endmusic.lua")
+AddCSLuaFile("cl_relapse_oxygen_music.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -286,6 +291,12 @@ function GM:AddResources()
 	for _, filename in pairs(file.Find("materials/zombiesurvival/killicons/*.png", "GAME")) do
 		resource.AddFile("materials/zombiesurvival/killicons/"..filename)
 	end
+
+	resource.AddFile("materials/maps/thumb/zs_hades3.jpg")
+	resource.AddFile("materials/maps/thumb/zs_antarctic_hospital_v7.jpg")
+	resource.AddFile("materials/maps/thumb/zs_oxygen_b4.jpg")
+	resource.AddFile("materials/maps/thumb/zs_jail_b2.jpg")
+	resource.AddFile("sound/relapse/oxygen_signal.mp3")
 
 	resource.AddFile("materials/zombiesurvival/filmgrain/filmgrain.vmt")
 	resource.AddFile("materials/zombiesurvival/filmgrain/filmgrain.vtf")
@@ -1265,7 +1276,16 @@ function GM:SpawnBossZombie(bossplayer, silent, bossindex, triggerboss)
 	end
 end
 
+-- Survival: one replay, and only after the first loss before wave 3.
+-- The second loss, a first loss on wave 3 or later, or a human win opens the map vote.
 function GM:ShouldRestartRound()
+	if not self.ZombieEscape then
+		if ROUNDWINNER == TEAM_HUMAN then return false end
+		if (self.CurrentRound or 1) > 1 then return false end
+		if self:GetWave() >= 3 then return false end
+		return true
+	end
+
 	if self.TimeLimit == -1 or self.RoundLimit == -1 then return true end
 
 	local roundlimit = self.RoundLimit
@@ -1280,7 +1300,7 @@ function GM:ShouldRestartRound()
 
 	if timelimit > 0 and CurTime() >= timelimit
 	or roundlimit > 0 and self.CurrentRound >= roundlimit
-	or not self.ZombieEscape and ROUNDWINNER == TEAM_HUMAN then
+	or ROUNDWINNER == TEAM_HUMAN then
 		return false
 	end
 
@@ -1618,6 +1638,10 @@ function GM:PlayerRepairedObject(pl, other, health, wep)
 	if self:GetWave() == 0 or health <= 0 then return end
 
 	pl.RepairedThisRound = pl.RepairedThisRound + health
+
+	if self.CreditRelapseScarRepair then
+		self:CreditRelapseScarRepair(pl, health)
+	end
 
 	local hpperpoint = self.RepairPointsPerHealth
 	if hpperpoint <= 0 then return end

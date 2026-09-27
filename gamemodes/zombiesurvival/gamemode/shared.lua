@@ -21,6 +21,14 @@ GM.RelapseCreditSections = {
 		}
 	},
 	{
+		Title = "credits_section_music",
+		-- Artist, then an en dash. Gaps are two non-breaking spaces. Track and
+		-- dash are gray. Map is the vote label, in parentheses after the same gap.
+		People = {
+			{ "Aldous Ichnite", Track = "Signal Interference", Map = "Oxygen" }
+		}
+	},
+	{
 		Title = "credits_section_upstream",
 		People = {
 			{ "11k", "credits_role_zombie_vm" },

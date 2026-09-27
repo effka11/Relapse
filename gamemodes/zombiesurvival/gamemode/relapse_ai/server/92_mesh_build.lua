@@ -25,7 +25,16 @@ Mesh.Building = Mesh.Building or false
 -- v5: a puddle shallower than a step is a floor. The stand test used to drop
 -- any hit whose point is in water, so the hall under a few units of water
 -- never painted and the room past it stayed another island.
-Mesh.PaintVersion = 5
+-- v6: a lip steeper than a walk still looks for a flat tread in the same
+-- cell. A doorway sill was dropped, so the sigil room stayed an island.
+-- The raster also takes zombiegasses: without world bounds the sigil
+-- envelope stopped at the building and the yard never painted.
+-- v7: the engine's world bounds are empty here, so the box stayed the last
+-- sigil plus 96 and the floor south of that door was never a column.
+-- Model 0 of the BSP is that box.
+-- v8: a sky lid is not the end of the column. HitSky used to stop the
+-- trace, so the yard under tools/toolsskybox never became a floor.
+Mesh.PaintVersion = 8
 
 -- 32u: a 48u-wide stair still gets a column (the clearance hull needs 12u to each
 -- wall, so a 40u raster could miss it entirely).
@@ -92,6 +101,48 @@ local function Expand(mins, maxs, p)
 	if p.z > maxs.z then maxs.z = p.z end
 end
 
+-- game.GetWorld():GetModelBounds() is an empty box on this server, so the
+-- raster fell through to the last sigil plus 96 and stopped at the door.
+-- Model 0 of the BSP is the world AABB.
+local function ReadU32(f)
+	local s = f:Read(4)
+	if not s or #s < 4 then return end
+	local b1, b2, b3, b4 = string.byte(s, 1, 4)
+	return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
+end
+
+local function ReadF32(f)
+	local bits = ReadU32(f)
+	if not bits then return end
+	local sign = bit.band(bits, 0x80000000) ~= 0 and -1 or 1
+	local exp = bit.rshift(bit.band(bits, 0x7F800000), 23)
+	local frac = bit.band(bits, 0x007FFFFF)
+	if exp == 0 then
+		if frac == 0 then return 0 end
+		return sign * math.ldexp(frac / 8388608, -126)
+	end
+	if exp == 255 then return end
+	return sign * math.ldexp(1 + frac / 8388608, exp - 127)
+end
+
+local function BspWorldBounds()
+	local f = file.Open("maps/" .. game.GetMap() .. ".bsp", "rb", "GAME")
+	if not f then return end
+	f:Seek(8 + 14 * 16)
+	local ofs = ReadU32(f)
+	if not ofs then
+		f:Close()
+		return
+	end
+	f:Seek(ofs)
+	local x0, y0, z0 = ReadF32(f), ReadF32(f), ReadF32(f)
+	local x1, y1, z1 = ReadF32(f), ReadF32(f), ReadF32(f)
+	f:Close()
+	if not x0 or not y0 or not z0 or not x1 or not y1 or not z1 then return end
+	if x1 - x0 < 512 or z1 - z0 < 64 then return end
+	return Vector(x0, y0, z0), Vector(x1, y1, z1)
+end
+
 -- Raster AABB. XY: the .nav envelope when there is one (it covers every floor
 -- the humans reach); else the whole map, since a spawn/sigil envelope stops 96u
 -- past the last node and cuts the far courtyard. Z: always the whole map.
@@ -116,6 +167,18 @@ local function PlayableBounds()
 		for _, ent in ipairs(ents.FindByClass(class)) do
 			add(ent:GetPos())
 		end
+	end
+
+	-- The cloud is the yard. A sigil envelope stops at the building, and the
+	-- snow outside it never gets a column.
+	for _, ent in ipairs(ents.FindByClass("zombiegasses")) do
+		local p = ent:GetPos()
+		local r = (ent.GetRadius and ent:GetRadius()) or 0
+		if r < 1 then r = 400 end
+		r = r + 128
+		add(p)
+		add(Vector(p.x + r, p.y + r, p.z))
+		add(Vector(p.x - r, p.y - r, p.z))
 	end
 
 	for _, node in ipairs((GAMEMODE and GAMEMODE.ProfilerNodes) or {}) do
@@ -144,6 +207,9 @@ local function PlayableBounds()
 		if wmins and wmaxs and (wmaxs.x - wmins.x < 512 or wmaxs.z - wmins.z < 64) then
 			wmins, wmaxs = nil, nil
 		end
+	end
+	if not wmins then
+		wmins, wmaxs = BspWorldBounds()
 	end
 
 	if wmins and wmaxs then
@@ -236,7 +302,16 @@ local function PreferTread(hitPos, normal)
 			if not downRes.StartSolid and downRes.Hit and not downRes.HitSky then
 				local n = downRes.HitNormal
 				local dz = downRes.HitPos.z - hitPos.z
-				if n.z >= normal.z + 0.05 and dz >= -2 and dz <= STEP_HEIGHT then
+				-- A walkable nosing only steps up onto a flatter tread.
+				-- A lip too steep to stand on may be the sill: the flat
+				-- floor is a short step below, still inside this cell.
+				local steeper = n.z >= normal.z + 0.05
+				local minDz = -2
+				if normal.z < WALKABLE_Z then
+					steeper = n.z >= WALKABLE_Z
+					minDz = -STEP_HEIGHT
+				end
+				if steeper and dz >= minDz and dz <= STEP_HEIGHT then
 					local room = CanStand(downRes.HitPos)
 					if room then
 						return Vector(downRes.HitPos.x, downRes.HitPos.y, downRes.HitPos.z), Vector(n.x, n.y, n.z), room
@@ -277,7 +352,10 @@ local function SampleColumn(x, y, zmax, zmin, cells)
 			if lastZ and z > lastZ - MIN_FLOOR_GAP then
 				z = lastZ - MIN_FLOOR_GAP
 			end
-		elseif not downRes.Hit or downRes.HitSky then
+		elseif downRes.HitSky then
+			-- Sky lid over a yard. The face is not a floor; the ground is below it.
+			z = LeaveSolid(x, y, downRes.HitPos.z - 4, zmin)
+		elseif not downRes.Hit then
 			break
 		else
 			local hitz = downRes.HitPos.z
@@ -288,11 +366,15 @@ local function SampleColumn(x, y, zmax, zmin, cells)
 				local hit = Vector(downRes.HitPos.x, downRes.HitPos.y, downRes.HitPos.z)
 				local nrm = Vector(n.x, n.y, n.z)
 				local room = nrm.z >= WALKABLE_Z and CanStand(hit) or nil
-				if room then
+				-- 0.35 still has an uphill direction. A vertical wall does not,
+				-- and searching it would paint the floor inside the brush.
+				if room or nrm.z >= 0.35 then
 					local treadPos, treadN, treadRoom = PreferTread(hit, nrm)
 					if treadRoom then
 						hit, nrm, room = treadPos, treadN, treadRoom
 					end
+				end
+				if room then
 					cells[#cells + 1] = {
 						pos = hit + SAMPLE_LIFT,
 						n = nrm,

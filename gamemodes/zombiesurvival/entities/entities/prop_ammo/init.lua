@@ -80,11 +80,17 @@ function ENT:GiveToActivator(activator, caller)
 				end
 			end
 
-			activator:GiveAmmo(self:GetAmmo(), self:GetAmmoType())
+			local ammo = self:GetAmmo()
+			local kind = self:GetAmmoType()
+			activator:GiveAmmo(ammo, kind)
+			local shown = ammo
+			if kind == "scrap" and GAMEMODE.RelapseScrapPaid then
+				shown = GAMEMODE:RelapseScrapPaid(activator, ammo)
+			end
 
 			net.Start("zs_ammopickup")
-				net.WriteUInt(self:GetAmmo(), 16)
-				net.WriteString(self:GetAmmoType())
+				net.WriteUInt(shown, 16)
+				net.WriteString(kind)
 			net.Send(activator)
 
 			if self.PlacedInMap and not self.IgnorePickupCount then

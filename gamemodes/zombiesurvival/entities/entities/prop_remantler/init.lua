@@ -109,9 +109,10 @@ function ENT:Use(activator, caller)
 	if activator == owner and self:GetScraps() > 0 then
 		local amount = self:GetScraps()
 		self:SetScraps(0)
+		local shown = GAMEMODE.RelapseScrapPaid and GAMEMODE:RelapseScrapPaid(activator, amount) or amount
 
 		net.Start("zs_ammopickup")
-			net.WriteUInt(amount, 16)
+			net.WriteUInt(shown, 16)
 			net.WriteString("scrap")
 		net.Send(activator)
 

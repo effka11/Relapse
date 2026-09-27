@@ -840,6 +840,11 @@ function Nav.BuildLadders()
 	local existing = Nav.GetAllLadders()
 	local made, skipped, climbN = 0, {}, 0
 	for i, box in ipairs(boxes) do
+		local cx = (box.mins.x + box.maxs.x) * 0.5
+		local cy = (box.mins.y + box.maxs.y) * 0.5
+		if GAMEMODE.RelapseLadderDeniedXY and GAMEMODE:RelapseLadderDeniedXY(cx, cy) then
+			continue
+		end
 		local ladder, spec, why = CreateLadderFromBox(box, existing)
 		if spec then
 			local id

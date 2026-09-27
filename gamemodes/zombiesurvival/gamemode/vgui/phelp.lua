@@ -55,7 +55,7 @@ function MakepCredits()
 			else
 				role = ""
 			end
-			RelapseUI.CreditsRow(scroll, person[1], role)
+			RelapseUI.CreditsRow(scroll, person[1], role, person.Track, person.Map)
 		end
 	end
 

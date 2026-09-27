@@ -989,9 +989,17 @@ function meta:Resupply(owner, obj)
 		amount = GAMEMODE:GetResupplyBoxAmmoGive(amount, owner, obj)
 	end
 
+	if self ~= owner and owner:IsValidHuman() and IsValid(obj) and obj:GetClass() == "prop_resupplybox" and GAMEMODE.CreditRelapseScarQuartermaster then
+		GAMEMODE:CreditRelapseScarQuartermaster(owner)
+	end
+
 	for i = 1, stockpiling and 2 or 1 do
+		local shown = amount
+		if ammotype == "scrap" and GAMEMODE.RelapseScrapPaid then
+			shown = GAMEMODE:RelapseScrapPaid(self, amount)
+		end
 		net.Start("zs_ammopickup")
-			net.WriteUInt(amount, 16)
+			net.WriteUInt(shown, 16)
 			net.WriteString(ammotype)
 		net.Send(self)
 

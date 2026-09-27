@@ -6,11 +6,11 @@ include("mg_melee_shared.lua")
 include("animations.lua")
 
 if CLIENT then
-	killicon.Add("mg_me_t9scythe", "zombiesurvival/killicons/weapon_zs_cwscythe2.png", Color(255, 255, 255))
-	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwscythe2.png")
+	killicon.Add("mg_me_t9scythe", "zombiesurvival/killicons/weapon_zs_cwscythe3.png", Color(255, 255, 255))
+	SWEP.WepSelectIcon = surface.GetTextureID("zombiesurvival/killicons/weapon_zs_cwscythe3.png")
 end
 
-SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwscythe2.png"
+SWEP.RelapsePreviewIcon = "zombiesurvival/killicons/weapon_zs_cwscythe3.png"
 -- WM already has the scythe mesh (handle along +Z, blade +X). No default attachments.
 SWEP.RelapsePreviewBoneMerge = true
 SWEP.RelapsePreviewHullBounds = true
