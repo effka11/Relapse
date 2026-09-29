@@ -41,6 +41,8 @@ AddCSLuaFile("sh_relapse_stamina.lua")
 AddCSLuaFile("sh_relapse_hearing.lua")
 AddCSLuaFile("sh_relapse_hearing_peaks.lua")
 AddCSLuaFile("sh_relapse_wmpose.lua")
+AddCSLuaFile("sh_relapse_posteffects.lua")
+AddCSLuaFile("sh_relapse_glass.lua")
 
 AddCSLuaFile("vault/shared.lua")
 
@@ -71,8 +73,16 @@ AddCSLuaFile("cl_relapse_coordinates.lua")
 AddCSLuaFile("cl_relapse_sigils.lua")
 AddCSLuaFile("cl_relapse_sigils_dev.lua")
 AddCSLuaFile("cl_relapse_hearing.lua")
+AddCSLuaFile("cl_relapse_sound_mesh.lua")
+AddCSLuaFile("cl_relapse_sound_rooms.lua")
+AddCSLuaFile("cl_relapse_occlusion.lua")
+AddCSLuaFile("cl_relapse_music_lift.lua")
 AddCSLuaFile("cl_relapse_endmusic.lua")
 AddCSLuaFile("cl_relapse_oxygen_music.lua")
+AddCSLuaFile("cl_relapse_monsoon_music.lua")
+AddCSLuaFile("cl_relapse_posteffects.lua")
+AddCSLuaFile("cl_relapse_loadfade.lua")
+AddCSLuaFile("cl_relapse_flashlight.lua")
 
 AddCSLuaFile("skillweb/sh_skillweb.lua")
 AddCSLuaFile("skillweb/cl_skillweb.lua")
@@ -139,12 +149,14 @@ include("sv_playerspawnentities.lua")
 include("sv_profiling.lua")
 include("sv_sigils.lua")
 include("sv_concommands.lua")
+include("sv_relapse_sound_imitation.lua")
 include("sv_reconnect.lua")
 include("sv_relapse_prop_push.lua")
 include("sv_relapse_freecam.lua")
 include("sv_relapse_wmpose.lua")
 include("sv_relapse_inventory.lua")
 include("sv_relapse_loadout.lua")
+include("sv_relapse_posteffects.lua")
 
 include("itemstocks/sv_stock.lua")
 
@@ -296,7 +308,13 @@ function GM:AddResources()
 	resource.AddFile("materials/maps/thumb/zs_antarctic_hospital_v7.jpg")
 	resource.AddFile("materials/maps/thumb/zs_oxygen_b4.jpg")
 	resource.AddFile("materials/maps/thumb/zs_jail_b2.jpg")
+	resource.AddFile("materials/maps/thumb/zs_monsoon_b2.jpg")
 	resource.AddFile("sound/relapse/oxygen_signal.mp3")
+	resource.AddFile("sound/relapse/jail_unstoppable.mp3")
+	resource.AddFile("sound/relapse/glass_sheet1.ogg")
+	resource.AddFile("sound/relapse/glass_sheet2.ogg")
+	resource.AddFile("sound/relapse/glass_sheet3.ogg")
+	resource.AddFile("sound/relapse/glass_sheet4.ogg")
 
 	resource.AddFile("materials/zombiesurvival/filmgrain/filmgrain.vmt")
 	resource.AddFile("materials/zombiesurvival/filmgrain/filmgrain.vtf")
@@ -1857,6 +1875,7 @@ function GM:RestartLua()
 	end
 
 	self.OverrideEndSlomo = nil
+	self.RelapseEndExtra = nil
 	if type(GetGlobalBool("endcamera", 1)) ~= "number" then
 		SetGlobalBool("endcamera", nil)
 	end
@@ -2090,6 +2109,7 @@ end
 function GM:EndRound(winner)
 	if self.RoundEnded then return end
 	self.RoundEnded = true
+	self.RelapseEndExtra = nil
 	self.MapVoteFinished = nil
 	self.RoundEndedTime = CurTime()
 	ROUNDWINNER = winner
@@ -2198,6 +2218,90 @@ function GM:ClearEndDelayTimers()
 	timer.Remove("RelapseEndRestart")
 	timer.Remove("RelapseEndMapVote")
 	timer.Remove("RelapseEndMapVoteFinish")
+end
+
+util.AddNetworkString("zs_relapse_endextra")
+
+local function RelapseClock(sec)
+	sec = math.max(0, math.floor((tonumber(sec) or 0) + 0.5))
+	return string.format("%d:%02d", math.floor(sec / 60), sec % 60)
+end
+
+function GM:RelapseBroadcastEndExtra()
+	net.Start("zs_relapse_endextra")
+		net.WriteFloat(self.RelapseEndExtra or 0)
+	net.Broadcast()
+end
+
+function GM:RelapseRescheduleEnd()
+	if not self.RoundEnded or self.EndDelaySkipped then return end
+	local elapsed = CurTime() - (self.RoundEndedTime or CurTime())
+	local total = (self.EndGameTime or 0) + (self.RelapseEndExtra or 0)
+	local left = math.max(0.01, total - elapsed)
+	self:ClearEndDelayTimers()
+	if self:ShouldRestartRound() then
+		if left > 3 then
+			timer.Create("RelapseEndPreRestart", left - 3, 1, function()
+				gamemode.Call("PreRestartRound")
+			end)
+		end
+		timer.Create("RelapseEndRestart", left, 1, function()
+			gamemode.Call("RestartRound")
+		end)
+		return
+	end
+	if not self.MapVote and not self.MapVoteFinished then
+		local openIn = math.max(0, math.min(5, total - 1) - elapsed)
+		timer.Create("RelapseEndMapVote", openIn, 1, function()
+			if GAMEMODE.RoundEnded then
+				GAMEMODE:OpenMapVote(true)
+			end
+		end)
+	end
+	timer.Create("RelapseEndMapVoteFinish", left, 1, function()
+		if GAMEMODE.RoundEnded then
+			GAMEMODE:FinishMapVote()
+		end
+	end)
+	if self.MapVote then
+		self:SendMapVote()
+	end
+end
+
+function GM:RelapseAddPhaseTime(seconds)
+	seconds = tonumber(seconds)
+	if not seconds or seconds == 0 then
+		return "relapse_addtime <сек>"
+	end
+	seconds = math.Clamp(seconds, -7200, 7200)
+	if self.RoundEnded then
+		if self.EndDelaySkipped then
+			return "Конец раунда уже пропущен."
+		end
+		self.RelapseEndExtra = (self.RelapseEndExtra or 0) + seconds
+		self:RelapseRescheduleEnd()
+		self:RelapseBroadcastEndExtra()
+		return string.format("Конец: %+g с, осталось %s.", seconds, RelapseClock(self:MapVoteSecondsLeft()))
+	end
+	if self:GetWaveActive() then
+		local tend = self:GetWaveEnd()
+		if tend < 0 then
+			return "У этой фазы нет таймера."
+		end
+		self:SetWaveEnd(tend + seconds)
+		return string.format("Волна: %+g с, осталось %s.", seconds, RelapseClock(self:GetWaveEnd() - CurTime()))
+	end
+	local tstart = self:GetWaveStart()
+	if tstart < 0 then
+		return "У этой фазы нет таймера."
+	end
+	self:SetWaveStart(tstart + seconds)
+	local tend = self:GetWaveEnd()
+	if tend > CurTime() then
+		self:SetWaveEnd(tend + seconds)
+	end
+	local name = self:GetWave() <= 0 and "Подготовка" or "Перерыв"
+	return string.format("%s: %+g с, осталось %s.", name, seconds, RelapseClock(self:GetWaveStart() - CurTime()))
 end
 
 -- Cuts the post-round EndGameTime wait. Restart path restarts now; otherwise the map vote closes and the map changes.
@@ -3818,6 +3922,12 @@ function GM:PlayerUse(pl, ent)
 end
 
 function GM:PlayerDeath(pl, inflictor, attacker)
+	if pl:GetNW2Bool("RelapseFlashlight") then
+		pl:SetNW2Bool("RelapseFlashlight", false)
+	end
+	if pl:FlashlightIsOn() then
+		pl:Flashlight(false)
+	end
 end
 
 function GM:PlayerDeathSound()
@@ -4289,6 +4399,12 @@ VoiceSetTranslate["models/jazzmcfly/kantai/yuudachi/yuudachi.mdl"] = VOICESET_FE
 VoiceSetTranslate["models/player/dewobedil/vocaloid/haku/bikini_p.mdl"] = VOICESET_FEMALE
 VoiceSetTranslate["models/player/dewobedil/touhou/junko/default_p.mdl"] = VOICESET_FEMALE
 function GM:PlayerSpawn(pl)
+	if pl:GetNW2Bool("RelapseFlashlight") then
+		pl:SetNW2Bool("RelapseFlashlight", false)
+	end
+	if pl:FlashlightIsOn() then
+		pl:Flashlight(false)
+	end
 	if self.ResetRelapseStamina then
 		self:ResetRelapseStamina(pl)
 	end
@@ -4785,15 +4901,20 @@ function GM:WaveStateChanged(newstate)
 end
 
 function GM:PlayerSwitchFlashlight(pl, newstate)
-	if pl:Team() == TEAM_UNDEAD then
+	if pl:Team() ~= TEAM_HUMAN or not pl:Alive() then
 		return false
 	end
 
-	if pl:Team() == TEAM_HUMAN and CurTime() >= pl.NextFlashlightSwitch then
-		pl.NextFlashlightSwitch = CurTime() + 0.75
-		return true
+	if CurTime() < pl.NextFlashlightSwitch then
+		return false
 	end
 
+	pl.NextFlashlightSwitch = CurTime() + 0.75
+	pl:SetNW2Bool("RelapseFlashlight", not pl:GetNW2Bool("RelapseFlashlight"))
+	if pl:FlashlightIsOn() then
+		pl:Flashlight(false)
+	end
+	pl:EmitSound("HL2Player.FlashLightOn")
 	return false
 end
 

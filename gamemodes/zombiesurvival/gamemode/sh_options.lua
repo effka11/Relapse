@@ -444,7 +444,7 @@ GM.WaveZeroLength = 240
 GM.WaveIntermissionLength = 180
 
 -- Time in seconds between end round and next map.
-GM.EndGameTime = 45
+GM.EndGameTime = 60
 
 -- How many clips of ammo guns from the Worth menu start with. Some guns such as shotguns and sniper rifles have multipliers on this.
 GM.SurvivalClips = 4 --2

@@ -83,8 +83,16 @@ include("cl_relapse_coordinates.lua")
 include("cl_relapse_sigils.lua")
 include("cl_relapse_sigils_dev.lua")
 include("cl_relapse_hearing.lua")
+include("cl_relapse_sound_mesh.lua")
+include("cl_relapse_sound_rooms.lua")
+include("cl_relapse_occlusion.lua")
+include("cl_relapse_music_lift.lua")
 include("cl_relapse_endmusic.lua")
 include("cl_relapse_oxygen_music.lua")
+include("cl_relapse_monsoon_music.lua")
+include("cl_relapse_posteffects.lua")
+include("cl_relapse_loadfade.lua")
+include("cl_relapse_flashlight.lua")
 
 w, h = ScrW(), ScrH()
 
@@ -324,9 +332,20 @@ function GM:InitPostEntity()
 
 	gamemode.Call("EvaluateFilmMode")
 
-	timer.Simple(2, function() GAMEMODE:GetFogData() end)
+	self.RelapseFogCaptured = false
+	self.RelapseFogBlend = 0
+	self.RelapseFogReadyAt = RealTime() + 2
+	timer.Remove("RelapsePostFogCapture")
+	timer.Create("RelapsePostFogCapture", 0.5, 24, function()
+		if not GAMEMODE or GAMEMODE.RelapseFogCaptured then
+			timer.Remove("RelapsePostFogCapture")
+			return
+		end
+		GAMEMODE:GetFogData()
+	end)
 
 	RunConsoleCommand("pp_bloom", "0")
+	RunConsoleCommand("mat_specular", "0")
 end
 
 local fogstart = 0
@@ -334,16 +353,28 @@ local fogend = 0
 local fogr = 0
 local fogg = 0
 local fogb = 0
+local fogdensity = 1
 
 function GM:SetupFog()
+	local baseStart = self.FogStart
+	local baseEnd = self.FogEnd
+	local baseR = self.FogRed
+	local baseG = self.FogGreen
+	local baseB = self.FogBlue
+	local baseDensity = 1
+	if self.RelapsePostFogBase then
+		baseStart, baseEnd, baseR, baseG, baseB, baseDensity = self:RelapsePostFogBase(baseStart, baseEnd, baseR, baseG, baseB, baseDensity)
+	end
+
 	local power = self.DeathFog
 	local rpower = 1 - self.DeathFog
 
-	fogstart = self.FogStart * rpower
-	fogend = self.FogEnd * rpower + 150 * power
-	fogr = self.FogRed * rpower
-	fogg = self.FogGreen * rpower + 40 * power
-	fogb = self.FogBlue * rpower
+	fogstart = baseStart * rpower
+	fogend = baseEnd * rpower + 150 * power
+	fogr = baseR * rpower
+	fogg = baseG * rpower + 40 * power
+	fogb = baseB * rpower
+	fogdensity = baseDensity * rpower + power
 
 	local dimvision = MySelf.DimVision
 	if dimvision and dimvision:IsValid() then
@@ -354,12 +385,16 @@ function GM:SetupFog()
 		fogr = Lerp(power, fogr, 0)
 		fogg = Lerp(power, fogg, 0)
 		fogb = Lerp(power, fogb, 0)
+		fogdensity = Lerp(power, fogdensity, 1)
 	end
+
+	fogdensity = math.Clamp(fogdensity, 0, 1)
 end
 
 function GM:_SetupWorldFog()
 	if not IsValid(MySelf) then return end
-	if self.DeathFog == 0 and not MySelf.DimVision then return end
+	local post = self.RelapsePostWantsFog and self:RelapsePostWantsFog()
+	if self.DeathFog == 0 and not MySelf.DimVision and not post then return end
 
 	self:SetupFog()
 
@@ -368,23 +403,32 @@ function GM:_SetupWorldFog()
 	render_FogStart(fogstart)
 	render_FogEnd(fogend)
 	render_FogColor(fogr, fogg, fogb)
-	render_FogMaxDensity(1)
+	render_FogMaxDensity(fogdensity)
 
 	return true
 end
 
 function GM:_SetupSkyboxFog(skyboxscale)
 	if not IsValid(MySelf) then return end
-	if self.DeathFog == 0 and not MySelf.DimVision then return end
+	local post = (self.RelapsePostWantsFog and self:RelapsePostWantsFog()) or (self.RelapsePostWantsSky and self:RelapsePostWantsSky())
+	if self.DeathFog == 0 and not MySelf.DimVision and not post then return end
 
 	self:SetupFog()
 
+	local start, endp, r, g, b, density = fogstart, fogend, fogr, fogg, fogb, fogdensity
+	if self.RelapsePostSkyDistances then
+		start, endp, r, g, b, density = self:RelapsePostSkyDistances(skyboxscale, start, endp, r, g, b, density)
+	else
+		start = start * skyboxscale
+		endp = endp * skyboxscale
+	end
+
 	render_FogMode(1)
 
-	render_FogStart(fogstart * skyboxscale)
-	render_FogEnd(fogend * skyboxscale)
-	render_FogColor(fogr, fogg, fogb)
-	render_FogMaxDensity(1)
+	render_FogStart(start)
+	render_FogEnd(endp)
+	render_FogColor(r, g, b)
+	render_FogMaxDensity(density)
 
 	return true
 end
@@ -418,9 +462,23 @@ function GM:PostDrawSkyBox()
 			render_SuppressEngineLighting(false)
 		cam_End3D()
 	end
+
+	if self.RelapsePostDrawSky then
+		self:RelapsePostDrawSky()
+	end
 end
 
 function GM:GetFogData()
+	if self.RelapseFogCaptured then return end
+	if not self.RelapseFogReadyAt then return end
+	if (self.DeathFog or 0) > 0 then return end
+	if IsValid(MySelf) and IsValid(MySelf.DimVision) then return end
+	local mode = render_GetFogMode()
+	-- Fog controller arrives after spawn. A live fog locks in after half a second.
+	-- No fog waits out the same two seconds the old capture used.
+	if RealTime() < self.RelapseFogReadyAt - 1.5 then return end
+	if mode == 0 and RealTime() < self.RelapseFogReadyAt then return end
+
 	local _fogstart, _fogend = render_GetFogDistances()
 	local _fogr, _fogg, _fogb = render_GetFogColor()
 
@@ -429,6 +487,9 @@ function GM:GetFogData()
 	self.FogRed = _fogr
 	self.FogGreen = _fogg
 	self.FogBlue = _fogb
+	self.FogMode = mode or 0
+	self.RelapseFogCaptured = true
+	self.RelapseFogBlend = 0
 end
 
 function GM:ShouldDraw3DWeaponHUD()
@@ -1350,12 +1411,13 @@ function GM:RestartRound()
 	self.OxygenHoldStop = nil
 	hook.Remove("EntityEmitSound", "RelapseOxygenEndMute")
 
-	if self.StopZombieWinMusic then
-		self:StopZombieWinMusic()
+	if self.StopEndMusic then
+		self:StopEndMusic()
 	end
 
 	self.TheLastHuman = nil
 	self.RoundEnded = nil
+	self.RelapseEndExtra = nil
 	LASTHUMAN = nil
 	self.AmmoPackPointsSession = nil
 
@@ -1804,9 +1866,20 @@ end
 local matFilmGrain = Material("zombiesurvival/filmgrain/filmgrain")
 function GM:_HUDPaintBackground()
 	if self.FilmGrainEnabled and P_Team(MySelf) ~= TEAM_UNDEAD then
-		surface_SetMaterial(matFilmGrain)
-		surface_SetDrawColor(0, 0, 0, (0.25 + 0.75 * self:CachedFearPower()) * self.FilmGrainOpacity)
-		surface_DrawTexturedRectUV(0, 0, ScrW(), ScrH(), 2, 2, 0, 0)
+		local alpha = (0.25 + 0.75 * self:CachedFearPower()) * self.FilmGrainOpacity
+		local grain = self.RelapsePostUnit and self:RelapsePostUnit("grain") or 0
+		if grain < 0 then
+			alpha = alpha * (1 + grain)
+		end
+		if alpha > 0.5 then
+			surface_SetMaterial(matFilmGrain)
+			surface_SetDrawColor(0, 0, 0, alpha)
+			surface_DrawTexturedRectUV(0, 0, ScrW(), ScrH(), 2, 2, 0, 0)
+		end
+	end
+
+	if self.RelapsePostPaintHUD then
+		self:RelapsePostPaintHUD()
 	end
 
 	local wep = MySelf:GetActiveWeapon()
@@ -2214,9 +2287,14 @@ function GM:_PostPlayerDraw(pl)
 	end
 end
 
+function GM:RelapseEndSecondsLeft()
+	if not self.EndTime then return 0 end
+	return math.max(0, self.EndTime + (self.EndGameTime or 0) + (self.RelapseEndExtra or 0) - CurTime())
+end
+
 function GM:HUDPaintBackgroundEndRound()
 	local x, y = ScrW() / 2, ScrH() * 0.8
-	local timleft = math.max(0, self.EndTime + self.EndGameTime - CurTime())
+	local timleft = self:RelapseEndSecondsLeft()
 
 	if timleft <= 0 then
 		draw_SimpleTextBlur(translate.Get("loading"), "ZSHUDFont", x, y, COLOR_WHITE, TEXT_ALIGN_CENTER)
@@ -2255,19 +2333,21 @@ local function EndRoundShouldDrawLocalPlayer(pl)
 end
 
 function GM:PlayEndRoundMusic(winner, immediate)
-	-- Zombie win plays beyond_arrival and fades out on the end-round clock.
-	-- Human win stays quiet unless the map set its own winmusic.
-	-- After stopsound the new track waits 0.5s so the command does not cut it.
+	-- Both end tracks fade out on the end-round clock. A map winmusic
+	-- replaces the human track. After stopsound the new track waits 0.5s
+	-- so the command does not cut it.
 	local function start()
 		if not GAMEMODE.RoundEnded then return end
 		if winner == TEAM_UNDEAD then
-			if GAMEMODE.StartZombieWinMusic then
-				GAMEMODE:StartZombieWinMusic()
+			if GAMEMODE.StartEndMusic then
+				GAMEMODE:StartEndMusic(TEAM_UNDEAD)
 			end
 		else
 			local snd = GetGlobalString("winmusic", "")
 			if snd ~= "" and snd ~= "default" and snd ~= "none" then
 				surface_PlaySound(snd)
+			elseif GAMEMODE.StartEndMusic then
+				GAMEMODE:StartEndMusic(TEAM_HUMAN)
 			end
 		end
 	end
@@ -2281,6 +2361,7 @@ end
 function GM:EndRound(winner, nextmap)
 	if self.RoundEnded then return end
 	self.RoundEnded = true
+	self.RelapseEndExtra = nil
 
 	ROUNDWINNER = winner
 

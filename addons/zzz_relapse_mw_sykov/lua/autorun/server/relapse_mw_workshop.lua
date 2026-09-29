@@ -16,6 +16,7 @@ resource.AddWorkshop("2685550699") -- Random's Spetsnaz Ground Forces (Airborne 
 resource.AddWorkshop("2816381632") -- Random's Spetsnaz Content Pack 2 (airborne textures)
 resource.AddWorkshop("3739488356") -- [RE2: Remake] Zombies Ragdolls
 resource.AddWorkshop("2129352947") -- zs_oxygen_b4
+resource.AddWorkshop("2364201764") -- zs_monsoon_b2
 -- zs_hades3 stays a local addon (addons/zs_hades3) for AI tests, not the map pool.
 resource.AddWorkshop("2904144632") -- COD BO1 Undercover Spetsnaz
 resource.AddWorkshop("3486238431") -- Alvaro's Shared Textures

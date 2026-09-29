@@ -1,6 +1,8 @@
 @echo off
 setlocal EnableDelayedExpansion
 title Relapse GMod Dedicated Server
+set "LOADROOT=%~dp0loading"
+set "LOADPORT=27080"
 cd /d "D:\Relapse\server"
 
 rem First map is a random installed entry from GM.MapVotePool.
@@ -20,4 +22,20 @@ if !n! lss 1 (
 )
 echo Starting map: !MAP!
 
-srcds.exe -console -condebug -game garrysmod -port 27016 -tickrate 33 -maxplayers 90 +maxplayers 90 +gamemode zombiesurvival +map !MAP! +sv_lan 1 +sv_hibernate_drop_bots 0 +sv_hibernate_think 1 +sv_minupdaterate 33 +sv_maxupdaterate 33 +sv_mincmdrate 33 +sv_maxcmdrate 33
+rem Loading screen (фы.cpr). Clients fetch it over HTTP before the map download.
+netstat -ano | findstr ":%LOADPORT%" | findstr "LISTENING" >nul
+if errorlevel 1 (
+	start "Relapse loading" /MIN python "%LOADROOT%\serve.py" %LOADPORT%
+)
+rem The game client refuses loading pages whose host is 192.168, 10, 127 or 172.16.
+set "LOADIP="
+for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /c:"IPv4"') do (
+	for /f "tokens=* delims= " %%B in ("%%A") do set "CAND=%%B"
+	echo !CAND! | findstr /b /c:"192.168." /c:"10." /c:"127." /c:"172.16." /c:"0." >nul
+	if errorlevel 1 set "LOADIP=!CAND!"
+)
+if not defined LOADIP set "LOADIP=127.0.0.1"
+echo Loading screen: http://!LOADIP!:%LOADPORT%/loading.html?11
+echo sv_loadingurl "http://!LOADIP!:%LOADPORT%/loading.html?11"> "garrysmod\cfg\relapse_loading.cfg"
+
+srcds.exe -console -condebug -game garrysmod -port 27016 -tickrate 33 -maxplayers 90 +maxplayers 90 +gamemode zombiesurvival +map !MAP! +sv_lan 1 +sv_hibernate_drop_bots 0 +sv_hibernate_think 1 +sv_minupdaterate 33 +sv_maxupdaterate 33 +sv_mincmdrate 33 +sv_maxcmdrate 33 +sv_loadingurl "http://!LOADIP!:%LOADPORT%/loading.html?11"

@@ -65,7 +65,7 @@ function GM:RelapseDeviceHealthScar(pl)
 	return self:RelapseScarP(n, 0.15, 0.05)
 end
 
--- Слесарь. Same repair sum, and only while the target is a mechanics device.
+-- Слесарь. Same repair sum as Multitool, and only while the target is a mechanics device.
 function GM:RelapseMechanicsRepairScar(pl)
 	if not (self.GetRelapseScarRank and self.RelapseScarP) then
 		return 0
@@ -84,7 +84,7 @@ function GM:GetRepairPercentMul(pl, ent)
 	end
 	local device = 0
 	if IsValid(ent) and self.IsMechanicsDeviceClass and self:IsMechanicsDeviceClass(ent:GetClass()) then
-		device = self:RelapseMechanicsRepairScar(pl)
+		device = self:RelapseMechanicsRepairScar(pl) + self:GetUpgradePercent(pl, "DeviceRepair")
 	end
 	return self:StackPercentMul(self:GetUpgradePercent(pl, "Repair"), skill, self:RelapseRepairScar(pl), device)
 end

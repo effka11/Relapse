@@ -12,6 +12,9 @@ if game.GetMap() ~= "zs_oxygen_b4" then return end
 
 local SOUND = "sound/relapse/oxygen_signal.mp3"
 
+-- The file already carries the phrase lift at GM.RelapsePhraseStrength.
+-- Playback is the wave fade times the music slider.
+
 local INTRO_END = 10.58
 local OUT_START = 97.5
 local IN_START = 97.55
@@ -89,7 +92,7 @@ local function Volume(slot, now)
 	if fadeStart and slot.gen == fadeGen then
 		vol = vol * (1 - SCurve((now - fadeStart) / fadeDur))
 	end
-	return vol
+	return vol * GAMEMODE:RelapseMusicVolume()
 end
 
 local function FindHead(which)

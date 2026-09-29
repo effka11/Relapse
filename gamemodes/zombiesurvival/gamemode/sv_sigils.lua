@@ -9,6 +9,7 @@ function GM:OnSigilCorrupted(ent, dmginfo)
 
 	net.Start("zs_sigilcorrupted")
 		net.WriteUInt(self:NumCorruptedSigils(), 8)
+		net.WriteEntity(ent)
 	net.Broadcast()
 end
 
@@ -22,7 +23,7 @@ function GM:OnSigilUncorrupted(ent, dmginfo)
 	end
 
 	net.Start("zs_sigiluncorrupted")
-		--net.WriteUInt(self:NumCorruptedSigils(), 8)
+		net.WriteEntity(ent)
 	net.Broadcast()
 end
 

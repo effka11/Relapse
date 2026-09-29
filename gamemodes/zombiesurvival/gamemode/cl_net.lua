@@ -8,6 +8,75 @@ end)
 local M_Player = FindMetaTable("Player")
 local P_Team = M_Player.Team
 
+-- One line, bottom of the screen. 10 cells is 150 at 1080p, to the glyph, not the em-box.
+local sigilNote
+local colSigilNote = Color(255, 255, 255, 255)
+local SIGIL_FONT = "Relapse25"
+local SIGIL_HANG = 5
+
+-- Same letter as the mark above the sigil (CachedSigils index).
+local function SigilLetter(ent)
+	local list = GAMEMODE and GAMEMODE.CachedSigils
+	if not list or not list[1] then
+		list = GAMEMODE and GAMEMODE.GetSigils and GAMEMODE:GetSigils() or nil
+	end
+	if IsValid(ent) and list then
+		for i, sigil in pairs(list) do
+			if sigil == ent then
+				return string.char(64 + i)
+			end
+		end
+	end
+	return "?"
+end
+
+local function ShowSigilNote(key, col, letter)
+	local text
+	if RelapseUI and RelapseUI.TF then
+		text = RelapseUI.TF(key, letter or "?")
+	else
+		text = translate.Format(key, letter or "?")
+	end
+	if not text or text == "" then return end
+	sigilNote = {
+		text = text,
+		col = col or (RelapseUI and RelapseUI.Col and RelapseUI.Col.Text) or color_white,
+		born = RealTime(),
+	}
+end
+
+hook.Add("HUDPaint", "RelapseSigilNote", function()
+	local note = sigilNote
+	if not note then return end
+
+	local gm = GAMEMODE
+	local hold = (gm and gm.NotifyFadeTime) or 8
+	local age = RealTime() - note.born
+	if age >= hold then
+		sigilNote = nil
+		return
+	end
+	if gm and gm.FilmMode then return end
+	if not RelapseUI or not RelapseUI.HudText then return end
+
+	local fade = 1
+	if age < 0.15 then
+		fade = age / 0.15
+	elseif age > hold - 1 then
+		fade = math.max(0, hold - age)
+	end
+
+	RelapseUI.CreateFonts()
+	local src = note.col
+	colSigilNote.r = src.r
+	colSigilNote.g = src.g
+	colSigilNote.b = src.b
+	colSigilNote.a = math.floor(fade * (src.a or 255) + 0.5)
+
+	local y = ScrH() - RelapseUI.Grid15(10) + RelapseUI.sPx(SIGIL_HANG)
+	RelapseUI.HudText(note.text, SIGIL_FONT, math.floor(ScrW() * 0.5 + 0.5), y, colSigilNote, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM, RelapseUI.Shadow)
+end)
+
 local function WaveNotice(title, ...)
 	if RelapseUI and RelapseUI.WaveNotify then
 		RelapseUI.WaveNotify(title, ...)
@@ -432,6 +501,10 @@ net.Receive("zs_endround", function(length)
 	gamemode.Call("EndRound", winner, nextmap)
 end)
 
+net.Receive("zs_relapse_endextra", function()
+	GAMEMODE.RelapseEndExtra = net.ReadFloat()
+end)
+
 net.Receive("zs_healother", function(length)
 	if net.ReadBool() then
 		gamemode.Call("HealedOtherPlayer", net.ReadEntity(), net.ReadFloat())
@@ -450,6 +523,7 @@ end)
 
 net.Receive("zs_sigilcorrupted", function(length)
 	local corrupted = net.ReadUInt(8)
+	local letter = SigilLetter(net.ReadEntity())
 
 	LastSigilCorrupted = CurTime()
 
@@ -468,17 +542,17 @@ net.Receive("zs_sigilcorrupted", function(length)
 			MySelf:EmitSound("zombiesurvival/eyeflash.ogg", 75, 100)
 		end)
 
+		local col = RelapseUI and RelapseUI.Col and RelapseUI.Col.Danger or COLOR_RED
 		if corrupted == maxsigils then
-			GAMEMODE:CenterNotify({killicon = "default"}, {font = "ZSHUDFontSmall"}, RelapseUI.Col.Danger, translate.Get("sigil_corrupted_last"), {killicon = "default"})
+			ShowSigilNote("sigil_corrupted_last", col, letter)
 		else
-			GAMEMODE:CenterNotify(RelapseUI.Col.Danger, {font = "ZSHUDFontSmall"}, translate.Get("sigil_corrupted"))
-			--GAMEMODE:CenterNotify(COLOR_RED, translate.Format("sigil_corrupted_x_remain", maxsigils - corrupted))
+			ShowSigilNote("sigil_corrupted", col, letter)
 		end
 	end
 end)
 
 net.Receive("zs_sigiluncorrupted", function(length)
-	--local corrupted = net.ReadUInt(8)
+	local letter = SigilLetter(net.ReadEntity())
 
 	LastSigilUncorrupted = CurTime()
 
@@ -488,7 +562,7 @@ net.Receive("zs_sigiluncorrupted", function(length)
 		timer.Simple(1.25, function()
 			MySelf:EmitSound("ambient/machines/teleport1.wav", 75, 60, 0.3)
 		end)
-		GAMEMODE:CenterNotify(RelapseUI.Col.Text, {font = "ZSHUDFontSmall"}, translate.Get("sigil_uncorrupted"))
+		ShowSigilNote("sigil_uncorrupted", RelapseUI and RelapseUI.Col and RelapseUI.Col.Text or color_white, letter)
 	end
 end)
 

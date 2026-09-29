@@ -512,8 +512,10 @@ function MakepEndBoard(winner)
 		local waveN = GAMEMODE:GetWave()
 		local wave = waveN > 0 and RelapseUI.TF("hm_wave", waveN) or ""
 		local left = 0
-		if GAMEMODE.EndTime then
-			left = math.max(0, GAMEMODE.EndTime + (GAMEMODE.EndGameTime or 0) - CurTime())
+		if GAMEMODE.RelapseEndSecondsLeft then
+			left = GAMEMODE:RelapseEndSecondsLeft()
+		elseif GAMEMODE.EndTime then
+			left = math.max(0, GAMEMODE.EndTime + (GAMEMODE.EndGameTime or 0) + (GAMEMODE.RelapseEndExtra or 0) - CurTime())
 		end
 		local clock = util.ToMinutesSecondsCD(left)
 		local subY = (lay.headerh or 0) + HeadingInkY(lay.headingH or 0)

@@ -4,7 +4,7 @@ function EFFECT:Init(data)
 
 	local particle, dir, ang, heading, RandDarkness, Size
 
-	sound.Play("physics/glass/glass_sheet_break"..math.random(3)..".wav", pos, 70, math.Rand(95, 105))
+	sound.Play("Glass.Break", pos, 90, 100)
 	sound.Play("ambient/fire/ignite.wav", pos, 80, math.Rand(80, 90))
 
 	local emitter = ParticleEmitter(pos)

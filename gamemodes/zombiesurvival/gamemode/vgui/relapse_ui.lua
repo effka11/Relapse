@@ -4963,7 +4963,7 @@ function RelapseUI.OptionsSlider(parent, text, cvar, min, max, decimals)
 	return slider
 end
 
-function RelapseUI.MakeStepSlider(parent, min, max, step, value, onChange)
+function RelapseUI.MakeStepSlider(parent, min, max, step, value, onChange, suffix)
 	local slider = vgui.Create("DNumSlider", parent)
 	slider:SetText("")
 	slider:SetMinMax(min, max)
@@ -4978,7 +4978,11 @@ function RelapseUI.MakeStepSlider(parent, min, max, step, value, onChange)
 	if IsValid(slider.TextArea) then
 		slider.TextArea:SetTextColor(RelapseUI.Col.Text)
 		slider.TextArea.Paint = function(me, w, h)
-			draw.SimpleText(me:GetValue(), "Relapse20", w, h * 0.5, RelapseUI.Col.Text, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+			local label = me:GetValue()
+			if suffix then
+				label = tostring(math.floor((tonumber(label) or 0) + 0.5)) .. suffix
+			end
+			draw.SimpleText(label, "Relapse20", w, h * 0.5, RelapseUI.Col.Text, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
 			return true
 		end
 	end
@@ -5000,7 +5004,7 @@ function RelapseUI.MakeStepSlider(parent, min, max, step, value, onChange)
 		h = h or me:GetTall()
 		local text = me.TextArea
 		local slide = me.Slider
-		local tw = RelapseUI.Grid15(3)
+		local tw = suffix and RelapseUI.Grid15(4) or RelapseUI.Grid15(3)
 		if IsValid(me.Label) then
 			me.Label:SetVisible(false)
 			me.Label:SetSize(0, 0)
@@ -5097,7 +5101,7 @@ function RelapseUI.SyncAmmoPackSliders()
 	end
 end
 
-function RelapseUI.OptionsStepSlider(parent, text, cvar, min, max, step)
+function RelapseUI.OptionsStepSlider(parent, text, cvar, min, max, step, suffix)
 	local cap = RelapseUI.OptionsCaption(parent, text)
 
 	local wrap = vgui.Create("DPanel", parent)
@@ -5113,7 +5117,7 @@ function RelapseUI.OptionsStepSlider(parent, text, cvar, min, max, step)
 		if con and con:GetInt() ~= v then
 			con:SetInt(v)
 		end
-	end)
+	end, suffix)
 	slider:Dock(FILL)
 	return slider, wrap, cap
 end

@@ -1,0 +1,22 @@
+---
+description: Cubase clip fades and the trimmed event length come from the .cpr via the script in documents/cpr-fades.md.
+alwaysApply: true
+---
+
+# Relapse фейды из Cubase
+
+Кривую и длину клипа читать скриптом из `documents/cpr-fades.md`. Путь к `.cpr` — аргумент. Байты вокруг класса не сканировать: имя сплайна бывает `MFramedSpline`, у схода его может не быть вовсе.
+
+`file` — весь файл пула. `event` — клип на таймлайне. Сход стоит в конце `event`. Хвост файла после `event` обрезан и не играет.
+
+`MAutoFadeSetting` и далёкий `MLinearInterpolator` с уровнем 1 — не нарисованный фейд. Микс WAV/MP3 кривую запекает. `.smt` темпа и размера — это BPM, не клип.
+
+```python
+# ❌ длина пула как длина петли: хвост за сходом ещё звучит
+clip = file_samples / rate
+
+# ✅ скрипт; петля кончается вместе с событием
+# file 219.506 s
+# event 212.572 s
+# MFadeOut ... 6.780 s  0
+```

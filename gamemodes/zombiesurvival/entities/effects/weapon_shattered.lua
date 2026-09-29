@@ -2,7 +2,7 @@ function EFFECT:Init(data)
 	local pos = data:GetOrigin()
 	local ent = data:GetEntity()
 	if ent:IsValid() then
-		ent:EmitSound("physics/glass/glass_sheet_break3.wav")
+		ent:EmitSound("Glass.Break", 90, 100)
 	end
 
 	local emitter = ParticleEmitter(pos)

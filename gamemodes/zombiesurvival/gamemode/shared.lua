@@ -25,7 +25,10 @@ GM.RelapseCreditSections = {
 		-- Artist, then an en dash. Gaps are two non-breaking spaces. Track and
 		-- dash are gray. Map is the vote label, in parentheses after the same gap.
 		People = {
-			{ "Aldous Ichnite", Track = "Signal Interference", Map = "Oxygen" }
+			{ "Audioinsmusic", Track = "Cloud Stillness", Map = "Humans Win" },
+			{ "Lightning Traveler", Track = "Beyond Arrival", Map = "Zombies Win" },
+			{ "Aldous Ichnite", Track = "Signal Interference", Map = "Oxygen" },
+			{ "Lightning Traveler", Track = "Unstoppable", Map = "Monsoon" }
 		}
 	},
 	{
@@ -100,6 +103,8 @@ include("sh_relapse_stamina.lua")
 include("sh_relapse_hearing.lua")
 include("sh_relapse_hearing_peaks.lua")
 include("sh_relapse_wmpose.lua")
+include("sh_relapse_posteffects.lua")
+include("sh_relapse_glass.lua")
 
 include("noxapi/noxapi.lua")
 

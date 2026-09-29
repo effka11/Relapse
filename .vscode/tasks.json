@@ -20,6 +20,60 @@
         "showReuseMessage": false,
         "close": false
       }
+    },
+    {
+      "label": "Убрать карту из кэша клиента",
+      "type": "shell",
+      "command": "python -u tools/clear_map_cache.py \"${input:mapName}\"",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONIOENCODING": "utf-8"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": false
+      }
+    },
+    {
+      "label": "Версия пака 1",
+      "type": "shell",
+      "command": "python -u tools/pak_version.py \"${input:deskMap}\"",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONIOENCODING": "utf-8"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": false
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "mapName",
+      "type": "promptString",
+      "description": "Имя карты, без .bsp",
+      "default": ""
+    },
+    {
+      "id": "deskMap",
+      "type": "promptString",
+      "description": "Имя bsp на столе, рядом с VMF",
+      "default": "relapse_jail"
     }
   ]
 }

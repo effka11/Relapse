@@ -1,14 +1,18 @@
 -- Relapse hearing, client.
 -- The local human's noise bar follows the rise between peaks, then the release.
 -- The peaks themselves stay on their own time. A step uses that footstep wav.
--- A shot uses that shot wav. A zombie
--- does not see that release. Each track sends one peak, its loudest point,
--- scaled by distance inside the track radius; the glow then fades for a few seconds.
+-- A shot uses that shot wav.
+-- A zombie does not see the body and does not see that release. Each heard
+-- event plants a static point where the sound was. Size and brightness are
+-- the level: the peak times the distance curve. The point fades in place.
+-- A later event within Merge refreshes that point; it does not follow the human.
+-- Footsteps arrive as one peak. Shots, landings, pain, hammer and nails are
+-- read from the noise clock and planted the same way.
 -- The halo library is off (nixthelag).
 
 local math_Clamp = math.Clamp
 local math_max = math.max
-local math_exp = math.exp
+local math_huge = math.huge
 local string_lower = string.lower
 local string_find = string.find
 local string_sub = string.sub
@@ -21,10 +25,6 @@ local EyePos = EyePos
 local IsValid = IsValid
 local team_GetPlayers = team.GetPlayers
 local util_TraceLine = util.TraceLine
-local render_SetBlend = render.SetBlend
-local render_ModelMaterialOverride = render.ModelMaterialOverride
-local render_SetColorModulation = render.SetColorModulation
-local render_SuppressEngineLighting = render.SuppressEngineLighting
 local render_SetMaterial = render.SetMaterial
 local render_DrawSprite = render.DrawSprite
 local cam_IgnoreZ = cam.IgnoreZ
@@ -34,6 +34,7 @@ local TEAM_UNDEAD = TEAM_UNDEAD
 local M_Entity = FindMetaTable("Entity")
 local M_Player = FindMetaTable("Player")
 local E_GetDTBool = M_Entity.GetDTBool
+local E_GetDTFloat = M_Entity.GetDTFloat
 local P_Team = M_Player.Team
 local P_Alive = M_Player.Alive
 
@@ -42,57 +43,157 @@ local P_Alive = M_Player.Alive
 ---------------------------------------------------------------------------
 
 GM.HearingView = {
-	FadeIn = 0.7, -- s, eases up toward the distance brightness
-	FadeOut = 0.85,
-	ProxPow = 1.6, -- 1 against the body, near 0 at the edge of R
-	Silhouette = 0.55, -- white blend at alpha 1: a light wash, not a plaster cast
-	Ping = true,
-	PingPx = 14, -- roughly constant screen size
-	PingAlpha = 0.7,
-	WallTraceInterval = 0.2, -- s, per human
+	FadeIn = 0.15, -- s, the point reaches its level, then GlowHalfLife fades it
+	PointMin = 6, -- px, a quiet point. Screen size, not world size.
+	PointMax = 26, -- px, level 1
+	Merge = 48, -- units. A new event this close to this human's point refreshes it in place.
+	MinLevel = 0.03,
 }
 
-local matWhite = Material("models/debug/debugwhite")
 local matGlow = Material("Sprites/light_glow02_add_noz")
-local colPing = Color(255, 255, 255, 255)
+local colPoint = Color(255, 255, 255, 255)
 
-local HeardList = {} -- [i] = Player with alpha > 0 this frame
-local HeardCount = 0
+local MAX_POINTS = 64
+local Points = {}
+local PointCount = 0
 local LastFrame = -1
 
 local traceResult = {}
 local traceData = {mask = MASK_SOLID_BRUSHONLY, output = traceResult}
 
 ---------------------------------------------------------------------------
--- Envelope
+-- Points
 ---------------------------------------------------------------------------
 
 local function HeardState(pl)
 	local st = pl.RelapseHeard
 	if not st then
-		st = {
-			alpha = 0,
-			wall = 0,
-			nextTrace = 0,
-			dist = 0,
-		}
+		st = {}
 		pl.RelapseHeard = st
 	end
 	return st
 end
 
-local function ClearHeard()
-	for i = 1, HeardCount do
-		local st = HeardList[i].RelapseHeard
-		if st then
-			st.alpha = 0
-		end
-		HeardList[i] = nil
+local function PointAlpha(p, now, fadeIn, halfLife)
+	local age = now - p.t0
+	local appear = 1
+	if fadeIn > 0 and age < fadeIn then
+		appear = age / fadeIn
 	end
-	HeardCount = 0
+	local decayAge = now - p.heard
+	if decayAge < 0 then decayAge = 0 end
+	local decay = 1
+	if halfLife > 0 then
+		decay = 0.5 ^ (decayAge / halfLife)
+	end
+	local a = p.level * appear * decay
+	if a < 0 then return 0 end
+	if a > 1 then return 1 end
+	return a
 end
 
--- Once per frame. Builds HeardList for the draw passes.
+local function DropPoint(i)
+	local n = PointCount
+	local slot = Points[i]
+	Points[i] = Points[n]
+	Points[n] = slot
+	PointCount = n - 1
+end
+
+local function ClearPoints()
+	PointCount = 0
+end
+
+-- A quieter event inside Merge does not stack a second sprite on a louder one.
+function GM:AddHearingPoint(who, pos, level)
+	local V = self.HearingView
+	if not level or level < (V.MinLevel or 0.03) then return end
+	if level > 1 then level = 1 end
+
+	local viewer = MySelf
+	if not IsValid(viewer) or P_Team(viewer) ~= TEAM_UNDEAD or self.Auras == false then return end
+
+	local eye = EyePos()
+	if pos:DistToSqr(eye) < 27500 and IsValid(who) and E_GetDTBool(who, DT_PLAYER_BOOL_NECRO) then
+		return
+	end
+
+	local now = CurTime()
+	local fadeIn = V.FadeIn or 0.15
+	local halfLife = self.Hearing.GlowHalfLife or 1.8
+	local mask = self.Hearing.Mask or 0.85
+	local merge = V.Merge or 48
+	local mergeSqr = merge * merge
+
+	for i = 1, PointCount do
+		local p = Points[i]
+		if p.who == who then
+			local dx = p.pos.x - pos.x
+			local dy = p.pos.y - pos.y
+			local dz = p.pos.z - pos.z
+			if dx * dx + dy * dy + dz * dz <= mergeSqr then
+				if level < PointAlpha(p, now, fadeIn, halfLife) * mask then return end
+				if level > p.level then
+					p.level = level
+				end
+				p.heard = now
+				return
+			end
+		end
+	end
+
+	if PointCount >= MAX_POINTS then
+		local oldest, idx = math_huge, 1
+		for i = 1, PointCount do
+			if Points[i].t0 < oldest then
+				oldest = Points[i].t0
+				idx = i
+			end
+		end
+		DropPoint(idx)
+	end
+
+	PointCount = PointCount + 1
+	local p = Points[PointCount]
+	if not p then
+		p = {pos = Vector()}
+		Points[PointCount] = p
+	end
+	p.who = who
+	p.pos.x, p.pos.y, p.pos.z = pos.x, pos.y, pos.z
+	p.level = level
+	p.t0 = now
+	p.heard = now
+end
+
+-- Shot, landing, pain, hammer, nail: one point at the body when the clock moves.
+-- The brush test is the existing wall muffling (Hearing.WallMul), once per event.
+local function NoisePointLevel(GM, pl, eye)
+	local noise = GM:GetHumanNoisePeak(pl)
+	if noise <= 1 then return end
+
+	local center = pl:WorldSpaceCenter()
+	local dist = center:Distance(eye)
+	if dist * dist < 27500 and E_GetDTBool(pl, DT_PLAYER_BOOL_NECRO) then return end
+
+	traceData.start = eye
+	traceData.endpos = center
+	util_TraceLine(traceData)
+
+	local radius = GM:GetNoiseRadius(noise)
+	if GM.ZombieEscape then
+		radius = radius * 4
+	end
+	if traceResult.Hit then
+		radius = radius * GM.Hearing.WallMul
+	end
+	if radius <= 0 or dist >= radius then return end
+
+	local fall = GM:EvalHearingCurve(GM.HearingFalloff, dist / radius)
+	return (noise / 100) * fall, center
+end
+
+-- Once per frame. Plants points for new noise-clock events and drops dead ones.
 local function UpdateHearing(GM)
 	local frame = FrameNumber()
 	if LastFrame == frame then return end
@@ -100,120 +201,92 @@ local function UpdateHearing(GM)
 
 	local viewer = MySelf
 	if not IsValid(viewer) or P_Team(viewer) ~= TEAM_UNDEAD or GM.Auras == false then
-		ClearHeard()
+		ClearPoints()
 		return
 	end
 
-	local H = GM.Hearing
-	local V = GM.HearingView
 	local now = CurTime()
 	local eye = EyePos()
-	local rangeMul = GM.ZombieEscape and 4 or 1 -- ZE kept the whole-map aura
-	local dt = FrameTime()
-	if dt <= 0 or dt > 0.1 then
-		dt = 1 / 60
+	local fadeIn = GM.HearingView.FadeIn or 0.15
+	local halfLife = GM.Hearing.GlowHalfLife or 1.8
+
+	for i = PointCount, 1, -1 do
+		local p = Points[i]
+		if now - p.t0 >= fadeIn and PointAlpha(p, now, fadeIn, halfLife) < 0.02 then
+			DropPoint(i)
+		end
 	end
 
-	HeardCount = 0
 	for _, pl in ipairs(team_GetPlayers(TEAM_HUMAN)) do
-		local st = HeardState(pl)
-		local target = 0
-
-		if pl ~= viewer and P_Alive(pl) and not pl:IsDormant() then
-			local center = pl:WorldSpaceCenter()
-			local dist = center:Distance(eye)
-			local hidden = dist * dist < 27500 and E_GetDTBool(pl, DT_PLAYER_BOOL_NECRO)
-			st.dist = dist
-
-			-- Track peak already includes distance. It fades on its own clock.
-			if not hidden then
-				target = GM:GetZombieGlow(pl) / 100
-			end
-
-			-- Shots and the other short peaks still use a live radius.
-			local noise = GM:GetHumanNoisePeak(pl)
-			if not hidden and noise > 1 then
-				if now >= st.nextTrace then
-					st.nextTrace = now + V.WallTraceInterval
-					traceData.start = eye
-					traceData.endpos = center
-					util_TraceLine(traceData)
-					st.wall = traceResult.Hit and 1 or 0
+		if pl ~= viewer then
+			local st = HeardState(pl)
+			local nt = E_GetDTFloat(pl, DT_PLAYER_FLOAT_NOISETIME) or 0
+			if not P_Alive(pl) or pl:IsDormant() then
+				st.noiseAt = nt
+			elseif nt ~= st.noiseAt then
+				local prev = st.noiseAt
+				st.noiseAt = nt
+				if prev ~= nil and nt > 0 then
+					local level, pos = NoisePointLevel(GM, pl, eye)
+					if level then
+						GM:AddHearingPoint(pl, pos, level)
+					end
 				end
-
-				local radius = GM:GetNoiseRadius(noise) * rangeMul
-				if st.wall == 1 then
-					radius = radius * H.WallMul
-				end
-
-				local prox = radius > 0 and math_Clamp(1 - dist / radius, 0, 1) or 0
-				target = math_max(target, prox ^ V.ProxPow)
 			end
 		end
-
-		local tau = target > st.alpha and V.FadeIn or V.FadeOut
-		st.alpha = st.alpha + (target - st.alpha) * (1 - math_exp(-dt / tau))
-		if st.alpha < 0.004 then
-			st.alpha = 0
-		end
-
-		if st.alpha > 0.01 then
-			HeardCount = HeardCount + 1
-			HeardList[HeardCount] = pl
-		end
-	end
-
-	for i = HeardCount + 1, #HeardList do
-		HeardList[i] = nil
 	end
 end
 
--- 0..1 for HUD / other draw code. Zero for anyone the local zombie does not hear.
+-- 0..1, loudest live point of this human. Zero when the local zombie hears nothing there.
 function GM:GetHeardHighlight(pl)
-	local st = pl.RelapseHeard
-	return st and st.alpha or 0
+	local best = 0
+	local now = CurTime()
+	local V = self.HearingView
+	local fadeIn = V and V.FadeIn or 0.15
+	local halfLife = self.Hearing.GlowHalfLife or 1.8
+	for i = 1, PointCount do
+		local p = Points[i]
+		if p.who == pl then
+			local a = PointAlpha(p, now, fadeIn, halfLife)
+			if a > best then
+				best = a
+			end
+		end
+	end
+	return best
 end
 
 ---------------------------------------------------------------------------
 -- Draw
 ---------------------------------------------------------------------------
 
--- From _PostDrawTranslucentRenderables. DrawModel here reaches humans the engine culled.
 function GM:DrawHeardHumans()
 	UpdateHearing(self)
-	if HeardCount == 0 then return end
+	if PointCount == 0 then return end
 
 	local V = self.HearingView
+	local now = CurTime()
+	local eye = EyePos()
+	local fadeIn = V.FadeIn or 0.15
+	local halfLife = self.Hearing.GlowHalfLife or 1.8
+	local pxMin = V.PointMin or 6
+	local pxSpan = (V.PointMax or 26) - pxMin
+	local scale = 2 / math_max(ScrW(), 1)
 
-	-- Per player: DrawModel runs _PrePlayerDraw / _PostPlayerDraw, which may reset render state.
-	for i = 1, HeardCount do
-		local pl = HeardList[i]
-		cam_IgnoreZ(true)
-		render_SuppressEngineLighting(true)
-		render_ModelMaterialOverride(matWhite)
-		render_SetColorModulation(1, 1, 1)
-		render_SetBlend(pl.RelapseHeard.alpha * V.Silhouette)
-		pl:DrawModel()
-	end
-	render_SetBlend(1)
-	render_SetColorModulation(1, 1, 1)
-	render_ModelMaterialOverride()
-	render_SuppressEngineLighting(false)
-	cam_IgnoreZ(false)
-
-	if not V.Ping then return end
-
-	local scale = V.PingPx * 2 / math_max(ScrW(), 1)
+	cam_IgnoreZ(true)
 	render_SetMaterial(matGlow)
-	for i = 1, HeardCount do
-		local pl = HeardList[i]
-		local st = pl.RelapseHeard
-		if st.alpha > 0.04 then
-			local size = math_max(4, st.dist * scale)
-			colPing.a = math_Clamp(st.alpha * V.PingAlpha * 255, 0, 255)
-			render_DrawSprite(pl:WorldSpaceCenter(), size, size, colPing)
+	for i = 1, PointCount do
+		local p = Points[i]
+		local a = PointAlpha(p, now, fadeIn, halfLife)
+		if a > 0.02 then
+			local dist = p.pos:Distance(eye)
+			local px = pxMin + pxSpan * p.level
+			local size = math_max(3, dist * px * scale)
+			colPoint.a = math_Clamp(a * 255, 0, 255)
+			render_DrawSprite(p.pos, size, size, colPoint)
 		end
 	end
+	cam_IgnoreZ(false)
 end
 
 ---------------------------------------------------------------------------
@@ -435,33 +508,13 @@ hook.Add("FinishMove", "RelapseHearingStepLocal", function(pl, mv)
 end)
 
 ---------------------------------------------------------------------------
--- Zombie memory
+-- Footstep peak. The position is where the step was, not where the body is now.
 ---------------------------------------------------------------------------
-
-function GM:GetZombieGlow(pl)
-	local st = pl.RelapseHeard
-	if not st or not st.glow or not st.glowAt then return 0 end
-
-	local dt = CurTime() - st.glowAt
-	if dt <= 0 then return st.glow end
-	return st.glow * 0.5 ^ (dt / (self.Hearing.GlowHalfLife or 1.8))
-end
-
--- A quieter peak does not erase a louder one that is still fading.
-function GM:NoteZombieGlow(pl, level)
-	if not IsValid(pl) or level <= 0 then return end
-
-	local st = HeardState(pl)
-	if level > self:GetZombieGlow(pl) then
-		st.glow = level
-		st.glowAt = CurTime()
-	end
-end
 
 net.Receive("zs_hearing_glow", function()
 	local human = net.ReadEntity()
 	local level = net.ReadFloat()
-	if IsValid(human) then
-		GAMEMODE:NoteZombieGlow(human, level)
-	end
+	local pos = net.ReadVector()
+	if level <= 0 then return end
+	GAMEMODE:AddHearingPoint(human, pos, level / 100)
 end)

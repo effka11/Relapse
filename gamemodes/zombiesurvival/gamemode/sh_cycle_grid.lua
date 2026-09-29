@@ -823,9 +823,35 @@ GM.CycleGridCatalog = {
 		need = "mechanics_2",
 		DeviceHealth = 0.05
 	},
-	mechanics_4 = {
+	mechanics_11 = {
 		tree = "mechanics",
 		slot = 1,
+		nameKey = "grid_skill_mechanics_11",
+		descKey = "grid_skill_mechanics_11_desc",
+		U = 20,
+		DeviceRepair = 0.05
+	},
+	mechanics_12 = {
+		tree = "mechanics",
+		slot = 3,
+		nameKey = "grid_skill_mechanics_12",
+		descKey = "grid_skill_mechanics_12_desc",
+		U = 20,
+		need = "mechanics_11",
+		DeviceRepair = 0.05
+	},
+	mechanics_13 = {
+		tree = "mechanics",
+		slot = 7,
+		nameKey = "grid_skill_mechanics_13",
+		descKey = "grid_skill_mechanics_13_desc",
+		U = 20,
+		need = "mechanics_12",
+		DeviceRepair = 0.05
+	},
+	mechanics_4 = {
+		tree = "mechanics",
+		slot = 4,
 		nameKey = "grid_skill_mechanics_4",
 		descKey = "grid_skill_mechanics_4_desc",
 		U = 20,
@@ -833,7 +859,7 @@ GM.CycleGridCatalog = {
 	},
 	mechanics_5 = {
 		tree = "mechanics",
-		slot = 3,
+		slot = 8,
 		nameKey = "grid_skill_mechanics_5",
 		descKey = "grid_skill_mechanics_5_desc",
 		U = 20,
@@ -842,7 +868,7 @@ GM.CycleGridCatalog = {
 	},
 	mechanics_6 = {
 		tree = "mechanics",
-		slot = 7,
+		slot = 10,
 		nameKey = "grid_skill_mechanics_6",
 		descKey = "grid_skill_mechanics_6_desc",
 		U = 20,

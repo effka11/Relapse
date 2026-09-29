@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Loading..</title>
+<style>
+html, body {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	margin: 0;
+	background: #000 url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC") no-repeat center center;
+	background-size: 100% 100%;
+	color: #fff;
+}
+#stage {
+	position: fixed;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	background: #000 url("screen.jpg") no-repeat center center;
+	background-size: contain;
+}
+#background {
+	position: relative;
+	z-index: 1;
+	height: 100%;
+}
+.server_info {
+	display: inline-block;
+	font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+	background-image: -webkit-linear-gradient(left, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.03) 75%, rgba(0, 0, 0, 0) 100%);
+	padding: 20px;
+	padding-right: 180px;
+	visibility: hidden;
+	white-space: nowrap;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+.server_info.visible { visibility: visible; }
+.server_info .text {
+	display: inline-block;
+	vertical-align: top;
+	max-width: 100%;
+	line-height: 42px;
+	font-size: xx-large;
+}
+.server_info .text > div {
+	text-overflow: ellipsis;
+	overflow: hidden;
+}
+#mapimg {
+	width: 128px;
+	height: 128px;
+	background: #666;
+	margin-right: 16px;
+	float: left;
+}
+</style>
+</head>
+<body bgcolor="#000000">
+<div id="stage">
+<div id="background">
+	<div class="server_info">
+		<img id="mapimg" alt="">
+		<div class="text">
+			<div id="serverName"></div>
+			<div id="serverMap"></div>
+			<div id="serverGamemode"></div>
+		</div>
+	</div>
+</div>
+</div>
+<script>
+// фы.cpr, 44100 Hz. The file is the trimmed event (212.572 s).
+// Pool file is 219.506 s; the tail past the fade-out is cut.
+// Fade-in spline, then the fade-out spline on the last 6.780 s.
+// The next copy starts with that tail, so the two splines overlap.
+var CLIP = 212.572153897;
+var IN_T = [0, 6.856214988, 13.163932776, 20.568644963, 27.424859950];
+var IN_V = [0, 0.38268343236, 0.696, 0.92387953251, 1];
+var OUT_T = [0, 1.694998520, 3.389997041, 5.084995561, 6.779994082];
+var OUT_V = [1, 0.92387953251, 0.707106767811, 0.38268343236, 0];
+var FADE_OUT = OUT_T[OUT_T.length - 1];
+var PRELOAD = 3;
+
+function slopes(times, values) {
+	var n = times.length;
+	var delta = [];
+	var slope = [];
+	for (var i = 0; i < n - 1; i++) {
+		delta[i] = (values[i + 1] - values[i]) / (times[i + 1] - times[i]);
+	}
+	slope[0] = delta[0];
+	slope[n - 1] = delta[n - 2];
+	for (var j = 1; j < n - 1; j++) {
+		if (delta[j - 1] * delta[j] <= 0) {
+			slope[j] = 0;
+		} else {
+			var w1 = 2 * (times[j + 1] - times[j]) + (times[j] - times[j - 1]);
+			var w2 = (times[j + 1] - times[j]) + 2 * (times[j] - times[j - 1]);
+			slope[j] = (w1 + w2) / (w1 / delta[j - 1] + w2 / delta[j]);
+		}
+	}
+	return slope;
+}
+
+var IN_S = slopes(IN_T, IN_V);
+var OUT_S = slopes(OUT_T, OUT_V);
+
+function env(times, values, slope, t) {
+	if (t <= 0) return values[0];
+	var last = times.length - 1;
+	if (t >= times[last]) return values[last];
+	var i = 0;
+	while (i < last - 1 && t > times[i + 1]) i++;
+	var h = times[i + 1] - times[i];
+	var u = (t - times[i]) / h;
+	var u2 = u * u;
+	var u3 = u2 * u;
+	var m0 = slope[i] * h;
+	var m1 = slope[i + 1] * h;
+	return (2 * u3 - 3 * u2 + 1) * values[i]
+		+ (u3 - 2 * u2 + u) * m0
+		+ (-2 * u3 + 3 * u2) * values[i + 1]
+		+ (u3 - u2) * m1;
+}
+
+var music = 0;
+var head = null;
+var next = null;
+var leaveAt = 0;
+var fadeLen = 0.8;
+var t0 = 0;
+var tStartLua = 0;
+var pageReady = false;
+window.addEventListener("load", function () { pageReady = true; });
+
+function markStart() {
+	if (!t0) t0 = performance.now();
+}
+
+function beginFade() {
+	if (leaveAt) return;
+	var now = performance.now();
+	markStart();
+	var elapsed = Math.max(0.25, (now - t0) / 1000);
+	var lap = tStartLua ? (now - tStartLua) / 1000 : elapsed * 0.12;
+	var done = Math.max(0, filesTotal - filesNeeded);
+	var filesPerSec = done > 0 ? done / elapsed : 0;
+	var remain = lap * 2;
+	if (filesPerSec > 0) remain = remain * Math.sqrt(10 / filesPerSec);
+	if (remain < 1.6) remain = 1.6;
+	if (remain > 5) remain = 5;
+	fadeLen = remain;
+	leaveAt = now;
+	if (next) {
+		next.pause();
+		next = null;
+	}
+}
+
+function lengthOf(audio) {
+	var got = audio.duration;
+	if (got && isFinite(got) && got > 180 && got < 240) return got;
+	return CLIP;
+}
+
+function gainAt(audio) {
+	var t = audio.currentTime || 0;
+	var len = lengthOf(audio);
+	var vol = env(IN_T, IN_V, IN_S, t);
+	var outStart = Math.max(0, len - FADE_OUT);
+	if (!leaveAt && t >= outStart) vol *= env(OUT_T, OUT_V, OUT_S, t - outStart);
+	if (leaveAt) vol *= leaveMul();
+	if (vol < 0) vol = 0;
+	return vol * music;
+}
+
+function makeAudio() {
+	var audio = new Audio("mutation.mp3");
+	audio.preload = "auto";
+	audio.volume = 0;
+	return audio;
+}
+
+function play(audio) {
+	var started = audio.play();
+	if (started && started.catch) started.catch(function () {});
+}
+
+function leaveMul() {
+	if (!leaveAt) return 1;
+	var u = ((performance.now() - leaveAt) / 1000) / fadeLen;
+	if (u < 0) u = 0;
+	if (u > 1) u = 1;
+	return Math.cos(u * Math.PI / 2);
+}
+
+function tick() {
+	if (pageReady && music > 0 && !head && !leaveAt) {
+		head = makeAudio();
+		play(head);
+	}
+	if (head) {
+		var len = lengthOf(head);
+		var outStart = Math.max(0, len - FADE_OUT);
+		var t = head.currentTime || 0;
+		if (leaveAt && (performance.now() - leaveAt) / 1000 >= fadeLen) {
+			head.pause();
+			head = null;
+		} else if (!next && !leaveAt && t >= outStart - PRELOAD && t < len - 0.5) {
+			next = makeAudio();
+			next.load();
+		}
+		if (head && next && !leaveAt && next.paused && t >= outStart) play(next);
+		if (head) head.volume = Math.max(0, Math.min(1, gainAt(head)));
+		if (next && !next.paused) next.volume = Math.max(0, Math.min(1, gainAt(next)));
+		if (head && head.ended && !next) {
+			head = null;
+		} else if (head && (head.ended || (t >= len - 0.05 && t > outStart)) && next) {
+			head.pause();
+			head = next;
+			next = null;
+			if (head.paused) play(head);
+		}
+	}
+}
+setInterval(tick, 32);
+document.addEventListener("pointerdown", function () {
+	if (head && head.paused) play(head);
+});
+
+var filesNeeded = 0;
+var filesTotal = 0;
+
+function GameDetails(servername, serverurl, mapname, maxplayers, steamid, gamemode, volume, lang, gamemodeNice) {
+	markStart();
+	document.getElementById("serverName").textContent = servername;
+	document.getElementById("serverMap").textContent = mapname;
+	document.getElementById("serverGamemode").textContent = gamemodeNice;
+	document.getElementById("mapimg").setAttribute("src", "asset://mapimage/" + mapname);
+	document.querySelector(".server_info").classList.add("visible");
+	music = Math.max(0, Math.min(1, Number(volume) || 0));
+}
+
+function DownloadingFile(file) {
+}
+
+function SetStatusChanged(status) {
+	markStart();
+	if (/starting lua/i.test(status)) tStartLua = performance.now();
+	if (/lua started/i.test(status)) beginFade();
+}
+
+function SetFilesNeeded(n) {
+	markStart();
+	filesNeeded = n;
+}
+
+function SetFilesTotal(n) {
+	markStart();
+	filesTotal = n;
+}
+</script>
+</body>
+</html>

@@ -96,6 +96,16 @@ function MakepOptions()
 	RelapseUI.OptionsCheck(hudTab, RelapseUI.T("options_window_transparency"), "zs_windowtransparency")
 	propertysheet:AddSheet(RelapseUI.T("options_tab_hud"), hudTab)
 
+	local soundTab = RelapseUI.MakeOptionsScroll(propertysheet)
+	RelapseUI.OptionsStepSlider(soundTab, RelapseUI.T("options_sound_music"), "zs_musicvolume", 0, 150, 10, "%")
+	propertysheet:AddSheet(RelapseUI.T("options_tab_audio"), soundTab)
+
+	local gfxTab = RelapseUI.MakeOptionsScroll(propertysheet)
+	local gfxCap = RelapseUI.OptionsCaption(gfxTab, RelapseUI.T("options_post_heading"))
+	gfxCap:DockMargin(0, 0, 0, RelapseUI.OptionsCheckGap())
+	RelapseUI.OptionsCheck(gfxTab, RelapseUI.T("options_post_enable"), "zs_posteffects")
+	propertysheet:AddSheet(RelapseUI.T("options_tab_graphics"), gfxTab)
+
 	local tabs = {}
 	for i, item in ipairs(propertysheet.Items or {}) do
 		tabs[i] = item.Tab

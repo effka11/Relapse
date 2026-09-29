@@ -808,11 +808,46 @@ concommand.Add("relapse_addpoints", function(pl, _, args)
 	end
 end)
 
+concommand.Add("relapse_addtime", function(pl, _, args)
+	if not RelapseAddPointsAllowed(pl) then return end
+
+	local n = tonumber(args and args[1] or "")
+	if not n or n == 0 then
+		RelapseAddPointsReply(pl, "relapse_addtime <сек>")
+		return
+	end
+
+	RelapseAddPointsReply(pl, GAMEMODE:RelapseAddPhaseTime(n))
+end)
+
 concommand.Add("relapse_skipend", function(pl)
 	if not RelapseAddPointsAllowed(pl) then return end
 
 	local _, why = GAMEMODE:SkipEndDelay()
 	RelapseAddPointsReply(pl, "[Relapse] " .. why)
+end)
+
+concommand.Add("relapse_win", function(pl, _, args)
+	if not RelapseAddPointsAllowed(pl) then return end
+
+	local key = string.lower(string.Trim(tostring(args and args[1] or "")))
+	local winner
+	if key == "humans" then
+		winner = TEAM_HUMAN
+	elseif key == "zombies" then
+		winner = TEAM_UNDEAD
+	end
+	if not winner then
+		RelapseAddPointsReply(pl, "[Relapse] relapse_win <humans|zombies>")
+		return
+	end
+	if GAMEMODE.RoundEnded then
+		RelapseAddPointsReply(pl, "[Relapse] раунд уже закончен")
+		return
+	end
+
+	gamemode.Call("EndRound", winner)
+	RelapseAddPointsReply(pl, winner == TEAM_HUMAN and "[Relapse] победа людей" or "[Relapse] победа зомби")
 end)
 
 -- Higher score is a closer nick. Exact beats a prefix, a prefix beats a nick that only contains the text.

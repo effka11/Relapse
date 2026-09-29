@@ -1,7 +1,8 @@
 -- Relapse mesh graph: 8-neighbour walk links, hops, one-way drops, ladder
 -- shafts; A* through cell centres. Centres stay inside the paint; a taut string
 -- hugged cliff lips. Source .nav is fallback until this graph is linked
--- (relapse_ai_mesh_path 0 to stay on .nav).
+-- (relapse_ai_mesh_path 0 to stay on .nav). Cells, gap bridges, ladder shafts
+-- and island labels share relapse_ai_mesh_link_ms, so the finish is not one tick.
 --
 -- A walk link is what a player can do without pressing jump: the chord between
 -- the two centres, sampled every few units, never steps more than the step
@@ -26,7 +27,7 @@ local CurTime = CurTime
 local IsValid = IsValid
 
 local cvUse = CreateConVar("relapse_ai_mesh_path", "1", FCVAR_NOTIFY, "1 = bots walk the Relapse skin, 0 = Source .nav.")
-local cvBudget = CreateConVar("relapse_ai_mesh_link_ms", "4", FCVAR_NOTIFY, "Milliseconds per tick to link mesh cells.")
+local cvBudget = CreateConVar("relapse_ai_mesh_link_ms", "4", FCVAR_NOTIFY, "Milliseconds per tick while linking cells, bridges, ladders and islands.")
 
 local SEG_GROUND = 0
 local SEG_DROP = 1
@@ -595,76 +596,86 @@ end
 -- Shafts become graph edges so A* can chain two ladders (down, street, up)
 -- between same-Z roofs. One brush may pass several floors; each pair of
 -- neighbouring landings is an edge (cost is that rise, not the whole brush).
+local function LadderList()
+	local list = Nav and Nav.Climbables
+	if not list or #list == 0 then
+		list = Nav and Nav.GetAllLadders and Nav.GetAllLadders() or {}
+	end
+	return list
+end
+
+local function LinkShaft(ladder, acc)
+	if not Nav.HasLadder(ladder) then return end
+	if Nav.IsShaft and not Nav.IsShaft(ladder) then
+		acc.stairs = acc.stairs + 1
+		return
+	end
+	local floors = ShaftLandings(ladder)
+	local id = (Nav.LadderID and Nav.LadderID(ladder)) or (ladder.GetID and ladder:GetID()) or 0
+	if #floors == 0 then
+		acc.noBottom = acc.noBottom + 1
+		if AI.cv.debug:GetInt() > 0 then
+			local b = ladder.GetBottom and ladder:GetBottom()
+			AI.Log("mesh ladder #%s: no paint at a landing%s", tostring(id),
+				b and string.format(" (%.0f %.0f %.0f)", b.x, b.y, b.z) or "")
+		end
+	elseif #floors == 1 then
+		local botZ = Nav.LadderLandingZ(ladder, false)
+		local topZ = Nav.LadderLandingZ(ladder, true)
+		local z = floors[1].pos.z
+		if math.abs(z - botZ) > 56 then
+			acc.noBottom = acc.noBottom + 1
+		elseif math.abs(z - topZ) > 56 then
+			acc.noTop = acc.noTop + 1
+		else
+			acc.flat = acc.flat + 1
+		end
+	else
+		local added = false
+		for k = 1, #floors - 1 do
+			local lo, hi = floors[k], floors[k + 1]
+			local dz = hi.pos.z - lo.pos.z
+			if dz >= CLUSTER_Z and AddLadderEdge(lo.i, hi.i, ladder, dz) then
+				added = true
+			end
+		end
+		if added then
+			acc.n = acc.n + 1
+			Mesh.LinkedLadders[id] = {
+				bot = Vector(floors[1].pos),
+				top = Vector(floors[#floors].pos),
+			}
+		else
+			acc.flat = acc.flat + 1
+		end
+	end
+end
+
+local function LogLadders(acc, nClimb)
+	Mesh.LadderCount = acc.n
+	AI.Log("mesh ladders %d shafts of %d climbables (%d stair volumes, %d no paint at bottom, %d no paint at top, %d same floor)",
+		acc.n, nClimb, acc.stairs, acc.noBottom, acc.noTop, acc.flat)
+	if Mesh.SendLinkedLadders then
+		Mesh.SendLinkedLadders()
+	end
+end
+
 function Mesh.LinkLadders()
 	if not Nav or not Mesh.Cells or #Mesh.Cells == 0 or not Mesh.Grid then
 		return 0
 	end
 	StripLadderNbs()
 	Mesh.LinkedLadders = {}
-	local list = Nav.Climbables
-	if not list or #list == 0 then
-		list = Nav.GetAllLadders and Nav.GetAllLadders() or {}
-	end
-	local n = 0
-	local stairs, noBottom, noTop, flat = 0, 0, 0, 0
+	local list = LadderList()
+	local acc = {n = 0, stairs = 0, noBottom = 0, noTop = 0, flat = 0}
 	for i = 1, #list do
-		local ladder = list[i]
-		if not Nav.HasLadder(ladder) then
-			-- skip
-		elseif Nav.IsShaft and not Nav.IsShaft(ladder) then
-			stairs = stairs + 1
-		else
-			local floors = ShaftLandings(ladder)
-			local id = (Nav.LadderID and Nav.LadderID(ladder)) or (ladder.GetID and ladder:GetID()) or 0
-			if #floors == 0 then
-				noBottom = noBottom + 1
-				if AI.cv.debug:GetInt() > 0 then
-					local b = ladder.GetBottom and ladder:GetBottom()
-					AI.Log("mesh ladder #%s: no paint at a landing%s", tostring(id),
-						b and string.format(" (%.0f %.0f %.0f)", b.x, b.y, b.z) or "")
-				end
-			elseif #floors == 1 then
-				local botZ = Nav.LadderLandingZ(ladder, false)
-				local topZ = Nav.LadderLandingZ(ladder, true)
-				local z = floors[1].pos.z
-				if math.abs(z - botZ) > 56 then
-					noBottom = noBottom + 1
-				elseif math.abs(z - topZ) > 56 then
-					noTop = noTop + 1
-				else
-					flat = flat + 1
-				end
-			else
-				local added = false
-				for k = 1, #floors - 1 do
-					local lo, hi = floors[k], floors[k + 1]
-					local dz = hi.pos.z - lo.pos.z
-					if dz >= CLUSTER_Z and AddLadderEdge(lo.i, hi.i, ladder, dz) then
-						added = true
-					end
-				end
-				if added then
-					n = n + 1
-					Mesh.LinkedLadders[id] = {
-						bot = Vector(floors[1].pos),
-						top = Vector(floors[#floors].pos),
-					}
-				else
-					flat = flat + 1
-				end
-			end
-		end
+		LinkShaft(list[i], acc)
 	end
-	Mesh.LadderCount = n
-	AI.Log("mesh ladders %d shafts of %d climbables (%d stair volumes, %d no paint at bottom, %d no paint at top, %d same floor)",
-		n, #list, stairs, noBottom, noTop, flat)
-	if Mesh.SendLinkedLadders then
-		Mesh.SendLinkedLadders()
-	end
+	LogLadders(acc, #list)
 	if Mesh.Linked then
 		Mesh.ComputeComponents()
 	end
-	return n
+	return acc.n
 end
 
 function Mesh.IsLadderLinked(ladder)
@@ -678,19 +689,21 @@ end
 
 -- Pair (a, b) seen once (j > i). Walk both ways; else a hop up and the drop
 -- back; else a plain one-way drop from the higher cell.
-local function AddWalkPair(i, j, a, b, dist, crouch)
+local function AddWalkPair(i, j, a, b, dist, crouch, nx, ny)
 	local cost = crouch and dist * 1.6 or dist
 	local door = DoorOnChord(a.pos.x, a.pos.y, a.pos.z, b.pos.x, b.pos.y, b.pos.z)
-	if door then
-		local extra = {door = door:EntIndex()}
+	local extra
+	if door or crouch or nx ~= nil then
+		extra = {}
+		if door then extra.door = door:EntIndex() end
 		if crouch then extra.crouch = true end
-		AddDirected(i, j, cost, "door", SEG_GROUND, extra)
-		AddDirected(j, i, cost, "door", SEG_GROUND, extra)
-	else
-		local extra = crouch and {crouch = true} or nil
-		AddDirected(i, j, cost, "walk", SEG_GROUND, extra)
-		AddDirected(j, i, cost, "walk", SEG_GROUND, extra)
+		if nx ~= nil then
+			extra.nx, extra.ny = nx, ny
+		end
 	end
+	local kind = door and "door" or "walk"
+	AddDirected(i, j, cost, kind, SEG_GROUND, extra)
+	AddDirected(j, i, cost, kind, SEG_GROUND, extra)
 end
 
 local function LinkPair(i, j, a, b, cell, dropZ)
@@ -773,11 +786,57 @@ local function DoorBridge(a, b)
 	return true, false
 end
 
-local function BridgeGaps()
+-- The cell line clips a jamb, but a body still fits in the opening beside it.
+-- A slit narrower than the body has no such slot. The offset is where the
+-- path bends: walking the raw cell chord would stay in the jamb.
+local function BridgeOpening(a, b)
+	local ax, ay, az = a.pos.x, a.pos.y, a.pos.z
+	local bx, by, bz = b.pos.x, b.pos.y, b.pos.z
+	local dx, dy = bx - ax, by - ay
+	local flat = math.sqrt(dx * dx + dy * dy)
+	if flat < 1 then return nil end
+	dx, dy = dx / flat, dy / flat
+	local rx, ry = -dy, dx
+	linkTr.mins.x, linkTr.mins.y = -BRIDGE_HULL, -BRIDGE_HULL
+	linkTr.maxs.x, linkTr.maxs.y = BRIDGE_HULL, BRIDGE_HULL
+	local function slot(off)
+		local ox, oy = rx * off, ry * off
+		if not ChordClear(ax + ox, ay + oy, az, bx + ox, by + oy, bz, WALK_LIFT, STAND_TOP) then
+			return false
+		end
+		if not ChordClear(ax, ay, az, ax + ox, ay + oy, az, WALK_LIFT, STAND_TOP) then
+			return false
+		end
+		if not ChordClear(bx + ox, by + oy, bz, bx, by, bz, WALK_LIFT, STAND_TOP) then
+			return false
+		end
+		return GroundContinuous(ax + ox, ay + oy, az, bx + ox, by + oy, bz, WALK_LIFT)
+	end
+	local foundX, foundY
+	for n = 1, 2 do
+		local off = 8 * n
+		if slot(off) then
+			foundX, foundY = rx * off, ry * off
+			break
+		end
+		if slot(-off) then
+			foundX, foundY = -rx * off, -ry * off
+			break
+		end
+	end
+	linkTr.mins.x, linkTr.mins.y = -LINK_HULL, -LINK_HULL
+	linkTr.maxs.x, linkTr.maxs.y = LINK_HULL, LINK_HULL
+	return foundX, foundY
+end
+
+-- One slice of the gap pass. Traces for every skipped strip used to land in
+-- the same tick as the last cell, which hitched the server when the skin finished.
+local function BridgeGapStep(from, deadline, added)
 	local cells = Mesh.Cells
 	local cell = CellSize()
 	local n = #cells
-	local added = 0
+	local i = from or 1
+	added = added or 0
 	local function nearestAhead(a, ox, oy)
 		local best, bestAlong
 		for k = 2, GAP_CELLS do
@@ -802,7 +861,7 @@ local function BridgeGaps()
 		end
 		return nil
 	end
-	for i = 1, n do
+	while i <= n and SysTime() < deadline do
 		local a = cells[i]
 		for dir = 1, 2 do
 			local ox, oy = dir == 1 and 1 or 0, dir == 2 and 1 or 0
@@ -810,18 +869,25 @@ local function BridgeGaps()
 			if j then
 				local b = cells[j]
 				local ok, crouch = BridgeOK(a, b)
+				local nx, ny
 				if not ok then
 					ok, crouch = DoorBridge(a, b)
 				end
+				if not ok then
+					nx, ny = BridgeOpening(a, b)
+					ok = nx ~= nil
+					crouch = false
+				end
 				if ok then
 					local dx, dy, dz = b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z
-					AddWalkPair(i, j, a, b, math.sqrt(dx * dx + dy * dy + dz * dz), crouch)
+					AddWalkPair(i, j, a, b, math.sqrt(dx * dx + dy * dy + dz * dz), crouch, nx, ny)
 					added = added + 1
 				end
 			end
 		end
+		i = i + 1
 	end
-	return added
+	return i, added
 end
 
 local function LinkCell(i, dropZ)
@@ -854,11 +920,37 @@ end
 
 -- Union-find over all edges (direction ignored): a goal in another component is
 -- unreachable for sure, so A* does not burn its budget draining the island.
-function Mesh.ComputeComponents()
+-- step + deadline resume across ticks. No deadline runs the whole pass (a
+-- ladder that appeared on an already linked skin).
+function Mesh.ComputeComponents(step, deadline)
 	local cells = Mesh.Cells
+	if not cells or #cells == 0 then return 0, 0, true end
 	local n = #cells
-	local parent = {}
-	for i = 1, n do parent[i] = i end
+	local state = step or {}
+	local function over()
+		return deadline ~= nil and SysTime() >= deadline
+	end
+
+	if not state.phase then
+		state.parent = {}
+		state.phase = "init"
+		state.i = 1
+	end
+
+	if state.phase == "init" then
+		local parent = state.parent
+		local i = state.i
+		while i <= n and not over() do
+			parent[i] = i
+			i = i + 1
+		end
+		state.i = i
+		if i <= n then return end
+		state.phase = "union"
+		state.i = 1
+	end
+
+	local parent = state.parent
 	local function find(x)
 		while parent[x] ~= x do
 			parent[x] = parent[parent[x]]
@@ -866,44 +958,80 @@ function Mesh.ComputeComponents()
 		end
 		return x
 	end
-	for i = 1, n do
-		local nbs = cells[i].nbs
-		if nbs then
-			for k = 1, #nbs do
-				local ri, rj = find(i), find(nbs[k].j)
-				if ri ~= rj then parent[ri] = rj end
+
+	if state.phase == "union" then
+		local i = state.i
+		while i <= n and not over() do
+			local nbs = cells[i].nbs
+			if nbs then
+				for k = 1, #nbs do
+					local ri, rj = find(i), find(nbs[k].j)
+					if ri ~= rj then parent[ri] = rj end
+				end
+			end
+			i = i + 1
+		end
+		state.i = i
+		if i <= n then return end
+		state.phase = "label"
+		state.i = 1
+		state.count = 0
+		state.sizes = {}
+	end
+
+	if state.phase == "label" then
+		local sizes = state.sizes
+		local count = state.count
+		local i = state.i
+		while i <= n and not over() do
+			local r = find(i)
+			cells[i].comp = r
+			if not sizes[r] then
+				sizes[r] = 0
+				count = count + 1
+			end
+			sizes[r] = sizes[r] + 1
+			i = i + 1
+		end
+		state.i = i
+		state.count = count
+		if i <= n then return end
+		local biggest, bigId = 0, nil
+		for id, s in pairs(sizes) do
+			if s > biggest then
+				biggest = s
+				bigId = id
 			end
 		end
+		Mesh.ComponentSizes = sizes
+		Mesh.ComponentCount = count
+		Mesh.BiggestComponent = biggest
+		Mesh.BiggestId = bigId
+		state.wparent = {}
+		state.phase = "winit"
+		state.i = 1
+		if over() then return end
 	end
-	local count, sizes = 0, {}
-	for i = 1, n do
-		local r = find(i)
-		cells[i].comp = r
-		if not sizes[r] then
-			sizes[r] = 0
-			count = count + 1
+
+	if state.phase == "winit" then
+		local wparent = state.wparent
+		local i = state.i
+		while i <= n and not over() do
+			wparent[i] = i
+			i = i + 1
 		end
-		sizes[r] = sizes[r] + 1
+		state.i = i
+		if i <= n then return end
+		state.phase = "wunion"
+		state.i = 1
 	end
-	local biggest, bigId = 0, nil
-	for id, s in pairs(sizes) do
-		if s > biggest then
-			biggest = s
-			bigId = id
-		end
-	end
-	Mesh.ComponentSizes = sizes
-	Mesh.ComponentCount = count
-	Mesh.BiggestComponent = biggest
-	Mesh.BiggestId = bigId
 
 	-- A pure drop has no way back up. Union-find on every edge still glues
 	-- that balcony to the ground, and the nearest sigil is then the one you
 	-- can only fall from. Walk islands keep an edge only when the reverse
 	-- exists (a jump, a ladder, a walk). Forward reach follows the drop
 	-- downward, so a sigil in the hole is still a target from the street.
-	local wparent = {}
-	for i = 1, n do wparent[i] = i end
+	local wparent = state.wparent
 	local function wfind(x)
 		while wparent[x] ~= x do
 			wparent[x] = wparent[wparent[x]]
@@ -919,77 +1047,105 @@ function Mesh.ComputeComponents()
 		end
 		return false
 	end
-	for i = 1, n do
-		local nbs = cells[i].nbs
-		if nbs then
-			for k = 1, #nbs do
-				local j = nbs[k].j
-				if j > i and reversed(i, j) then
-					local ri, rj = wfind(i), wfind(j)
-					if ri ~= rj then wparent[ri] = rj end
-				end
-			end
-		end
-	end
-	for i = 1, n do
-		cells[i].wcomp = wfind(i)
-	end
-	local nxt, seenE = {}, {}
-	for i = 1, n do
-		local nbs = cells[i].nbs
-		local a = cells[i].wcomp
-		if nbs and a then
-			for k = 1, #nbs do
-				local b = cells[nbs[k].j].wcomp
-				if b and a ~= b then
-					local bag = seenE[a]
-					if not bag then
-						bag = {}
-						seenE[a] = bag
-					end
-					if not bag[b] then
-						bag[b] = true
-						local list = nxt[a]
-						if not list then
-							list = {}
-							nxt[a] = list
-						end
-						list[#list + 1] = b
+
+	if state.phase == "wunion" then
+		local i = state.i
+		while i <= n and not over() do
+			local nbs = cells[i].nbs
+			if nbs then
+				for k = 1, #nbs do
+					local j = nbs[k].j
+					if j > i and reversed(i, j) then
+						local ri, rj = wfind(i), wfind(j)
+						if ri ~= rj then wparent[ri] = rj end
 					end
 				end
 			end
+			i = i + 1
 		end
-	end
-	local reach = {}
-	local function flood(from)
-		local got = {[from] = true}
-		reach[from] = got
-		local stack = {from}
-		while #stack > 0 do
-			local x = stack[#stack]
-			stack[#stack] = nil
-			local list = nxt[x]
-			if list then
-				for t = 1, #list do
-					local y = list[t]
-					if not got[y] then
-						got[y] = true
-						stack[#stack + 1] = y
-					end
-				end
-			end
-		end
-		return got
-	end
-	function Mesh.Reaches(fromW, toW)
-		if not fromW or not toW then return true end
-		if fromW == toW then return true end
-		local got = reach[fromW]
-		if not got then got = flood(fromW) end
-		return got[toW] == true
+		state.i = i
+		if i <= n then return end
+		state.phase = "wlabel"
+		state.i = 1
 	end
 
-	return count, biggest
+	if state.phase == "wlabel" then
+		local i = state.i
+		while i <= n and not over() do
+			cells[i].wcomp = wfind(i)
+			i = i + 1
+		end
+		state.i = i
+		if i <= n then return end
+		state.phase = "reach"
+		state.i = 1
+		state.nxt = {}
+		state.seenE = {}
+		if over() then return end
+	end
+
+	if state.phase == "reach" then
+		local nxt, seenE = state.nxt, state.seenE
+		local i = state.i
+		while i <= n and not over() do
+			local nbs = cells[i].nbs
+			local a = cells[i].wcomp
+			if nbs and a then
+				for k = 1, #nbs do
+					local b = cells[nbs[k].j].wcomp
+					if b and a ~= b then
+						local bag = seenE[a]
+						if not bag then
+							bag = {}
+							seenE[a] = bag
+						end
+						if not bag[b] then
+							bag[b] = true
+							local list = nxt[a]
+							if not list then
+								list = {}
+								nxt[a] = list
+							end
+							list[#list + 1] = b
+						end
+					end
+				end
+			end
+			i = i + 1
+		end
+		state.i = i
+		if i <= n then return end
+		local reach = {}
+		local function flood(from)
+			local got = {[from] = true}
+			reach[from] = got
+			local stack = {from}
+			while #stack > 0 do
+				local x = stack[#stack]
+				stack[#stack] = nil
+				local list = nxt[x]
+				if list then
+					for t = 1, #list do
+						local y = list[t]
+						if not got[y] then
+							got[y] = true
+							stack[#stack + 1] = y
+						end
+					end
+				end
+			end
+			return got
+		end
+		function Mesh.Reaches(fromW, toW)
+			if not fromW or not toW then return true end
+			if fromW == toW then return true end
+			local got = reach[fromW]
+			if not got then got = flood(fromW) end
+			return got[toW] == true
+		end
+		state.phase = "done"
+		return state.count, Mesh.BiggestComponent, true
+	end
 end
 
 function Mesh.StartLink()
@@ -1004,20 +1160,31 @@ function Mesh.StartLink()
 	if Mesh.SendLinkedLadders then
 		Mesh.SendLinkedLadders()
 	end
-	local size = CellSize()
-	local cells = Mesh.Cells
-	for i = 1, #cells do
-		local c = cells[i]
-		c.i = i
-		c.nbs = {}
-		c.comp = nil
-		c.wcomp = nil
-		c.gx = math.floor(c.pos.x / size)
-		c.gy = math.floor(c.pos.y / size)
-		GridAdd(c.gx, c.gy, i)
-	end
-	Mesh.Linking = {i = 1, n = #cells, t0 = SysTime(), ping = 0, dropZ = DropZ()}
-	AI.Log("mesh linking %d cells...", #cells)
+	-- The bucket index used to walk every cell here, in the same tick as the
+	-- file parse. Think spreads it under the link budget.
+	Mesh.Linking = {
+		phase = "grid", grid = 1, i = 1, n = #Mesh.Cells,
+		t0 = SysTime(), ping = 0, dropZ = DropZ(),
+	}
+	AI.Log("mesh linking %d cells...", #Mesh.Cells)
+end
+
+local function FinishLink(job, deadline)
+	if not job.comp then job.comp = {} end
+	local comps, biggest, done = Mesh.ComputeComponents(job.comp, deadline)
+	if not done then return false end
+	local elapsed = SysTime() - job.t0
+	local n = job.n
+	Mesh.Linking = nil
+	Mesh.Linked = true
+	AI.Log("mesh linked %d cells: %d walk (%d crouch), %d door, %d jump, %d drop, %d ladders, %d gaps; %d components (largest %d) in %.1fs",
+		n, job.walks, job.crouches, job.doors, job.jumps, job.drops, Mesh.LadderCount or 0, job.gaps, comps, biggest, elapsed)
+	-- Quota may have waited on the link; refill without waiting for the 5 s timer.
+	timer.Simple(0, function()
+		if AI.Manager and AI.Manager.Maintain then
+			AI.Manager.Maintain("mesh")
+		end
+	end)
 end
 
 function Mesh.LinkStep()
@@ -1025,31 +1192,96 @@ function Mesh.LinkStep()
 	if not job then return end
 	local deadline = SysTime() + math.max(0.001, cvBudget:GetFloat() / 1000)
 	local n = job.n
-	while job.i <= n and SysTime() < deadline do
-		LinkCell(job.i, job.dropZ)
-		job.i = job.i + 1
+	if job.phase == "grid" then
+		local cells = Mesh.Cells
+		local size = CellSize()
+		while job.grid <= n and SysTime() < deadline do
+			local i = job.grid
+			local c = cells[i]
+			c.i = i
+			c.nbs = {}
+			c.comp = nil
+			c.wcomp = nil
+			c.gx = math.floor(c.pos.x / size)
+			c.gy = math.floor(c.pos.y / size)
+			GridAdd(c.gx, c.gy, i)
+			job.grid = i + 1
+		end
+		if job.grid <= n then
+			if CurTime() >= job.ping then
+				job.ping = CurTime() + 1
+				AI.Log("mesh indexing %d%%", math.floor((job.grid - 1) / n * 100))
+			end
+			return
+		end
+		job.phase = nil
 	end
-	if job.i > n then
-		local elapsed = SysTime() - job.t0
-		Mesh.LinkLadders()
-		local gaps = BridgeGaps()
-		local walks, jumps, drops, crouches, doors = 0, 0, 0, 0, 0
-		for k = 1, n do
-			local c = Mesh.Cells[k]
+	if not job.phase then
+		while job.i <= n and SysTime() < deadline do
+			LinkCell(job.i, job.dropZ)
+			job.i = job.i + 1
+		end
+		if job.i <= n then
+			if CurTime() >= job.ping then
+				job.ping = CurTime() + 1
+				AI.Log("mesh linking %d%%", math.floor((job.i - 1) / n * 100))
+			end
+			return
+		end
+		job.phase = "gaps"
+		job.gap = 1
+		job.gaps = 0
+	end
+	-- Gaps, shafts and the corner tax each used to run in the tick that finished
+	-- the last cell. Same millisecond budget as the cell pass, so the hitch
+	-- spreads across frames instead of landing at once.
+	if job.phase == "gaps" then
+		if SysTime() >= deadline then return end
+		job.gap, job.gaps = BridgeGapStep(job.gap, deadline, job.gaps)
+		if job.gap <= n then
+			if CurTime() >= job.ping then
+				job.ping = CurTime() + 1
+				AI.Log("mesh bridging %d%%", math.floor((job.gap - 1) / n * 100))
+			end
+			return
+		end
+		if SysTime() >= deadline then return end
+		job.phase = "ladders"
+		StripLadderNbs()
+		Mesh.LinkedLadders = {}
+		job.ladList = LadderList()
+		job.lad = 1
+		job.ladAcc = {n = 0, stairs = 0, noBottom = 0, noTop = 0, flat = 0}
+	end
+	if job.phase == "ladders" then
+		local list = job.ladList
+		while job.lad <= #list and SysTime() < deadline do
+			LinkShaft(list[job.lad], job.ladAcc)
+			job.lad = job.lad + 1
+		end
+		if job.lad <= #list then return end
+		LogLadders(job.ladAcc, #list)
+		job.phase = "tax"
+		job.tax = 1
+		job.walks, job.jumps, job.drops, job.crouches, job.doors = 0, 0, 0, 0, 0
+	end
+	if job.phase == "tax" then
+		while job.tax <= n and SysTime() < deadline do
+			local c = Mesh.Cells[job.tax]
 			local w = 0
 			for _, e in ipairs(c.nbs) do
 				if e.kind == "walk" or e.kind == "door" then
 					w = w + 1
 					if e.kind == "door" then
-						doors = doors + 1
+						job.doors = job.doors + 1
 					else
-						walks = walks + 1
+						job.walks = job.walks + 1
 					end
-					if e.crouch then crouches = crouches + 1 end
+					if e.crouch then job.crouches = job.crouches + 1 end
 				elseif e.kind == "jump" then
-					jumps = jumps + 1
+					job.jumps = job.jumps + 1
 				elseif e.kind == "drop" then
-					drops = drops + 1
+					job.drops = job.drops + 1
 				end
 			end
 			-- Outer corners / lips: standable but a fat body snags. Prefer interior.
@@ -1060,23 +1292,14 @@ function Mesh.LinkStep()
 			else
 				c.tax = 0
 			end
+			job.tax = job.tax + 1
 		end
-		local comps, biggest = Mesh.ComputeComponents()
-		Mesh.Linking = nil
-		Mesh.Linked = true
-		AI.Log("mesh linked %d cells: %d walk (%d crouch), %d door, %d jump, %d drop, %d ladders, %d gaps; %d components (largest %d) in %.1fs",
-			n, walks, crouches, doors, jumps, drops, Mesh.LadderCount or 0, gaps, comps, biggest, elapsed)
-		-- Quota may have waited on the link; refill without waiting for the 5 s timer.
-		timer.Simple(0, function()
-			if AI.Manager and AI.Manager.Maintain then
-				AI.Manager.Maintain("mesh")
-			end
-		end)
+		if job.tax <= n then return end
+		job.phase = "comps"
 		return
 	end
-	if CurTime() >= job.ping then
-		job.ping = CurTime() + 1
-		AI.Log("mesh linking %d%%", math.floor((job.i - 1) / n * 100))
+	if job.phase == "comps" then
+		FinishLink(job, deadline)
 	end
 end
 
@@ -1113,7 +1336,7 @@ end
 
 -- Closest cell on this Z band, by XY. 3D Nearest prefers the walkway under a
 -- high pad (dz 50, small XY) over the pad the entity actually stands on.
-function Mesh.NearestOnFloor(pos, maxDist, maxDz)
+function Mesh.NearestOnFloor(pos, maxDist, maxDz, skip)
 	if not pos or not Mesh.Grid then return nil end
 	local size = CellSize()
 	local gx, gy = math.floor(pos.x / size), math.floor(pos.y / size)
@@ -1128,7 +1351,7 @@ function Mesh.NearestOnFloor(pos, maxDist, maxDz)
 			if bucket then
 				for i = 1, #bucket do
 					local c = Mesh.Cells[bucket[i]]
-					if math.abs(c.pos.z - pos.z) <= maxDz then
+					if (not skip or not skip(c)) and math.abs(c.pos.z - pos.z) <= maxDz then
 						local xyd = (c.pos.x - pos.x) * (c.pos.x - pos.x)
 							+ (c.pos.y - pos.y) * (c.pos.y - pos.y)
 						if xyd <= maxd2 and (not best or xyd < bestXY) then
@@ -1446,9 +1669,43 @@ local DOOR_SIDE = 22
 -- The hinge stays in the doorway after the leaf swings. A hit on it is not a shut leaf.
 local DOOR_HINGE = 16
 
+-- Physics mesh of a swung leaf stops short of WorldSpaceAABB. A body hull
+-- already standing in that tip gets a clear trace and the chord stays a walk.
+local function HullMeetsLeaf(door, x, y, z)
+	if not IsValid(door) then return false end
+	local ok, mn, mx = pcall(door.WorldSpaceAABB, door)
+	if not ok or not mn or not mx then return false end
+	local z0 = z + WALK_LIFT + doorTr.mins.z
+	local z1 = z + WALK_LIFT + doorTr.maxs.z
+	if x + doorTr.maxs.x < mn.x or x + doorTr.mins.x > mx.x then return false end
+	if y + doorTr.maxs.y < mn.y or y + doorTr.mins.y > mx.y then return false end
+	if z1 < mn.z or z0 > mx.z then return false end
+	local h = door:GetPos()
+	local dx, dy = x - h.x, y - h.y
+	if dx * dx + dy * dy <= DOOR_HINGE * DOOR_HINGE then return false end
+	return true
+end
+
+local function BoundsOnChord(door, ax, ay, az, bx, by, bz)
+	local dx, dy, dz = bx - ax, by - ay, bz - az
+	local len = math.sqrt(dx * dx + dy * dy)
+	local steps = math.max(1, math.ceil(len / 24))
+	for s = 0, steps do
+		local t = s / steps
+		if HullMeetsLeaf(door, ax + dx * t, ay + dy * t, az + dz * t) then
+			return true
+		end
+	end
+	return false
+end
+
 local function DoorLeafInChord(doorId, ax, ay, az, bx, by, bz)
 	local hit, hitPos = DoorOnChord(ax, ay, az, bx, by, bz)
-	if not hit or hit:EntIndex() ~= doorId then return false end
+	if not hit or hit:EntIndex() ~= doorId then
+		if hit then return false end
+		local door = Entity(doorId)
+		return IsValid(door) and BoundsOnChord(door, ax, ay, az, bx, by, bz)
+	end
 	if not hitPos then return true end
 	local hinge = hit:GetPos()
 	local dx, dy = hitPos.x - hinge.x, hitPos.y - hinge.y
@@ -1623,6 +1880,14 @@ local function CellInOpenLeaf(x, y, z)
 	doorEnd:SetUnpacked(x, y, z + WALK_LIFT)
 	util.TraceHull(doorTr)
 	local inside = doorRes.StartSolid and IsDoorEnt(doorRes.Entity)
+	if not inside then
+		for i = 1, #doors do
+			if HullMeetsLeaf(doors[i], x, y, z) then
+				inside = true
+				break
+			end
+		end
+	end
 	doorTr.mins.x, doorTr.mins.y = -LINK_HULL, -LINK_HULL
 	doorTr.maxs.x, doorTr.maxs.y = LINK_HULL, LINK_HULL
 	return inside
@@ -1966,7 +2231,14 @@ local function BuildPath(from, goal, ids, edges)
 	local pts = {{pos = Vector(from.x, from.y, from.z)}}
 	for k = 1, #ids do
 		local p = cells[ids[k]].pos
-		pts[#pts + 1] = {pos = Vector(p.x, p.y, p.z), enter = edges[k - 1]}
+		local e = edges[k - 1]
+		-- Bridge slot: step off the cell line, cross where a body fits, step back.
+		if e and e.nx ~= nil then
+			local prev = pts[#pts].pos
+			pts[#pts + 1] = {pos = Vector(prev.x + e.nx, prev.y + e.ny, prev.z), enter = e}
+			pts[#pts + 1] = {pos = Vector(p.x + e.nx, p.y + e.ny, p.z), enter = e}
+		end
+		pts[#pts + 1] = {pos = Vector(p.x, p.y, p.z), enter = e}
 	end
 	local lastCell = cells[ids[#ids]].pos
 	local onFloor = math.abs(goal.z - lastCell.z) < 48 and goal:DistToSqr(lastCell) <= 128 * 128
@@ -2083,10 +2355,16 @@ end
 
 local function StartCell(from)
 	local near = CellSize() * 1.6
-	local close = Mesh.NearestOnFloor(from, near, STEP_Z)
+	-- The nearest centre can sit in a leaf that has swung across the corridor.
+	-- Stepping onto it is the stick; the next centre outside the leaf is the start.
+	local function inLeaf(c)
+		local p = c.pos
+		return CellInOpenLeaf(p.x, p.y, p.z)
+	end
+	local close = Mesh.NearestOnFloor(from, near, STEP_Z, inLeaf)
 	if close then return close, false end
 
-	local band = Mesh.NearestOnFloor(from, 240, STEP_Z)
+	local band = Mesh.NearestOnFloor(from, 240, STEP_Z, inLeaf)
 	if band and GroundContinuous(from.x, from.y, from.z, band.pos.x, band.pos.y, band.pos.z, WALK_LIFT) then
 		return band, false
 	end
@@ -2099,6 +2377,7 @@ end
 -- Snap start and goal to cells, A*, build. Returns path, reached, startC.
 -- A path that does not reach ends at the closest approach (reached = false).
 function Mesh.FindPath(from, goal)
+	CollectOpenDoors()
 	local startC, openingDrop = StartCell(from)
 	local cross = math.abs(goal.z - from.z) > 40
 	local goalC = Mesh.NearestOnFloor(goal, 200, 48)
@@ -2278,9 +2557,20 @@ if Nav then
 			return string.format("relapse mesh painting %d%% (%d cells so far), bots on %s",
 				math.floor(Mesh.Build.done / math.max(1, Mesh.Build.total) * 100), #Mesh.Cells, Nav.SourceStatus())
 		end
+		if Mesh.Loading then
+			return "relapse mesh reading"
+		end
 		if Mesh.Linking then
 			local job = Mesh.Linking
-			return string.format("relapse mesh linking %d%%", math.floor((job.i - 1) / math.max(1, job.n) * 100))
+			local n = math.max(1, job.n)
+			if job.phase == "grid" then
+				return string.format("relapse mesh indexing %d%%", math.floor((job.grid - 1) / n * 100))
+			elseif job.phase == "gaps" then
+				return string.format("relapse mesh bridging %d%%", math.floor((job.gap - 1) / n * 100))
+			elseif job.phase then
+				return "relapse mesh finishing links"
+			end
+			return string.format("relapse mesh linking %d%%", math.floor((job.i - 1) / n * 100))
 		end
 		if Mesh.Cells and #Mesh.Cells > 0 then
 			return string.format("relapse mesh %d cells (not linked)", #Mesh.Cells)

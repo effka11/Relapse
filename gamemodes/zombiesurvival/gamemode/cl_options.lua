@@ -133,6 +133,15 @@ cvars.AddChangeCallback("zs_beatsvolume", function(cvar, oldvalue, newvalue)
 	GAMEMODE.BeatsVolume = math.Clamp(tonumber(newvalue) or 0, 0, 100) / 100
 end)
 
+-- Masters match at -16.6 LUFS. 100% on the slider is 0.7 of that master
+-- (about -19.7 LUFS). The slider stops at 150%.
+CreateClientConVar("zs_musicvolume", "100", true, false)
+function GM:RelapseMusicVolume()
+	local cv = GetConVar("zs_musicvolume")
+	local pct = tonumber(cv and cv:GetFloat()) or 100
+	return math.Clamp(pct, 0, 150) / 100 * (210 / 300)
+end
+
 GM.CrosshairLines = math.Clamp(CreateClientConVar("zs_crosshairlines", 4, true, false):GetInt(), 2, 8)
 cvars.AddChangeCallback("zs_crosshairlines", function(cvar, oldvalue, newvalue)
 	GAMEMODE.CrosshairLines = math.Clamp(tonumber(newvalue) or 4, 2, 8)
@@ -274,6 +283,7 @@ cvars.AddChangeCallback("zs_drawxp", function(cvar, oldvalue, newvalue)
 end)
 
 GM.WindowTransparency = CreateClientConVar("zs_windowtransparency", "1", true, false):GetBool()
+CreateClientConVar("zs_posteffects", "1", true, false)
 cvars.AddChangeCallback("zs_windowtransparency", function(cvar, oldvalue, newvalue)
 	GAMEMODE.WindowTransparency = tonumber(newvalue) == 1
 end)

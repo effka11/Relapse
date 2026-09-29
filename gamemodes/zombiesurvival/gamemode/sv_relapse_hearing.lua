@@ -2,8 +2,10 @@
 -- A footstep with a track does not write the fast peak. The human's client
 -- plays the curve for their bar and names zombies inside the track radius;
 -- bots have no client, so the server does that scan. The zombie receives one
--- peak, the loudest point of the track, already scaled by distance.
+-- peak, the loudest point of the track, already scaled by distance, and the
+-- position of that step. The client plants a static point there.
 -- Shots, landings, pain, hammer and nails still use the short DT peak.
+-- The zombie client plants those the same way, from the noise clock.
 
 util.AddNetworkString("zs_hearing_peak")
 util.AddNetworkString("zs_hearing_glow")
@@ -63,10 +65,11 @@ end
 -- Sources
 ---------------------------------------------------------------------------
 
-local function SendGlow(human, zombie, level)
+local function SendGlow(human, zombie, level, origin)
 	net.Start("zs_hearing_glow")
 		net.WriteEntity(human)
 		net.WriteFloat(level)
+		net.WriteVector(origin)
 	net.Send(zombie)
 end
 
@@ -85,7 +88,7 @@ function GM:SendHearingGlow(human, trackId, peak)
 			if dist <= radius then
 				local level = peak * self:EvalHearingCurve(self.HearingFalloff, dist / radius)
 				if level > 0 then
-					SendGlow(human, zombie, level)
+					SendGlow(human, zombie, level, origin)
 				end
 			end
 		end
@@ -139,7 +142,7 @@ net.Receive("zs_hearing_peak", function(_, pl)
 			if dist <= radius then
 				local level = peak * GAMEMODE:EvalHearingCurve(GAMEMODE.HearingFalloff, dist / radius)
 				if level > 0 then
-					SendGlow(pl, zombie, level)
+					SendGlow(pl, zombie, level, origin)
 				end
 			end
 		end

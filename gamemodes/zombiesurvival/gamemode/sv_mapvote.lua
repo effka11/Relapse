@@ -106,7 +106,7 @@ end
 
 function GM:MapVoteSecondsLeft()
 	if not self.RoundEnded or not self.RoundEndedTime then return -1 end
-	return math.max(0, (self.RoundEndedTime + (self.EndGameTime or 0)) - CurTime())
+	return math.max(0, (self.RoundEndedTime + (self.EndGameTime or 0) + (self.RelapseEndExtra or 0)) - CurTime())
 end
 
 function GM:SendMapVote(target, force)
@@ -391,7 +391,7 @@ function GM:ChangelevelCandidates()
 			self:AddMapVoteCandidate(list, seen, entry)
 		end
 	end
-	for _, pattern in ipairs({ "maps/zs_*.bsp", "maps/ze_*.bsp", "maps/zm_*.bsp" }) do
+	for _, pattern in ipairs({ "maps/zs_*.bsp", "maps/ze_*.bsp", "maps/zm_*.bsp", "maps/relapse_*.bsp" }) do
 		local files = file.Find(pattern, "GAME")
 		for _, fn in ipairs(files or {}) do
 			self:AddMapVoteCandidate(list, seen, fn)

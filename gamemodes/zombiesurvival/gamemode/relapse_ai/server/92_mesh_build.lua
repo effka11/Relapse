@@ -39,7 +39,7 @@ Mesh.PaintVersion = 8
 -- 32u: a 48u-wide stair still gets a column (the clearance hull needs 12u to each
 -- wall, so a 40u raster could miss it entirely).
 local cvCell = CreateConVar("relapse_ai_mesh_cell", "32", FCVAR_NOTIFY, "Relapse mesh sample spacing (units). Smaller = denser paint.")
-local cvBudget = CreateConVar("relapse_ai_mesh_budget_ms", "4", FCVAR_NOTIFY, "Milliseconds per tick for mesh generation.")
+local cvBudget = CreateConVar("relapse_ai_mesh_budget_ms", "4", FCVAR_NOTIFY, "Milliseconds per tick for mesh paint and for reading a saved skin.")
 
 local WALKABLE_Z = 0.7 -- Source walkable limit: slopes up to ~45 degrees
 local STEP_HEIGHT = 18
@@ -608,35 +608,62 @@ function Mesh.Save()
 	return true
 end
 
-function Mesh.Load()
+-- Reading the skin used to Explode the whole file and build every cell in the
+-- tick that loaded Lua. A 1 MB skin stalled the server as the map came up.
+-- Think chews lines under the paint budget; the admin load still runs it through.
+local function OpenMeshJob()
 	local path = Mesh.FilePath()
 	if not file.Exists(path, "DATA") then
-		return false, "missing"
+		return nil, "missing"
 	end
 	local raw = file.Read(path, "DATA")
 	if not raw or raw == "" then
-		return false, "empty"
+		return nil, "empty"
 	end
-	local lines = string.Explode("\n", raw, false)
-	if not string.StartWith(lines[1] or "", "RelapseMesh") then
-		return false, "bad header"
+	if not string.StartWith(raw, "RelapseMesh") then
+		return nil, "bad header"
 	end
-	local version = tonumber(string.match(lines[1], "RelapseMesh%s+(%d+)")) or 1
-	local map, cell, expect
-	local cells = {}
-	for i = 2, #lines do
-		local line = string.Trim(lines[i])
+	return {
+		raw = raw,
+		path = path,
+		pos = 1,
+		cells = {},
+		meta = {version = tonumber(string.match(string.sub(raw, 1, 32), "RelapseMesh%s+(%d+)")) or 1},
+	}
+end
+
+local function ParseMeshChunk(job, deadline)
+	local raw = job.raw
+	local n = #raw
+	local i = job.pos
+	local cells = job.cells
+	local meta = job.meta
+	local guard = 0
+	while i <= n do
+		if deadline and guard >= 48 then
+			if SysTime() >= deadline then break end
+			guard = 0
+		end
+		guard = guard + 1
+		local nl = string.find(raw, "\n", i, true)
+		local last = nl and (nl - 1) or n
+		local line = string.Trim(string.sub(raw, i, last))
+		i = nl and (nl + 1) or (n + 1)
 		if line ~= "" then
 			local m = string.match(line, "^map%s+(.+)$")
 			local cl = tonumber(string.match(line, "^cell%s+([%d%.]+)"))
 			local cn = tonumber(string.match(line, "^count%s+(%d+)"))
 			if m then
-				map = string.Trim(m)
+				meta.map = string.Trim(m)
+				if meta.map ~= game.GetMap() then
+					job.pos = i
+					return true, "map mismatch " .. meta.map
+				end
 			elseif cl then
-				cell = cl
+				meta.cell = cl
 			elseif cn then
-				expect = cn
-			else
+				meta.expect = cn
+			elseif not string.StartWith(line, "RelapseMesh") then
 				local x, y, z, nx, ny, nz, flag = string.match(line, "([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s+([^%s]+)%s*(%a*)")
 				if x then
 					cells[#cells + 1] = {
@@ -648,20 +675,28 @@ function Mesh.Load()
 			end
 		end
 	end
-	if map and map ~= game.GetMap() then
-		return false, "map mismatch " .. map
+	job.pos = i
+	return i > n
+end
+
+local function CommitMesh(job)
+	local cells = job.cells
+	local meta = job.meta
+	if meta.map and meta.map ~= game.GetMap() then
+		return false, "map mismatch " .. meta.map
 	end
 	if #cells == 0 then
 		return false, "no cells in file"
 	end
+	local version = meta.version or 1
 	Mesh.GenId = Mesh.GenId + 1
 	Mesh.Cells = cells
-	Mesh.CellSize = cell or Mesh.CellSize or 40
+	Mesh.CellSize = meta.cell or Mesh.CellSize or 40
 	for _, stream in pairs(Mesh.Streams) do
 		stream.gen = Mesh.GenId
 		stream.i = 1
 	end
-	AI.Log("mesh loaded %d cells (%su, paint v%d) from data/%s", #cells, Mesh.CellSize, version, path)
+	AI.Log("mesh loaded %d cells (%su, paint v%d) from data/%s", #cells, Mesh.CellSize, version, job.path)
 	-- Stale paint (old sampler or old bounds) still links so bots have something
 	-- now; the repaint waits for InitPostEntity, when spawns, sigil nodes and
 	-- the .nav exist to bound it. Painting here, at Lua init, saw no entities
@@ -669,12 +704,71 @@ function Mesh.Load()
 	Mesh.PaintedVersion = version
 	Mesh.NeedRepaint = version < Mesh.PaintVersion
 	if Mesh.NeedRepaint then
-		AI.Warn("mesh data/%s is paint v%d (current v%d): stale, repainting once the map is up", path, version, Mesh.PaintVersion)
+		AI.Warn("mesh data/%s is paint v%d (current v%d): stale, repainting once the map is up", job.path, version, Mesh.PaintVersion)
 	end
 	if Mesh.StartLink then
 		Mesh.StartLink()
 	end
 	return true, #cells
+end
+
+function Mesh.Load()
+	local job = Mesh.Loading
+	if job and not job.raw then
+		Mesh.Loading = nil
+		job = nil
+	end
+	if not job then
+		local opened, err = OpenMeshJob()
+		if not opened then return false, err end
+		job = opened
+	end
+	local done, err = ParseMeshChunk(job, nil)
+	Mesh.Loading = nil
+	if err then return false, err end
+	if not done then return false, "empty" end
+	return CommitMesh(job)
+end
+
+-- Queue a read. The file itself is opened on the first Think, then lines are
+-- parsed a few milliseconds at a time.
+function Mesh.StartLoad()
+	if Mesh.Loading or Mesh.Building or #Mesh.Cells > 0 then return end
+	Mesh.Loading = {phase = "open"}
+end
+
+function Mesh.LoadStep()
+	local job = Mesh.Loading
+	if not job or Mesh.Building then
+		Mesh.Loading = nil
+		return
+	end
+	if not job.raw then
+		local opened, err = OpenMeshJob()
+		if not opened then
+			Mesh.Loading = nil
+			if err ~= "missing" then
+				AI.Warn("mesh load failed: %s", tostring(err))
+			end
+			return
+		end
+		opened.phase = "parse"
+		Mesh.Loading = opened
+		return
+	end
+	local deadline = SysTime() + math.max(0.001, cvBudget:GetFloat() / 1000)
+	local done, err = ParseMeshChunk(job, deadline)
+	if err then
+		Mesh.Loading = nil
+		AI.Warn("mesh load failed: %s", tostring(err))
+		return
+	end
+	if not done then return end
+	Mesh.Loading = nil
+	local ok, fail = CommitMesh(job)
+	if not ok then
+		AI.Warn("mesh load failed: %s", tostring(fail))
+	end
 end
 
 function Mesh.FinishBuild()
@@ -738,6 +832,10 @@ function Mesh.StartBuild(pl, force)
 	if Mesh.Building and not force then
 		Mesh.Reply(pl, "[Relapse AI] mesh already painting")
 		return
+	end
+	-- A forced repaint owns the cells. An in-flight read must not commit over it.
+	if force then
+		Mesh.Loading = nil
 	end
 
 	if not force and #Mesh.Cells > 0 then
@@ -813,27 +911,36 @@ concommand.Add("relapse_buildmesh", function(pl)
 end)
 
 hook.Add("Think", "RelapseAI.MeshBuild", function()
+	if Mesh.Loading then
+		Mesh.LoadStep()
+	end
 	if Mesh.Building then
 		Mesh.BuildStep()
 	end
 	Mesh.StreamStep()
 end)
 
+local function MeshAfterMap()
+	if Mesh.Loading then
+		timer.Simple(0.5, MeshAfterMap)
+		return
+	end
+	if #Mesh.Cells == 0 then
+		Mesh.Load()
+	end
+	-- Stale file: repaint now that spawns, sigil nodes and the .nav bound
+	-- the raster. Bots fall back to .nav (or retry) for the minute it takes;
+	-- a skin with the pit and the stair tops missing is worse than that.
+	if Mesh.NeedRepaint and not Mesh.Building then
+		AI.Warn("mesh paint is stale (v%d < v%d): repainting %s", Mesh.PaintedVersion or 0, Mesh.PaintVersion, game.GetMap())
+		Mesh.StartBuild(nil, true)
+	end
+end
+
 hook.Add("InitPostEntity", "RelapseAI.MeshLoad", function()
-	timer.Simple(1, function()
-		if #Mesh.Cells == 0 then
-			Mesh.Load()
-		end
-		-- Stale file: repaint now that spawns, sigil nodes and the .nav bound
-		-- the raster. Bots fall back to .nav (or retry) for the minute it takes;
-		-- a skin with the pit and the stair tops missing is worse than that.
-		if Mesh.NeedRepaint and not Mesh.Building then
-			AI.Warn("mesh paint is stale (v%d < v%d): repainting %s", Mesh.PaintedVersion or 0, Mesh.PaintVersion, game.GetMap())
-			Mesh.StartBuild(nil, true)
-		end
-	end)
+	timer.Simple(1, MeshAfterMap)
 end)
 
 if #Mesh.Cells == 0 then
-	Mesh.Load()
+	Mesh.StartLoad()
 end

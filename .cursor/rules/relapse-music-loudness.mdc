@@ -1,0 +1,51 @@
+---
+description: Relapse music matches integrated loudness at -16.6 LUFS. The slider sits on top of that match.
+globs: gamemodes/zombiesurvival/gamemode/cl_relapse_endmusic.lua,gamemodes/zombiesurvival/gamemode/cl_relapse_oxygen_music.lua,gamemodes/zombiesurvival/gamemode/cl_relapse_monsoon_music.lua,gamemodes/zombiesurvival/gamemode/cl_relapse_music_lift.lua,gamemodes/zombiesurvival/gamemode/cl_options.lua,gamemodes/zombiesurvival/content/sound/**/*
+alwaysApply: true
+---
+
+# Relapse громкость трека
+
+Новый трек садится на **−16.6 LUFS**, как Signal Interference. Это громкость куска, который реально играет (EBU R128, поле `input_i`), не пик и не хвост файла за таймером.
+
+Петля, которая проходит файл целиком (эмбиент Oxygen), мерится без обрезки. Победный трек обрывается по `EndGameTime` (сейчас 60 с): меряется первые 60 с, `-t 60`. Сменился таймер после раунда — победные куски меряются заново.
+
+Пик (`input_tp`) того же куска только потолок: после gain истинный пик не выше **−1 dBTP**. Тихий трек, которому до −16.6 не хватает запаса до этого пика, остаётся на пике. Лимитер и `loudnorm` в файл не писать: они жмут динамику.
+
+Замер: `ffmpeg -i <file> -t <секунд> -af loudnorm=print_format=json -f null -`. Без `-t`, если играет весь файл. В расчёт берётся `input_i`. `output_i` — уже чужая цель прогона.
+
+```
+gain = 10 ^ ((-16.6 - input_i) / 20)
+```
+
+Match и подъём фразы уже лежат в файле, который играет сервер. Поверх него один раз `RelapseMusicVolume()`: 100% — это 0.7 мастера (около −19.7 LUFS), ползунок 0–150%. В файл ползунок не зашивать. `zs_beatsvolume` к этим трекам не умножать. Фейд волны тоже снаружи файла: у Oxygen холодный старт и вход петли — разные кривые, у победы фейд привязан к часам `EndGameTime`.
+
+## Подъём фразы
+
+После match одна кривая на все треки, включая победные. `L` — короткая громкость EBU R128, окно 3 с по центру момента, плюс match в дБ. Сила в коде — `GM.RelapsePhraseStrength` = **0.50**.
+
+```
+boost = 0                                          , L >= -16.6
+boost = min(6, strength * (-16.6 - L)) * gate(L)   , L < -16.6
+gate = smoothstep(-34.6, -28.6, L)
+```
+
+Готовый файл собирается из `reference/music/source/`: match × подъём, шаг громкости 0.1 с, между точками линейно. Петля — весь файл. Победный кусок меряется по первым `EndGameTime` секундам, в файл пишется та же кривая на всю длину. Сменилась сила или таймер — собрать файл заново из исходника, старый подъём не умножать сверху.
+
+Слушать силу до сборки: `reference/music/index.html` (локальный сервер из этой папки). Страница играет исходник. Исходники в раздачу клиентам не класть и поверх них не писать ни фейд, ни подъём.
+
+Если после кодирования истинный пик выше **−1 dBTP**, весь файл умножается на одну константу, пока пик не сядет на потолок. Лимитер и `loudnorm` по-прежнему не писать. У Cloud Stillness Vorbis поднял пик с −1.00 до −0.85, поэтому файл дополнительно тише на 0.18 дБ: первые 60 с вышли −16.88 LUFS, пик −1.11 dBTP.
+
+```lua
+-- ❌ громкость на слух или второй множитель битов
+chan:SetVolume(0.4 * GAMEMODE.BeatsVolume)
+
+-- ❌ подтянуть файл loudnorm, или мерить хвост, который таймер срезает
+gain = 10 ^ ((-1 - input_tp) / 20)
+
+-- ❌ match и подъём уже в файле — второй раз поднимает тихие фразы
+chan:SetVolume(fade * 0.508 * GAMEMODE:RelapseMusicVolume())
+
+-- ✅ фейд и ползунок; сила 0.50 уже в файле
+chan:SetVolume(fade * GAMEMODE:RelapseMusicVolume())
+```

@@ -4,8 +4,9 @@
 -- own time and release. A separate rise runs between peaks and is what the bar
 -- follows. Overlapping sounds show the max. Zombies do not get that
 -- release. Each track sends one peak, its loudest point, scaled by the shared
--- distance curve stretched over that track's radius. The glow then fades for a
--- few seconds. A shot's networked peak is still that one instant.
+-- distance curve stretched over that track's radius, plus where it happened.
+-- The zombie plants a static point there. It fades in place and does not
+-- follow the body. A shot's networked peak is still that one instant.
 -- AI bots do not use this yet; their eyes stay in relapse_ai/server/40_perception.lua.
 
 local math_max = math.max

@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сила подъёма</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #121418;
+    --fg: #e8e8e8;
+    --muted: #9aa0a8;
+    --line: #2a2e36;
+    --before: #8b939e;
+    --after: #e0b15c;
+    --tick: #d0d4da;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.45 "Segoe UI", sans-serif;
+  }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 24px 64px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  p { margin: 0; color: var(--muted); }
+  .lead { max-width: 68ch; }
+  .strength {
+    margin: 28px 0 8px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 20px;
+    align-items: center;
+  }
+  .strength h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .value {
+    font-variant-numeric: tabular-nums;
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .value small {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .slider {
+    position: relative;
+    padding-top: 6px;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 28px;
+    margin: 0;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+  }
+  input[type="range"]:focus { outline: none; }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px;
+    background: var(--line);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -7px;
+    border: 0;
+    border-radius: 0;
+    background: var(--fg);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 2px;
+    background: var(--line);
+    border: 0;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 0;
+    background: var(--fg);
+    cursor: pointer;
+  }
+  .tick {
+    position: absolute;
+    top: 10px;
+    width: 1px;
+    height: 14px;
+    background: var(--tick);
+    transform: translateX(-50%);
+    pointer-events: none;
+    left: calc(var(--p) * (100% - 16px) + 8px);
+  }
+  .scale {
+    position: relative;
+    height: 32px;
+    margin-top: 2px;
+  }
+  .scale span {
+    position: absolute;
+    transform: translateX(-50%);
+    left: calc(var(--p) * (100% - 16px) + 8px);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .scale span:first-child { transform: none; text-align: left; }
+  .scale span:last-child { transform: translateX(-100%); text-align: right; }
+  .scale span b {
+    display: block;
+    font-weight: 600;
+    color: var(--fg);
+  }
+  .legend {
+    display: flex;
+    gap: 18px;
+    margin: 22px 0 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .legend i {
+    display: inline-block;
+    width: 14px;
+    height: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .legend .b { background: var(--before); }
+  .legend .a { background: var(--after); }
+  article { margin-top: 26px; }
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+  button {
+    font: inherit;
+    color: var(--fg);
+    background: transparent;
+    border: 1px solid var(--line);
+    padding: 6px 14px;
+    cursor: pointer;
+    min-width: 92px;
+  }
+  button[aria-pressed="true"] { border-color: var(--after); color: var(--after); }
+  h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .meta { color: var(--muted); font-size: 13px; }
+  canvas { width: 100%; height: 168px; display: block; }
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Сила подъёма</h1>
+  <p class="lead">Четыре трека с исходников, до фейда волны. На сервере уже записана сила 0.50. Здесь ползунок слушает другую силу поверх чистого исходника. Фейд тот же, что на сервере. Ползунок музыки сюда не входит.</p>
+
+  <div class="strength">
+    <div>
+      <h2>Сила</h2>
+      <div class="value" id="value">0.50<small id="value-note">как в скрипте</small></div>
+    </div>
+    <div>
+      <div class="slider">
+        <div class="tick" style="--p: 0"></div>
+        <div class="tick" style="--p: 0.5"></div>
+        <input id="strength" type="range" min="0" max="1" step="0.01" value="0.50" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.50" aria-label="Сила подъёма">
+      </div>
+      <div class="scale">
+        <span style="--p: 0"><b>0</b></span>
+        <span style="--p: 0.5"><b>0.50</b>скрипт</span>
+        <span style="--p: 1"><b>1</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="b"></i>До подъёма</span>
+    <span><i class="a"></i>После, при этой силе</span>
+  </div>
+
+  <div id="tracks"></div>
+</main>
+<script src="envelopes.js"></script>
+<script>
+const ANCHOR = -16.6
+const CAP = 6
+const GATE_LO = -34.6
+const GATE_HI = -28.6
+const SCRIPT = 0.5
+
+const META = [
+  { id: "oxygen", title: "Signal Interference", place: "Oxygen", file: "source/oxygen.wav", match: 1, playTo: null, fade: "oxygen" },
+  { id: "unstoppable", title: "Unstoppable", place: "Monsoon", file: "source/unstoppable.wav", match: 0.745, playTo: null, fade: "monsoon" },
+  { id: "beyond_arrival", title: "Beyond Arrival", place: "Победа зомби", file: "source/beyond_arrival.ogg", match: 0.508, playTo: 60, fade: "victory" },
+  { id: "cloud_stillness", title: "Cloud Stillness", place: "Победа людей", file: "source/cloud_stillness.ogg", match: 0.947, playTo: 60, fade: "victory" },
+]
+
+const KNOT_T = [0, 2.3876757300856766, 4.775351460171358, 7.704233689076454, 9.550702920342706]
+const KNOT_V = [0, 0.38268343236, 0.68, 0.92, 1]
+const KNOT_SLOPE = (function () {
+  const n = KNOT_T.length
+  const delta = []
+  for (let i = 0; i < n - 1; i++) delta[i] = (KNOT_V[i + 1] - KNOT_V[i]) / (KNOT_T[i + 1] - KNOT_T[i])
+  const slope = [delta[0]]
+  for (let i = 1; i < n - 1; i++) {
+    if (delta[i - 1] * delta[i] <= 0) slope[i] = 0
+    else {
+      const w1 = 2 * (KNOT_T[i + 1] - KNOT_T[i]) + (KNOT_T[i] - KNOT_T[i - 1])
+      const w2 = (KNOT_T[i + 1] - KNOT_T[i]) + 2 * (KNOT_T[i] - KNOT_T[i - 1])
+      slope[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i])
+    }
+  }
+  slope[n - 1] = delta[n - 2]
+  return slope
+})()
+
+function smoothstep(a, b, x) {
+  const u = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return u * u * (3 - 2 * u)
+}
+
+function sCurve(t) {
+  if (t <= 0) return 0
+  if (t >= 1) return 1
+  return t * t * (3 - 2 * t)
+}
+
+function monsoonIn(t) {
+  if (t <= 0) return 0
+  if (t >= KNOT_T[KNOT_T.length - 1]) return 1
+  let i = 0
+  while (i < KNOT_T.length - 2 && t > KNOT_T[i + 1]) i++
+  const h = KNOT_T[i + 1] - KNOT_T[i]
+  const u = (t - KNOT_T[i]) / h
+  const u2 = u * u
+  const u3 = u2 * u
+  const m0 = KNOT_SLOPE[i] * h
+  const m1 = KNOT_SLOPE[i + 1] * h
+  return (2 * u3 - 3 * u2 + 1) * KNOT_V[i]
+    + (u3 - 2 * u2 + u) * m0
+    + (-2 * u3 + 3 * u2) * KNOT_V[i + 1]
+    + (u3 - u2) * m1
+}
+
+function fadeOf(track, t, len) {
+  if (track.fade === "oxygen") {
+    let vol = sCurve(t / 10.58)
+    const outStart = 97.5
+    if (t >= outStart && len > outStart) vol *= 1 - sCurve((t - outStart) / (len - outStart))
+    return vol
+  }
+  if (track.fade === "monsoon") {
+    let vol = monsoonIn(t)
+    const tail = 12.695197068514295
+    const outStart = Math.max(0, len - tail)
+    if (t >= outStart && len > outStart) vol *= 1 - Math.min(1, Math.max(0, (t - outStart) / tail))
+    return vol
+  }
+  const left = 60 - t
+  if (left <= 0) return 0
+  if (left >= 4) return 1
+  return left / 4
+}
+
+function strength() {
+  return Number(document.getElementById("strength").value)
+}
+
+function fileLoud(track, t) {
+  const loud = track.loud
+  const x = t * 10
+  const i0 = Math.max(0, Math.min(loud.length - 1, Math.floor(x)))
+  const i1 = Math.min(loud.length - 1, i0 + 1)
+  const u = Math.min(1, Math.max(0, x - i0))
+  return loud[i0] * (1 - u) + loud[i1] * u
+}
+
+function boostDb(level, k) {
+  const gap = ANCHOR - level
+  if (gap <= 0) return 0
+  return Math.min(CAP, k * gap) * smoothstep(GATE_LO, GATE_HI, level)
+}
+
+function playedLevel(track, t, k) {
+  return fileLoud(track, t) + 20 * Math.log10(track.match)
+}
+
+function gainAt(track, t, len, k) {
+  const level = playedLevel(track, t, k)
+  const boost = boostDb(level, k)
+  return track.match * Math.pow(10, boost / 20) * fadeOf(track, t, len)
+}
+
+const slider = document.getElementById("strength")
+const valueEl = document.getElementById("value")
+const noteEl = document.getElementById("value-note")
+
+function paintValue() {
+  const k = strength()
+  const text = k.toFixed(2)
+  valueEl.firstChild.textContent = text
+  slider.setAttribute("aria-valuenow", text)
+  if (k === 0) noteEl.textContent = "без подъёма"
+  else if (Math.abs(k - SCRIPT) < 0.001) noteEl.textContent = "как в скрипте"
+  else noteEl.textContent = "доля зазора"
+}
+
+const root = document.getElementById("tracks")
+const views = []
+
+for (const meta of META) {
+  const track = Object.assign({}, meta, { loud: ENVELOPES[meta.id] })
+  const article = document.createElement("article")
+  const row = document.createElement("div")
+  row.className = "row"
+  const button = document.createElement("button")
+  button.type = "button"
+  button.textContent = "Играть"
+  button.setAttribute("aria-pressed", "false")
+  const title = document.createElement("h3")
+  title.textContent = track.title
+  const metaEl = document.createElement("div")
+  metaEl.className = "meta"
+  const end = track.playTo || (track.loud.length - 1) / 10
+  metaEl.textContent = track.place + " · " + format(end)
+  const axis = document.createElement("div")
+  axis.className = "axis"
+  const axisL = document.createElement("span")
+  axisL.textContent = "0 с"
+  const axisM = document.createElement("span")
+  axisM.textContent = "Короткая громкость после match, LUFS"
+  const axisR = document.createElement("span")
+  axisR.textContent = format(end)
+  axis.append(axisL, axisM, axisR)
+  row.append(button, title, metaEl)
+  const canvas = document.createElement("canvas")
+  article.append(row, canvas, axis)
+  root.append(article)
+  const audio = new Audio(track.file)
+  audio.preload = "auto"
+  views.push({ track, button, canvas, axis, audio, end })
+}
+
+function format(t) {
+  const s = Math.max(0, Math.round(t))
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")
+}
+
+function draw(view, playhead) {
+  const canvas = view.canvas
+  const dpr = window.devicePixelRatio || 1
+  const w = canvas.clientWidth
+  const h = canvas.clientHeight
+  if (w < 2 || h < 2) return
+  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+    canvas.width = Math.floor(w * dpr)
+    canvas.height = Math.floor(h * dpr)
+  }
+  const ctx = canvas.getContext("2d")
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, w, h)
+  const padL = 44
+  const padR = 12
+  const padT = 10
+  const padB = 8
+  const plotW = w - padL - padR
+  const plotH = h - padT - padB
+  const k = strength()
+  const n = Math.min(view.track.loud.length, Math.floor(view.end * 10) + 1)
+  let lo = ANCHOR
+  let hi = ANCHOR
+  const before = new Array(n)
+  const after = new Array(n)
+  for (let i = 0; i < n; i++) {
+    const t = i / 10
+    const level = playedLevel(view.track, t, k)
+    before[i] = level
+    after[i] = level + boostDb(level, k)
+    lo = Math.min(lo, before[i], after[i])
+    hi = Math.max(hi, before[i], after[i])
+  }
+  lo = Math.floor(lo / 2) * 2 - 2
+  hi = Math.ceil(hi / 2) * 2 + 2
+  const xOf = (t) => padL + (t / view.end) * plotW
+  const yOf = (v) => padT + ((hi - v) / (hi - lo)) * plotH
+
+  ctx.strokeStyle = "#2a2e36"
+  ctx.lineWidth = 1
+  ctx.fillStyle = "#9aa0a8"
+  ctx.font = "11px Segoe UI"
+  ctx.textAlign = "right"
+  for (let v = Math.ceil(lo / 4) * 4; v <= hi; v += 4) {
+    const y = yOf(v)
+    ctx.beginPath()
+    ctx.moveTo(padL, y)
+    ctx.lineTo(w - padR, y)
+    ctx.stroke()
+    ctx.fillText(String(v), padL - 6, y + 4)
+  }
+  const yA = yOf(ANCHOR)
+  ctx.strokeStyle = "#c8ccd2"
+  ctx.setLineDash([3, 4])
+  ctx.beginPath()
+  ctx.moveTo(padL, yA)
+  ctx.lineTo(w - padR, yA)
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.textAlign = "left"
+  ctx.fillText("−16.6", w - padR - 36, Math.max(12, yA - 4))
+
+  function stroke(series, color) {
+    ctx.beginPath()
+    for (let i = 0; i < n; i++) {
+      const x = xOf(i / 10)
+      const y = yOf(series[i])
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+  }
+  stroke(before, "#8b939e")
+  stroke(after, "#e0b15c")
+
+  if (playhead != null) {
+    const x = xOf(Math.min(view.end, Math.max(0, playhead)))
+    ctx.strokeStyle = "#e8e8e8"
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x, padT)
+    ctx.lineTo(x, padT + plotH)
+    ctx.stroke()
+  }
+
+}
+
+function drawAll(playheadView, playhead) {
+  for (const view of views) {
+    draw(view, view === playheadView ? playhead : null)
+  }
+}
+
+let ctxAudio = null
+let playing = null
+const wired = new WeakMap()
+
+function audioCtx() {
+  if (!ctxAudio) ctxAudio = new AudioContext()
+  return ctxAudio
+}
+
+function wire(audio) {
+  let node = wired.get(audio)
+  if (node) return node
+  const actx = audioCtx()
+  const src = actx.createMediaElementSource(audio)
+  const gain = actx.createGain()
+  src.connect(gain).connect(actx.destination)
+  node = { gain }
+  wired.set(audio, node)
+  return node
+}
+
+function lengthOf(view) {
+  const d = view.audio.duration
+  if (d && isFinite(d)) return d
+  return (view.track.loud.length - 1) / 10
+}
+
+function stopAtEnd(view) {
+  if (!playing || playing.view !== view) return
+  view.audio.pause()
+  playing = null
+  view.button.textContent = "Играть"
+  view.button.setAttribute("aria-pressed", "false")
+  view.audio.currentTime = 0
+  draw(view, null)
+}
+
+function frame() {
+  if (!playing) return
+  const view = playing.view
+  const t = view.audio.currentTime
+  if (view.track.playTo != null && t >= view.track.playTo) {
+    stopAtEnd(view)
+    return
+  }
+  const target = gainAt(view.track, t, lengthOf(view), strength())
+  const actx = audioCtx()
+  const now = actx.currentTime
+  const param = playing.gain.gain
+  param.cancelScheduledValues(now)
+  param.setValueAtTime(param.value, now)
+  param.linearRampToValueAtTime(Math.max(0, target), now + 0.05)
+  draw(view, t)
+  playing.raf = requestAnimationFrame(frame)
+}
+
+function play(view) {
+  const actx = audioCtx()
+  actx.resume()
+  if (playing && playing.view === view && !view.audio.paused) {
+    view.audio.pause()
+    cancelAnimationFrame(playing.raf)
+    playing = null
+    view.button.textContent = "Играть"
+    view.button.setAttribute("aria-pressed", "false")
+    return
+  }
+  if (playing) {
+    playing.view.audio.pause()
+    cancelAnimationFrame(playing.raf)
+    playing.view.button.textContent = "Играть"
+    playing.view.button.setAttribute("aria-pressed", "false")
+    playing = null
+  }
+  const node = wire(view.audio)
+  const t = view.audio.currentTime
+  node.gain.gain.setValueAtTime(gainAt(view.track, t, lengthOf(view), strength()), actx.currentTime)
+  view.audio.play().catch(function () {})
+  view.button.textContent = "Пауза"
+  view.button.setAttribute("aria-pressed", "true")
+  playing = { view, gain: node.gain, raf: 0 }
+  playing.raf = requestAnimationFrame(frame)
+}
+
+for (const view of views) {
+  view.button.addEventListener("click", () => play(view))
+  view.audio.addEventListener("ended", () => stopAtEnd(view))
+}
+
+slider.addEventListener("input", () => {
+  paintValue()
+  drawAll(playing && playing.view, playing && playing.view.audio.currentTime)
+})
+
+window.addEventListener("resize", () => drawAll(playing && playing.view, playing && playing.view.audio.currentTime))
+paintValue()
+drawAll(null, null)
+</script>
+</body>
+</html>

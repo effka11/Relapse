@@ -47,6 +47,7 @@ local GRID_STAT_INFO = {
 	Phase = { key = "phase", name = "char_stat_phase", fallback = "Barricade phase speed", kind = "pct" },
 	DeviceHealth = { key = "devicehealth", name = "char_stat_devicehealth", fallback = "Mechanical device durability", kind = "pct" },
 	DeviceHandle = { key = "devicehandle", name = "char_stat_devicehandle", fallback = "Device setup speed", kind = "pct" },
+	DeviceRepair = { key = "devicerepair", name = "char_stat_devicerepair", fallback = "Mechanical device repair", kind = "pct" },
 	TurretFire = { key = "turretfire", name = "char_stat_turretfire", fallback = "Turret attack speed", kind = "pct" },
 	GunFire = { key = "gunfire", name = "char_stat_gunfire", fallback = "Fire rate", kind = "pct" },
 	RangedShop = { key = "rangedshop", name = "char_stat_rangedshop", fallback = "Ranged weapon discount", kind = "pct" },
