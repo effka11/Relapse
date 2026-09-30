@@ -1,8 +1,14 @@
 -- Relapse mesh graph: 8-neighbour walk links, hops, one-way drops, ladder
 -- shafts; A* through cell centres. Centres stay inside the paint; a taut string
 -- hugged cliff lips. Source .nav is fallback until this graph is linked
--- (relapse_ai_mesh_path 0 to stay on .nav). Cells, gap bridges, ladder shafts
--- and island labels share relapse_ai_mesh_link_ms, so the finish is not one tick.
+-- (relapse_ai_mesh_path 0 to stay on .nav).
+--
+-- Linking and gap bridges trace every cell. That graph is written once to
+-- data/relapse_ai/mesh/<map>.graph.txt. Later loads read those edges and rebuild
+-- the grid, door ids and island labels without tracing links or bridges. Bump
+-- LinkVersion when a link or bridge change would pick different edges.
+-- A fresh trace links and bridges every cell in one pass. Reading a saved
+-- graph, ladder shafts and island labels still share relapse_ai_mesh_link_ms.
 --
 -- A walk link is what a player can do without pressing jump: the chord between
 -- the two centres, sampled every few units, never steps more than the step
@@ -27,7 +33,13 @@ local CurTime = CurTime
 local IsValid = IsValid
 
 local cvUse = CreateConVar("relapse_ai_mesh_path", "1", FCVAR_NOTIFY, "1 = bots walk the Relapse skin, 0 = Source .nav.")
-local cvBudget = CreateConVar("relapse_ai_mesh_link_ms", "4", FCVAR_NOTIFY, "Milliseconds per tick while linking cells, bridges, ladders and islands.")
+local cvBudget = CreateConVar("relapse_ai_mesh_link_ms", "4", FCVAR_NOTIFY, "Milliseconds per tick while reading a saved graph, indexing, ladders and islands. Linking and bridges run in one pass.")
+
+-- Bump when linking or bridging would choose different edges. An older graph
+-- file is ignored and the skin is traced again; the new file is written when
+-- that finishes.
+-- v1: walks, doors, jumps, drops, gap bridges, ladder ids.
+Mesh.LinkVersion = 1
 
 local SEG_GROUND = 0
 local SEG_DROP = 1
@@ -393,8 +405,11 @@ local function AddLadderEdge(lo, hi, ladder, rise)
 	if not low or not high or lo == hi then return false end
 	local costUp = rise * 1.5 + 80
 	local costDown = rise + 40
-	low.nbs[#low.nbs + 1] = {j = hi, cost = costUp, kind = "ladder", seg = SEG_LADDER_UP, ladder = ladder}
-	high.nbs[#high.nbs + 1] = {j = lo, cost = costDown, kind = "ladder", seg = SEG_LADDER_DOWN, ladder = ladder}
+	-- Id, not the climbable table: the table is rebuilt with the shafts, and the
+	-- baked file has to point at the same shaft next load.
+	local id = (Nav and Nav.LadderID and Nav.LadderID(ladder)) or (ladder.GetID and ladder:GetID())
+	low.nbs[#low.nbs + 1] = {j = hi, cost = costUp, kind = "ladder", seg = SEG_LADDER_UP, ladder = ladder, ladderId = id}
+	high.nbs[#high.nbs + 1] = {j = lo, cost = costDown, kind = "ladder", seg = SEG_LADDER_DOWN, ladder = ladder, ladderId = id}
 	Mesh.LinkCount = Mesh.LinkCount + 1
 	return true
 end
@@ -660,9 +675,60 @@ local function LogLadders(acc, nClimb)
 	end
 end
 
+-- Point baked ladder edges at the climbables that exist now. Returns how many
+-- edges needed a shaft and how many got one. A miss means the ids moved.
+function Mesh.RebindLadderPtrs()
+	local byId = {}
+	local list = LadderList()
+	for i = 1, #list do
+		local id = Nav and Nav.LadderID and Nav.LadderID(list[i])
+		if id then byId[id] = list[i] end
+	end
+	local bound, need = 0, 0
+	local cells = Mesh.Cells
+	for i = 1, #cells do
+		local nbs = cells[i].nbs
+		if nbs then
+			for k = 1, #nbs do
+				local e = nbs[k]
+				if e.ladderId then
+					need = need + 1
+					local lad = byId[e.ladderId]
+					if lad then
+						e.ladder = lad
+						bound = bound + 1
+					else
+						e.ladder = nil
+					end
+				end
+			end
+		end
+	end
+	return bound, need
+end
+
 function Mesh.LinkLadders()
 	if not Nav or not Mesh.Cells or #Mesh.Cells == 0 or not Mesh.Grid then
 		return 0
+	end
+	-- Shafts were baked with the walks. Reattach the live climbable; do not
+	-- trace the landings again. An id that no longer exists falls through.
+	if Mesh.LaddersFromGraph and Mesh.GraphVersion == Mesh.LinkVersion then
+		local list = LadderList()
+		if #list == 0 then
+			return Mesh.LadderCount or 0
+		end
+		local bound, need = Mesh.RebindLadderPtrs()
+		if need > 0 and bound == need then
+			if Mesh.SendLinkedLadders then Mesh.SendLinkedLadders() end
+			return Mesh.LadderCount or 0
+		end
+		AI.Log("mesh graph ladders rebound %d/%d, tracing shafts", bound, need)
+		Mesh.LaddersFromGraph = nil
+	elseif Mesh.GraphSave and (Mesh.LadderCount or 0) > 0 then
+		Mesh.RebindLadderPtrs()
+		if Mesh.SendLinkedLadders then Mesh.SendLinkedLadders() end
+		return Mesh.LadderCount or 0
 	end
 	StripLadderNbs()
 	Mesh.LinkedLadders = {}
@@ -674,6 +740,11 @@ function Mesh.LinkLadders()
 	LogLadders(acc, #list)
 	if Mesh.Linked then
 		Mesh.ComputeComponents()
+	end
+	if acc.n > 0 and Mesh.Linked and not Mesh.Linking and Mesh.QueueGraphSave then
+		Mesh.LaddersFromGraph = true
+		Mesh.GraphVersion = Mesh.LinkVersion
+		Mesh.QueueGraphSave()
 	end
 	return acc.n
 end
@@ -687,6 +758,11 @@ function Mesh.IsLadderLinked(ladder)
 	return id ~= nil and Mesh.LinkedLadders[id] ~= nil
 end
 
+-- Door origin rounded to a unit. EntIndex changes every load; the hinge does not.
+local function DoorKey(x, y, z)
+	return math.floor(x + 0.5), math.floor(y + 0.5), math.floor(z + 0.5)
+end
+
 -- Pair (a, b) seen once (j > i). Walk both ways; else a hop up and the drop
 -- back; else a plain one-way drop from the higher cell.
 local function AddWalkPair(i, j, a, b, dist, crouch, nx, ny)
@@ -695,7 +771,12 @@ local function AddWalkPair(i, j, a, b, dist, crouch, nx, ny)
 	local extra
 	if door or crouch or nx ~= nil then
 		extra = {}
-		if door then extra.door = door:EntIndex() end
+		if door then
+			extra.door = door:EntIndex()
+			local p = door:GetPos()
+			local x, y, z = DoorKey(p.x, p.y, p.z)
+			extra.doorPos = {x, y, z}
+		end
 		if crouch then extra.crouch = true end
 		if nx ~= nil then
 			extra.nx, extra.ny = nx, ny
@@ -829,8 +910,8 @@ local function BridgeOpening(a, b)
 	return foundX, foundY
 end
 
--- One slice of the gap pass. Traces for every skipped strip used to land in
--- the same tick as the last cell, which hitched the server when the skin finished.
+-- Gap bridges for every cell. The link job runs this to the end (deadline
+-- math.huge). A finite deadline still returns the next cell index.
 local function BridgeGapStep(from, deadline, added)
 	local cells = Mesh.Cells
 	local cell = CellSize()
@@ -1148,15 +1229,619 @@ function Mesh.ComputeComponents(step, deadline)
 	end
 end
 
-function Mesh.StartLink()
-	if Mesh.Building or #Mesh.Cells == 0 then return end
+---------------------------------------------------------------------------
+-- Baked graph. Traces stay in the first link; the file is the next load.
+---------------------------------------------------------------------------
 
+local F_CROUCH, F_HOP, F_OPEN, F_DOOR, F_LADDER = 1, 2, 4, 8, 16
+local KIND_CODE = {walk = "w", door = "d", jump = "j", drop = "r"}
+local KIND_FROM = {
+	w = {"walk", SEG_GROUND},
+	d = {"door", SEG_GROUND},
+	j = {"jump", SEG_CLIMB},
+	r = {"drop", SEG_DROP},
+	u = {"ladder", SEG_LADDER_UP},
+	v = {"ladder", SEG_LADDER_DOWN},
+}
+
+local function StripCR(line)
+	if line ~= "" and string.byte(line, -1) == 13 then
+		return string.sub(line, 1, -2)
+	end
+	return line
+end
+
+local function EdgeToken(e)
+	local code
+	if e.kind == "ladder" then
+		code = e.seg == SEG_LADDER_DOWN and "v" or "u"
+	else
+		code = KIND_CODE[e.kind]
+	end
+	if not code or not e.j or not e.cost then return nil end
+	local flags = 0
+	local extra = {}
+	if e.crouch then flags = flags + F_CROUCH end
+	if e.hop then flags = flags + F_HOP end
+	if e.nx ~= nil and e.ny ~= nil then
+		flags = flags + F_OPEN
+		extra[#extra + 1] = string.format("%.2f", e.nx)
+		extra[#extra + 1] = string.format("%.2f", e.ny)
+	end
+	local dx, dy, dz
+	if e.doorPos then
+		dx, dy, dz = e.doorPos[1], e.doorPos[2], e.doorPos[3]
+	elseif e.door then
+		local ent = Entity(e.door)
+		if IsValid(ent) then
+			local p = ent:GetPos()
+			dx, dy, dz = DoorKey(p.x, p.y, p.z)
+		end
+	end
+	if dx then
+		flags = flags + F_DOOR
+		extra[#extra + 1] = tostring(dx)
+		extra[#extra + 1] = tostring(dy)
+		extra[#extra + 1] = tostring(dz)
+	end
+	if code == "u" or code == "v" then
+		flags = flags + F_LADDER
+		extra[#extra + 1] = tostring(e.ladderId or 0)
+	end
+	local tail = #extra > 0 and ("," .. table.concat(extra, ",")) or ""
+	return string.format("%d,%.2f,%s,%d%s", e.j, e.cost, code, flags, tail)
+end
+
+local function ParseEdge(token, nCells)
+	local p, n = {}, 0
+	for part in string.gmatch(token, "[^,]+") do
+		n = n + 1
+		p[n] = part
+	end
+	if n < 4 then return nil, "short edge" end
+	local j = tonumber(p[1])
+	local cost = tonumber(p[2])
+	local spec = KIND_FROM[p[3]]
+	local flags = tonumber(p[4])
+	if not j or not cost or not spec or not flags or j < 1 or j > nCells then
+		return nil, "bad edge"
+	end
+	local e = {j = j, cost = cost, kind = spec[1], seg = spec[2]}
+	local at = 5
+	local function take()
+		local v = tonumber(p[at])
+		at = at + 1
+		return v
+	end
+	if bit.band(flags, F_CROUCH) ~= 0 then e.crouch = true end
+	if bit.band(flags, F_HOP) ~= 0 then e.hop = true end
+	if bit.band(flags, F_OPEN) ~= 0 then
+		local x, y = take(), take()
+		if not x or not y then return nil, "open" end
+		e.nx, e.ny = x, y
+	end
+	if bit.band(flags, F_DOOR) ~= 0 then
+		local x, y, z = take(), take(), take()
+		if not x or not y or not z then return nil, "door" end
+		e.doorPos = {x, y, z}
+	end
+	if bit.band(flags, F_LADDER) ~= 0 then
+		local id = take()
+		if not id then return nil, "ladder" end
+		e.ladderId = id
+	end
+	return e
+end
+
+local function ApplyGraphLine(line, job)
+	if line == "" then return true end
+	local sp = string.find(line, " ", 1, true)
+	if not sp then return false, "no edges" end
+	local i = tonumber(string.sub(line, 1, sp - 1))
+	local cell = i and Mesh.Cells[i]
+	if not cell or not cell.nbs then return false, "cell" end
+	for token in string.gmatch(string.sub(line, sp + 1), "%S+") do
+		local e, err = ParseEdge(token, job.n)
+		if not e then return false, err end
+		cell.nbs[#cell.nbs + 1] = e
+		job.got = job.got + 1
+		if e.doorPos then
+			job.doorEdges[#job.doorEdges + 1] = e
+		end
+	end
+	return true
+end
+
+function Mesh.GraphPath()
+	-- .txt: file.Open in DATA refuses other extensions.
+	return "relapse_ai/mesh/" .. game.GetMap() .. ".graph.txt"
+end
+
+local function ReadGraphHeader(raw)
+	local meta = {linked = {}, ladderCount = 0}
+	local i, n = 1, #raw
+	local first = true
+	while i <= n do
+		local nl = string.find(raw, "\n", i, true)
+		local stop = nl and (nl - 1) or n
+		local line = StripCR(string.sub(raw, i, stop))
+		i = nl and (nl + 1) or (n + 1)
+		if line == "---" then
+			meta.body = i
+			return meta
+		end
+		if line ~= "" then
+			if first then
+				local v = tonumber(string.match(line, "^RelapseGraph%s+(%d+)"))
+				if not v then return nil, "bad header" end
+				meta.version = v
+				first = false
+			else
+				local map = string.match(line, "^map%s+(.+)$")
+				local paint = tonumber(string.match(line, "^paint%s+(%d+)"))
+				local cell = tonumber(string.match(line, "^cell%s+([%d%.]+)"))
+				local count = tonumber(string.match(line, "^count%s+(%d+)"))
+				local drop = tonumber(string.match(line, "^drop%s+([%-%d%.]+)"))
+				local edges = tonumber(string.match(line, "^edges%s+(%d+)"))
+				if map then
+					meta.map = string.Trim(map)
+				elseif paint then
+					meta.paint = paint
+				elseif cell then
+					meta.cell = cell
+				elseif count then
+					meta.count = count
+				elseif drop then
+					meta.drop = drop
+				elseif edges then
+					meta.edges = edges
+				else
+					local id, ax, ay, az, bx, by, bz = string.match(line, "^lad%s+(%S+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)$")
+					if id then
+						local key = tonumber(id) or id
+						meta.linked[key] = {
+							bot = Vector(tonumber(ax), tonumber(ay), tonumber(az)),
+							top = Vector(tonumber(bx), tonumber(by), tonumber(bz)),
+						}
+						meta.ladderCount = meta.ladderCount + 1
+					else
+						local sax, say, saz, sbx, sby, sbz = string.match(line, "^spot%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)$")
+						if sax then
+							meta.ax, meta.ay, meta.az = tonumber(sax), tonumber(say), tonumber(saz)
+							meta.bx, meta.by, meta.bz = tonumber(sbx), tonumber(sby), tonumber(sbz)
+						end
+					end
+				end
+			end
+		end
+	end
+	return nil, "no body"
+end
+
+local function GraphBodyAt(raw)
+	local at = string.find(raw, "\n---\r\n", 1, true)
+	if at then return at + 6 end
+	at = string.find(raw, "\n---\n", 1, true)
+	if at then return at + 5 end
+	return nil
+end
+
+local function GraphMetaOK(meta)
+	if meta.version ~= Mesh.LinkVersion then
+		return false, string.format("link v%s (current v%s)", tostring(meta.version), tostring(Mesh.LinkVersion))
+	end
+	if meta.map ~= game.GetMap() then
+		return false, "map"
+	end
+	if meta.paint ~= (Mesh.PaintedVersion or 0) then
+		return false, string.format("paint v%s (loaded v%s)", tostring(meta.paint), tostring(Mesh.PaintedVersion or 0))
+	end
+	if not meta.cell or math.abs(meta.cell - (Mesh.CellSize or 40)) > 0.01 then
+		return false, "cell"
+	end
+	if meta.count ~= #Mesh.Cells then
+		return false, "count"
+	end
+	if not meta.drop or math.abs(meta.drop - DropZ()) > 0.01 then
+		return false, "drop"
+	end
+	local a = Mesh.Cells[1] and Mesh.Cells[1].pos
+	local b = Mesh.Cells[#Mesh.Cells] and Mesh.Cells[#Mesh.Cells].pos
+	if not a or not b or not meta.ax then
+		return false, "spot"
+	end
+	if math.abs(a.x - meta.ax) > 0.15 or math.abs(a.y - meta.ay) > 0.15 or math.abs(a.z - meta.az) > 0.15
+		or math.abs(b.x - meta.bx) > 0.15 or math.abs(b.y - meta.by) > 0.15 or math.abs(b.z - meta.bz) > 0.15 then
+		return false, "spot"
+	end
+	if not meta.edges or meta.edges < 1 then
+		return false, "edges"
+	end
+	return true
+end
+
+local function BuildDoorIndex()
+	local index, list = {}, {}
+	local classes = {"prop_door_rotating", "func_door", "func_door_rotating"}
+	for c = 1, #classes do
+		local found = ents.FindByClass(classes[c])
+		for i = 1, #found do
+			local ent = found[i]
+			if IsValid(ent) then
+				local p = ent:GetPos()
+				local x, y, z = DoorKey(p.x, p.y, p.z)
+				local id = ent:EntIndex()
+				index[x .. " " .. y .. " " .. z] = id
+				list[#list + 1] = {id = id, x = x, y = y, z = z}
+			end
+		end
+	end
+	return index, list
+end
+
+local function MatchDoor(index, list, pos)
+	local x, y, z = pos[1], pos[2], pos[3]
+	local id = index[x .. " " .. y .. " " .. z]
+	if id then return id end
+	local best, bestD
+	for i = 1, #list do
+		local d = list[i]
+		local dx, dy, dz = d.x - x, d.y - y, d.z - z
+		local d2 = dx * dx + dy * dy + dz * dz
+		if d2 <= 256 and (not best or d2 < bestD) then
+			best, bestD = d.id, d2
+		end
+	end
+	return best
+end
+
+function Mesh.RebindDoors()
+	local edges = Mesh.PendingDoors
+	if not edges or #edges == 0 then return 0 end
+	local index, list = BuildDoorIndex()
+	if #list == 0 then return 0 end
+	local n = 0
+	for i = 1, #edges do
+		local e = edges[i]
+		local id = e.doorPos and MatchDoor(index, list, e.doorPos)
+		if id then
+			e.door = id
+			n = n + 1
+		end
+	end
+	return n
+end
+
+local function AbortGraph(why)
+	AI.Warn("mesh graph rejected (%s): linking live", why)
+	file.Delete(Mesh.GraphPath())
+	Mesh.Linking = nil
+	Mesh.PendingDoors = nil
+	Mesh.DoorsPending = nil
+	Mesh.StartLink()
+end
+
+local function ReadGraphBody(job, deadline)
+	local cells = Mesh.Cells
+	local n = job.n
+	if job.phase == "wipe" then
+		local i = job.wipe
+		while i <= n and SysTime() < deadline do
+			local c = cells[i]
+			c.nbs = {}
+			c.comp = nil
+			c.wcomp = nil
+			c.tax = nil
+			i = i + 1
+		end
+		job.wipe = i
+		if i <= n then return false end
+		job.phase = "graph"
+		if SysTime() >= deadline then return false end
+	end
+	local raw = job.raw
+	local last = #raw
+	local i = job.pos
+	local guard = 0
+	while i <= last and SysTime() < deadline do
+		if guard >= 24 then
+			guard = 0
+			if SysTime() >= deadline then break end
+		end
+		guard = guard + 1
+		local nl = string.find(raw, "\n", i, true)
+		local stop = nl and (nl - 1) or last
+		local line = StripCR(string.sub(raw, i, stop))
+		i = nl and (nl + 1) or (last + 1)
+		if line ~= "" then
+			local ok, err = ApplyGraphLine(line, job)
+			if not ok then
+				AbortGraph(err or "bad line")
+				return false
+			end
+		end
+	end
+	job.pos = i
+	if i <= last then
+		if CurTime() >= job.ping then
+			job.ping = CurTime() + 1
+			AI.Log("mesh graph %d%%", math.floor(job.pos / last * 100))
+		end
+		return false
+	end
+	if job.got ~= job.expect then
+		AbortGraph(string.format("%d edges, header %d", job.got, job.expect))
+		return false
+	end
+	Mesh.LinkCount = job.got
+	Mesh.PendingDoors = job.doorEdges
+	job.raw = nil
+	job.phase = "grid"
+	job.grid = 1
+	job.keepNbs = true
+	return SysTime() < deadline
+end
+
+local function BindGraphStep(job, deadline)
+	if not job.bindReady then
+		Mesh.LinkedLadders = job.linked or {}
+		Mesh.LadderCount = job.ladderCount or 0
+		if Mesh.SendLinkedLadders then Mesh.SendLinkedLadders() end
+		job.bindReady = true
+		job.doorAt = 1
+		job.doorIndex, job.doorList = BuildDoorIndex()
+	end
+	if not job.doorsDone then
+		local edges = job.doorEdges or {}
+		local at = job.doorAt or 1
+		while at <= #edges and SysTime() < deadline do
+			local e = edges[at]
+			e.door = MatchDoor(job.doorIndex, job.doorList, e.doorPos)
+			at = at + 1
+		end
+		job.doorAt = at
+		if at <= #edges then return false end
+		job.doorsDone = true
+		local bound = 0
+		for i = 1, #edges do
+			if edges[i].door then bound = bound + 1 end
+		end
+		if #edges > 0 and bound < #edges then
+			Mesh.DoorsPending = true
+			Mesh.DoorBindUntil = CurTime() + 20
+			Mesh.DoorBindNext = CurTime() + 1
+		else
+			Mesh.DoorsPending = nil
+		end
+	end
+	if not job.laddersDone then
+		if SysTime() >= deadline then return false end
+		Mesh.RebindLadderPtrs()
+		job.laddersDone = true
+	end
+	job.phase = "tax"
+	job.tax = 1
+	job.walks, job.jumps, job.drops, job.crouches, job.doors = 0, 0, 0, 0, 0
+	job.gaps = 0
+	return SysTime() < deadline
+end
+
+local function WriteGraphHeader(job)
+	local cells = Mesh.Cells
+	local a, b = cells[1].pos, cells[#cells].pos
+	local drop = Mesh.LinkDrop or DropZ()
+	local lines = {
+		"RelapseGraph " .. tostring(Mesh.LinkVersion),
+		"map " .. game.GetMap(),
+		"paint " .. tostring(Mesh.PaintedVersion or Mesh.PaintVersion or 0),
+		"cell " .. tostring(Mesh.CellSize or 40),
+		"count " .. tostring(#cells),
+		string.format("drop %.3f", drop),
+		"edges " .. tostring(job.edges),
+		string.format("spot %.1f %.1f %.1f %.1f %.1f %.1f", a.x, a.y, a.z, b.x, b.y, b.z),
+	}
+	local linked = Mesh.LinkedLadders or {}
+	for id, ends in pairs(linked) do
+		local bot, top = ends.bot, ends.top
+		if bot and top then
+			lines[#lines + 1] = string.format("lad %s %.1f %.1f %.1f %.1f %.1f %.1f",
+				tostring(id), bot.x, bot.y, bot.z, top.x, top.y, top.z)
+		end
+	end
+	lines[#lines + 1] = "---"
+	file.CreateDir("relapse_ai")
+	file.CreateDir("relapse_ai/mesh")
+	file.Write(job.path, table.concat(lines, "\n") .. "\n")
+end
+
+local function FlushGraph(job)
+	if #job.buf == 0 then return end
+	file.Append(job.path, table.concat(job.buf, "\n") .. "\n")
+	job.buf = {}
+	job.bytes = 0
+end
+
+function Mesh.QueueGraphSave()
+	if Mesh.Building or not Mesh.Linked or not Mesh.Cells or #Mesh.Cells == 0 then return end
+	file.CreateDir("relapse_ai")
+	file.CreateDir("relapse_ai/mesh")
+	Mesh.GraphSave = {
+		phase = "count",
+		i = 1,
+		n = #Mesh.Cells,
+		edges = 0,
+		written = 0,
+		path = Mesh.GraphPath(),
+		buf = {},
+		bytes = 0,
+		t0 = SysTime(),
+	}
+	AI.Log("mesh graph: saving %s", Mesh.GraphPath())
+end
+
+function Mesh.GraphSaveStep()
+	local job = Mesh.GraphSave
+	if not job then return end
+	local cells = Mesh.Cells
+	if not cells or #cells ~= job.n then
+		Mesh.GraphSave = nil
+		return
+	end
+	local deadline = SysTime() + math.max(0.001, cvBudget:GetFloat() / 1000)
+	if job.phase == "count" then
+		while job.i <= job.n and SysTime() < deadline do
+			local nbs = cells[job.i].nbs
+			if nbs then job.edges = job.edges + #nbs end
+			job.i = job.i + 1
+		end
+		if job.i <= job.n then return end
+		if job.edges < 1 then
+			file.Delete(job.path)
+			Mesh.GraphSave = nil
+			AI.Log("mesh graph not written: no edges")
+			return
+		end
+		WriteGraphHeader(job)
+		job.phase = "body"
+		job.i = 1
+		if SysTime() >= deadline then return end
+	end
+	local buf = job.buf
+	while job.i <= job.n and SysTime() < deadline do
+		local nbs = cells[job.i].nbs
+		if nbs and #nbs > 0 then
+			local parts = {}
+			for k = 1, #nbs do
+				local tok = EdgeToken(nbs[k])
+				if tok then
+					parts[#parts + 1] = tok
+					job.written = job.written + 1
+				end
+			end
+			if #parts > 0 then
+				local line = tostring(job.i) .. " " .. table.concat(parts, " ")
+				buf[#buf + 1] = line
+				job.bytes = job.bytes + #line
+				if job.bytes > 32768 then
+					FlushGraph(job)
+					buf = job.buf
+				end
+			end
+		end
+		job.i = job.i + 1
+	end
+	if job.i <= job.n then return end
+	FlushGraph(job)
+	Mesh.GraphSave = nil
+	if job.written ~= job.edges then
+		file.Delete(job.path)
+		Mesh.GraphVersion = nil
+		Mesh.LaddersFromGraph = nil
+		AI.Warn("mesh graph write mismatched (%d/%d), discarded", job.written, job.edges)
+		return
+	end
+	Mesh.GraphVersion = Mesh.LinkVersion
+	Mesh.LaddersFromGraph = (Mesh.LadderCount or 0) > 0
+	AI.Log("mesh graph saved data/%s (%d edges, %.1fs)", job.path, job.written, SysTime() - job.t0)
+end
+
+function Mesh.StartGraph()
+	if Mesh.Building or Mesh.Linking or not Mesh.Cells or #Mesh.Cells == 0 then
+		return false
+	end
+	local path = Mesh.GraphPath()
+	local f = file.Open(path, "r", "DATA")
+	if not f then return false end
+	local head = f:Read(65536) or ""
+	if not string.find(head, "\n---", 1, true) then
+		f:Close()
+		AI.Log("mesh graph skipped (no header): linking live")
+		return false
+	end
+	local meta, why = ReadGraphHeader(head)
+	if not meta then
+		f:Close()
+		AI.Log("mesh graph skipped (%s): linking live", why or "bad file")
+		return false
+	end
+	local ok, reason = GraphMetaOK(meta)
+	if not ok then
+		f:Close()
+		AI.Log("mesh graph skipped (%s): linking live", reason)
+		return false
+	end
+	f:Close()
+	local raw = file.Read(path, "DATA")
+	if not raw or raw == "" then return false end
+	local body = GraphBodyAt(raw)
+	if not body then
+		AI.Log("mesh graph skipped (no body): linking live")
+		return false
+	end
 	Mesh.Linked = false
 	Mesh.LinkCount = 0
 	Mesh.Grid = {}
 	Mesh.Blocked = {}
 	Mesh.DoorBan = {}
 	Mesh.LinkedLadders = {}
+	Mesh.LadderCount = 0
+	Mesh.PendingDoors = nil
+	Mesh.DoorsPending = nil
+	Mesh.GraphSave = nil
+	Mesh.LaddersFromGraph = nil
+	Mesh.LinkDrop = meta.drop
+	Mesh.Linking = {
+		phase = "wipe",
+		wipe = 1,
+		raw = raw,
+		pos = body,
+		n = #Mesh.Cells,
+		expect = meta.edges,
+		got = 0,
+		t0 = SysTime(),
+		ping = 0,
+		dropZ = meta.drop,
+		fromGraph = true,
+		linked = meta.linked,
+		ladderCount = meta.ladderCount,
+		doorEdges = {},
+	}
+	AI.Log("mesh graph: %d edges for %d cells", meta.edges, #Mesh.Cells)
+	return true
+end
+
+function Mesh.BeginGraphOrLink()
+	if Mesh.Building or not Mesh.Cells or #Mesh.Cells == 0 then return end
+	if Mesh.Linking then return end
+	if Mesh.Linked and Mesh.GraphVersion == Mesh.LinkVersion then return end
+	-- Already traced this session (a lua refresh, or the bake file is still
+	-- being written). Keep the edges and write them if the file is not current.
+	if Mesh.Linked and (Mesh.LinkCount or 0) > 0 and Mesh.GraphVersion == nil then
+		if not Mesh.GraphSave then Mesh.QueueGraphSave() end
+		return
+	end
+	if not Mesh.StartGraph() then
+		Mesh.StartLink()
+	end
+end
+
+function Mesh.StartLink()
+	if Mesh.Building or #Mesh.Cells == 0 then return end
+
+	local drop = DropZ()
+	Mesh.Linked = false
+	Mesh.LinkCount = 0
+	Mesh.Grid = {}
+	Mesh.Blocked = {}
+	Mesh.DoorBan = {}
+	Mesh.LinkedLadders = {}
+	Mesh.LadderCount = 0
+	Mesh.GraphSave = nil
+	Mesh.GraphVersion = nil
+	Mesh.LaddersFromGraph = nil
+	Mesh.PendingDoors = nil
+	Mesh.DoorsPending = nil
+	Mesh.LinkDrop = drop
 	if Mesh.SendLinkedLadders then
 		Mesh.SendLinkedLadders()
 	end
@@ -1164,7 +1849,7 @@ function Mesh.StartLink()
 	-- file parse. Think spreads it under the link budget.
 	Mesh.Linking = {
 		phase = "grid", grid = 1, i = 1, n = #Mesh.Cells,
-		t0 = SysTime(), ping = 0, dropZ = DropZ(),
+		t0 = SysTime(), ping = 0, dropZ = drop,
 	}
 	AI.Log("mesh linking %d cells...", #Mesh.Cells)
 end
@@ -1177,8 +1862,16 @@ local function FinishLink(job, deadline)
 	local n = job.n
 	Mesh.Linking = nil
 	Mesh.Linked = true
-	AI.Log("mesh linked %d cells: %d walk (%d crouch), %d door, %d jump, %d drop, %d ladders, %d gaps; %d components (largest %d) in %.1fs",
-		n, job.walks, job.crouches, job.doors, job.jumps, job.drops, Mesh.LadderCount or 0, job.gaps, comps, biggest, elapsed)
+	if job.fromGraph then
+		Mesh.GraphVersion = Mesh.LinkVersion
+		Mesh.LaddersFromGraph = (Mesh.LadderCount or 0) > 0
+		AI.Log("mesh graph %d cells, %d edges (%d walk, %d crouch, %d door, %d jump, %d drop, %d ladders), %d components (largest %d) in %.1fs",
+			n, Mesh.LinkCount or 0, job.walks or 0, job.crouches or 0, job.doors or 0, job.jumps or 0, job.drops or 0, Mesh.LadderCount or 0, comps, biggest, elapsed)
+	else
+		AI.Log("mesh linked %d cells: %d walk (%d crouch), %d door, %d jump, %d drop, %d ladders, %d gaps; %d components (largest %d) in %.1fs",
+			n, job.walks, job.crouches, job.doors, job.jumps, job.drops, Mesh.LadderCount or 0, job.gaps, comps, biggest, elapsed)
+		Mesh.QueueGraphSave()
+	end
 	-- Quota may have waited on the link; refill without waiting for the 5 s timer.
 	timer.Simple(0, function()
 		if AI.Manager and AI.Manager.Maintain then
@@ -1192,6 +1885,10 @@ function Mesh.LinkStep()
 	if not job then return end
 	local deadline = SysTime() + math.max(0.001, cvBudget:GetFloat() / 1000)
 	local n = job.n
+	if job.phase == "wipe" or job.phase == "graph" then
+		if not ReadGraphBody(job, deadline) then return end
+		if Mesh.Linking ~= job then return end
+	end
 	if job.phase == "grid" then
 		local cells = Mesh.Cells
 		local size = CellSize()
@@ -1199,7 +1896,9 @@ function Mesh.LinkStep()
 			local i = job.grid
 			local c = cells[i]
 			c.i = i
-			c.nbs = {}
+			if not job.keepNbs then
+				c.nbs = {}
+			end
 			c.comp = nil
 			c.wcomp = nil
 			c.gx = math.floor(c.pos.x / size)
@@ -1214,38 +1913,30 @@ function Mesh.LinkStep()
 			end
 			return
 		end
-		job.phase = nil
+		if job.keepNbs then
+			job.phase = "bind"
+		else
+			job.phase = nil
+		end
 	end
+	if job.phase == "bind" then
+		if not BindGraphStep(job, deadline) then return end
+		if Mesh.Linking ~= job then return end
+	end
+	-- One pass. Slicing these traces across ticks left the server in a long
+	-- "linking N%" / "bridging N%" stall; the whole walk and the gap bridges
+	-- finish before the next phase.
 	if not job.phase then
-		while job.i <= n and SysTime() < deadline do
+		while job.i <= n do
 			LinkCell(job.i, job.dropZ)
 			job.i = job.i + 1
-		end
-		if job.i <= n then
-			if CurTime() >= job.ping then
-				job.ping = CurTime() + 1
-				AI.Log("mesh linking %d%%", math.floor((job.i - 1) / n * 100))
-			end
-			return
 		end
 		job.phase = "gaps"
 		job.gap = 1
 		job.gaps = 0
 	end
-	-- Gaps, shafts and the corner tax each used to run in the tick that finished
-	-- the last cell. Same millisecond budget as the cell pass, so the hitch
-	-- spreads across frames instead of landing at once.
 	if job.phase == "gaps" then
-		if SysTime() >= deadline then return end
-		job.gap, job.gaps = BridgeGapStep(job.gap, deadline, job.gaps)
-		if job.gap <= n then
-			if CurTime() >= job.ping then
-				job.ping = CurTime() + 1
-				AI.Log("mesh bridging %d%%", math.floor((job.gap - 1) / n * 100))
-			end
-			return
-		end
-		if SysTime() >= deadline then return end
+		job.gap, job.gaps = BridgeGapStep(job.gap, math.huge, job.gaps)
 		job.phase = "ladders"
 		StripLadderNbs()
 		Mesh.LinkedLadders = {}
@@ -1963,7 +2654,9 @@ local function AStar(startI, goalI, expandCap)
 				local j = e.j
 				local payDoor = false
 				if not closed[j] then
-					if e.door and not Mesh.DoorPassable(e.door) then
+					if e.kind == "ladder" and not e.ladder then
+						j = nil
+					elseif e.door and not Mesh.DoorPassable(e.door) then
 						local a, b = cells[i].pos, cells[e.j].pos
 						if DoorwayOpen(e.door, a.x, a.y, a.z, b.x, b.y, b.z) then
 							-- Leaf is out of the hole, ban or not.
@@ -2566,11 +3259,11 @@ if Nav then
 			if job.phase == "grid" then
 				return string.format("relapse mesh indexing %d%%", math.floor((job.grid - 1) / n * 100))
 			elseif job.phase == "gaps" then
-				return string.format("relapse mesh bridging %d%%", math.floor((job.gap - 1) / n * 100))
+				return "relapse mesh bridging"
 			elseif job.phase then
 				return "relapse mesh finishing links"
 			end
-			return string.format("relapse mesh linking %d%%", math.floor((job.i - 1) / n * 100))
+			return "relapse mesh linking"
 		end
 		if Mesh.Cells and #Mesh.Cells > 0 then
 			return string.format("relapse mesh %d cells (not linked)", #Mesh.Cells)
@@ -2612,8 +3305,29 @@ hook.Add("Think", "RelapseAI.MeshLink", function()
 	if Mesh.Linking then
 		Mesh.LinkStep()
 	end
+	if Mesh.GraphSave then
+		Mesh.GraphSaveStep()
+	end
+	if Mesh.DoorsPending and not Mesh.Linking and CurTime() >= (Mesh.DoorBindNext or 0) then
+		Mesh.DoorBindNext = CurTime() + 1
+		Mesh.RebindDoors()
+		local edges = Mesh.PendingDoors
+		local need = edges and #edges or 0
+		local got = 0
+		if edges then
+			for i = 1, need do
+				if edges[i].door then got = got + 1 end
+			end
+		end
+		if got >= need or CurTime() >= (Mesh.DoorBindUntil or 0) then
+			if got > 0 then
+				AI.Log("mesh graph doors rebound %d/%d", got, need)
+			end
+			Mesh.DoorsPending = nil
+		end
+	end
 end)
 
 if #Mesh.Cells > 0 and not Mesh.Building then
-	Mesh.StartLink()
+	Mesh.BeginGraphOrLink()
 end

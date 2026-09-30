@@ -250,6 +250,10 @@ end
 
 function GM:RelapseInvOnLose(pl, item)
 	if not IsValid(pl) then return end
+	local still = pl.ZSInventory and pl.ZSInventory[item]
+	if item == self.RelapseFlashlightItem and not (still and still > 0) and self.RelapseFlashlightOff then
+		self:RelapseFlashlightOff(pl)
+	end
 	self:RelapseInvSanitize(pl)
 	self:SyncRelapseLoadout(pl)
 end

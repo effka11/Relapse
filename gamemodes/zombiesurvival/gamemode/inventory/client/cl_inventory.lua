@@ -54,11 +54,22 @@ local function BagCount(entry)
 	return 1
 end
 
+local function InvLabel(data, field, keyField)
+	if not data then return "" end
+	local key = data[keyField]
+	if key and RelapseUI and RelapseUI.T then
+		return RelapseUI.T(key, data[field])
+	end
+	return data[field] or ""
+end
+
 local function ItemName(entry)
 	if not entry then return "" end
 	if entry.t == "inv" then
 		local data = GAMEMODE.ZSInventoryItemData[entry.id]
-		return data and data.PrintName or entry.id
+		if not data then return entry.id end
+		local name = InvLabel(data, "PrintName", "TranslationName")
+		return name ~= "" and name or entry.id
 	end
 	if entry.t == "ammo" then
 		return RelapseUI.ShopAmmo(entry.id)
@@ -74,7 +85,7 @@ local function ItemDesc(entry)
 	if not entry then return "" end
 	if entry.t == "inv" then
 		local data = GAMEMODE.ZSInventoryItemData[entry.id]
-		return data and data.Description or ""
+		return InvLabel(data, "Description", "TranslationDescription")
 	end
 	if entry.t == "ammo" then
 		return ""
@@ -96,6 +107,12 @@ local function IconPath(entry)
 	if entry.t == "ammo" then
 		local id = GAMEMODE.RelapseInvAmmoId and GAMEMODE:RelapseInvAmmoId(entry.id) or string.lower(entry.id or "")
 		return RelapseUI.AmmoIconPath(id)
+	end
+	if entry.t == "inv" then
+		local data = GAMEMODE.ZSInventoryItemData[entry.id]
+		if data and isstring(data.Icon) and data.Icon ~= "" then
+			return data.Icon
+		end
 	end
 	local cat = GAMEMODE:GetInventoryItemType(entry.id)
 	local kitbl = killicon.Get(cat == INVCAT_TRINKETS and "weapon_zs_trinket" or "weapon_zs_craftables")
@@ -693,7 +710,12 @@ function GM:FillRelapseInvViewer(entry)
 			viewer.ModelPanel:SetModel("")
 			viewer.ModelPanel:SetVisible(false)
 		end
-		if entry.t == "ammo" then
+		local ownIcon = false
+		if entry.t == "inv" then
+			local data = GAMEMODE.ZSInventoryItemData[entry.id]
+			ownIcon = data and isstring(data.Icon) and data.Icon ~= ""
+		end
+		if entry.t == "ammo" or ownIcon then
 			viewer.m_VBG:SetVisible(true)
 			local path = IconPath(entry)
 			if path and IsValid(viewer.m_ModelIcon) then

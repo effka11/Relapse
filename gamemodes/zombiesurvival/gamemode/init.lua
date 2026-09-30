@@ -4900,8 +4900,24 @@ function GM:WaveStateChanged(newstate)
 	gamemode.Call("OnWaveStateChanged")
 end
 
+function GM:RelapseFlashlightOff(pl)
+	if not IsValid(pl) then return end
+	if pl:GetNW2Bool("RelapseFlashlight") then
+		pl:SetNW2Bool("RelapseFlashlight", false)
+	end
+	if pl:FlashlightIsOn() then
+		pl:Flashlight(false)
+	end
+end
+
 function GM:PlayerSwitchFlashlight(pl, newstate)
 	if pl:Team() ~= TEAM_HUMAN or not pl:Alive() then
+		return false
+	end
+
+	local item = self.RelapseFlashlightItem
+	if not item or not pl.ZSInventory or not pl:HasInventoryItem(item) then
+		self:RelapseFlashlightOff(pl)
 		return false
 	end
 

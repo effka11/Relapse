@@ -1,5 +1,5 @@
--- Relapse spectator / noclip (client). V flies a local-only camera: no entity,
--- so other players and bots cannot see or chase it. B asks the server for real
+-- Relapse spectator / noclip (client). B flies a local-only camera: no entity,
+-- so other players and bots cannot see or chase it. V asks the server for real
 -- MOVETYPE_NOCLIP. WASD / jump / duck fly the hidden camera; the pawn stays.
 
 local Active = false
@@ -81,7 +81,7 @@ hook.Add("PlayerBindPress", "RelapseFreecam", function(pl, bind, pressed, code)
 	end
 
 	if bind == "noclip" then
-		RequestToggle()
+		RequestNoclip()
 		return true
 	end
 
@@ -102,9 +102,9 @@ hook.Add("PlayerButtonDown", "RelapseFreecam", function(pl, button)
 	if pl ~= LocalPlayer() then return end
 	if not IsFirstTimePredicted() then return end
 	if button == KEY_V then
-		RequestToggle()
-	elseif button == KEY_B then
 		RequestNoclip()
+	elseif button == KEY_B then
+		RequestToggle()
 	end
 end)
 

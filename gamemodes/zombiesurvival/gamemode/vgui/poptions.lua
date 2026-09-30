@@ -89,6 +89,12 @@ function MakepOptions()
 
 	propertysheet:AddSheet(RelapseUI.T("options_tab_game"), gameTab)
 
+	local gfxTab = RelapseUI.MakeOptionsScroll(propertysheet)
+	local gfxCap = RelapseUI.OptionsCaption(gfxTab, RelapseUI.T("options_post_heading"))
+	gfxCap:DockMargin(0, 0, 0, RelapseUI.OptionsCheckGap())
+	RelapseUI.OptionsCheck(gfxTab, RelapseUI.T("options_post_enable"), "zs_posteffects")
+	propertysheet:AddSheet(RelapseUI.T("options_tab_graphics"), gfxTab)
+
 	local hudTab = RelapseUI.MakeOptionsScroll(propertysheet)
 	local hudCap = RelapseUI.OptionsCaption(hudTab, RelapseUI.T("options_hud_general"))
 	hudCap:DockMargin(0, 0, 0, RelapseUI.OptionsCheckGap())
@@ -99,12 +105,6 @@ function MakepOptions()
 	local soundTab = RelapseUI.MakeOptionsScroll(propertysheet)
 	RelapseUI.OptionsStepSlider(soundTab, RelapseUI.T("options_sound_music"), "zs_musicvolume", 0, 150, 10, "%")
 	propertysheet:AddSheet(RelapseUI.T("options_tab_audio"), soundTab)
-
-	local gfxTab = RelapseUI.MakeOptionsScroll(propertysheet)
-	local gfxCap = RelapseUI.OptionsCaption(gfxTab, RelapseUI.T("options_post_heading"))
-	gfxCap:DockMargin(0, 0, 0, RelapseUI.OptionsCheckGap())
-	RelapseUI.OptionsCheck(gfxTab, RelapseUI.T("options_post_enable"), "zs_posteffects")
-	propertysheet:AddSheet(RelapseUI.T("options_tab_graphics"), gfxTab)
 
 	local tabs = {}
 	for i, item in ipairs(propertysheet.Items or {}) do

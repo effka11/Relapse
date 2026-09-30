@@ -840,7 +840,18 @@ function GM:GetCurrentEquipmentCount(id)
 		end
 
 		if item.SWEP then
-			count = count + #ents.FindByClass(item.SWEP)
+			if self.ZSInventoryItemData[item.SWEP] then
+				if CLIENT and self.ZSInventory then
+					count = count + (self.ZSInventory[item.SWEP] or 0)
+				end
+				for _, ent in ipairs(ents.FindByClass("prop_invitem")) do
+					if ent.GetInventoryItemType and ent:GetInventoryItemType() == item.SWEP then
+						count = count + 1
+					end
+				end
+			else
+				count = count + #ents.FindByClass(item.SWEP)
+			end
 		end
 	end
 
@@ -880,8 +891,8 @@ function GM:GetRagdollEyes(pl)
 end
 
 function GM:PlayerNoClip(pl, on)
-	-- V / noclip bind is hidden spectator. B is real MOVETYPE_NOCLIP.
-	-- Never let the engine noclip command move the pawn: bots would chase it.
+	-- B is hidden spectator. V / noclip bind is real MOVETYPE_NOCLIP.
+	-- The engine command is swallowed; movetype is set only through our toggle.
 	if SERVER and self.RelapseFreecamNoclip then
 		return self:RelapseFreecamNoclip(pl, on)
 	end

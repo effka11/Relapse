@@ -1,4 +1,4 @@
--- Relapse spectator / noclip: V (noclip bind) flies a hidden camera; B flies
+-- Relapse spectator / noclip: B flies a hidden camera; V (noclip bind) flies
 -- the pawn (MOVETYPE_NOCLIP). Hidden never moves the body so bots keep seeing
 -- a standing player. No camera entity is spawned — nothing to render or sense.
 
@@ -109,7 +109,7 @@ function GM:ToggleRelapseFreecam(pl)
 end
 
 function GM:RelapseFreecamNoclip(pl)
-	self:ToggleRelapseFreecam(pl)
+	self:ToggleRelapseNoclip(pl)
 	return false
 end
 

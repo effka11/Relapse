@@ -277,6 +277,7 @@ RelapseUI.CardIconZoom = {
 	mg_me_t9cane = 1.75,
 	mg_cinderblock = 1.05,
 	weapon_zs_medicalkit = 1.8,
+	cons_flashlight = 1.2,
 	["3030win"] = 0.78,
 	["357mag"] = 0.63,
 	["45acp"] = 0.71,
@@ -374,6 +375,7 @@ RelapseUI.CardIconSmooth = {
 	weapon_zs_hammer = true,
 	weapon_zs_wrench = true,
 	weapon_zs_medicalkit = true,
+	cons_flashlight = true,
 	mg_me_t9loadout = true,
 	mg_me_t9bat = true,
 	mg_me_t9etool = true,
@@ -817,6 +819,7 @@ RelapseUI.InvSlotIconTilt = {
 	weapon_zs_arsenalcrate = 0,
 	weapon_zs_remantler = 0,
 	weapon_zs_medicalkit = 0,
+	cons_flashlight = 0,
 	["9x18"] = 0,
 	["9x19"] = 0,
 	["45acp"] = 0,
@@ -932,6 +935,9 @@ function RelapseUI.TryAttachCardIcon(itempan, mdlframe, tab, missing_skill)
 	local class = tab.SWEP
 	local path
 	local allow = cat == ITEMCAT_GUNS or cat == ITEMCAT_MELEE
+	if not allow and isstring(tab.RelapsePreviewIcon) and tab.RelapsePreviewIcon ~= "" then
+		allow = true
+	end
 	if not allow and class then
 		local wep = weapons.GetStored(class)
 		allow = wep and isstring(wep.RelapsePreviewIcon) and wep.RelapsePreviewIcon ~= ""

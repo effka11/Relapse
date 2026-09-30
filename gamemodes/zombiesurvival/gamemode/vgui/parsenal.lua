@@ -120,7 +120,8 @@ local function ItemPanelPaint(self, w, h)
 	local unaffordable = self.m_LastAbleToBuy == false
 	RelapseUI.PaintCard(self, w, h, selected, false, unaffordable)
 
-	if self.ShopTabl.SWEP and IsValid(MySelf) and MySelf:HasInventoryItem(self.ShopTabl.SWEP) then
+	local ownedSwep = self.ShopTabl and self.ShopTabl.SWEP
+	if ownedSwep and GAMEMODE:GetInventoryItemType(ownedSwep) == INVCAT_TRINKETS and IsValid(MySelf) and MySelf:HasInventoryItem(ownedSwep) then
 		local wash = RelapseUI.Col.Wash
 		surface.SetDrawColor(wash.r, wash.g, wash.b, wash.a or 40)
 		surface.DrawRect(0, 0, w, h)
@@ -319,7 +320,21 @@ function GM:SupplyItemViewerDetail(viewer, sweptable, shoptbl)
 
 	else
 		viewer.ModelPanel:SetModel("")
+		viewer.ModelPanel:SetVisible(false)
 		viewer.m_VBG:SetVisible(true)
+		local path = shoptbl.RelapsePreviewIcon
+		if not (isstring(path) and path ~= "") and isstring(sweptable.Icon) then
+			path = sweptable.Icon
+		end
+		if path and IsValid(viewer.m_ModelIcon) then
+			viewer.m_ModelIcon:SetImage(path)
+			viewer.m_ModelIcon:SetImageColor(RelapseUI.Col.Text)
+			viewer.m_ModelIcon:SetVisible(true)
+			viewer.m_ModelIcon:Dock(NODOCK)
+			RelapseUI.FitIcon(viewer.m_ModelIcon, viewer.m_VBG:GetWide(), viewer.m_VBG:GetTall())
+		elseif IsValid(viewer.m_ModelIcon) then
+			viewer.m_ModelIcon:SetVisible(false)
+		end
 	end
 	local debugLines = tonumber(sweptable.RelapseDescDebugLines) or 0
 	if debugLines > 0 then
@@ -1218,7 +1233,8 @@ end
 
 function ARSENAL_CARD:Paint(w, h)
 	RelapseUI.PaintCard(self, w, h, self.On, self.Locked, self.m_LastAbleToBuy == false)
-	if self.ShopTabl and self.ShopTabl.SWEP and IsValid(MySelf) and MySelf:HasInventoryItem(self.ShopTabl.SWEP) then
+	local ownedSwep = self.ShopTabl and self.ShopTabl.SWEP
+	if ownedSwep and GAMEMODE:GetInventoryItemType(ownedSwep) == INVCAT_TRINKETS and IsValid(MySelf) and MySelf:HasInventoryItem(ownedSwep) then
 		local wash = RelapseUI.Col.Wash
 		surface.SetDrawColor(wash.r, wash.g, wash.b, wash.a or 40)
 		surface.DrawRect(0, 0, w, h)

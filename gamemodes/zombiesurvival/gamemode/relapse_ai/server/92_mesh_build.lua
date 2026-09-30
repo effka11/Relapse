@@ -1,6 +1,6 @@
 -- Walkable-skin generator: rasterize standable surfaces (top hits per column,
 -- any floor below). Not Source .nav tiles, not D3bot nodes.
--- 93_mesh_path.lua links cells and walks the skin; .nav is fallback until linked.
+-- 93_mesh_path.lua links cells and walks the skin, or reads a baked graph; .nav is fallback until linked.
 
 local AI = RelapseAI
 local Mesh = AI.Mesh
@@ -701,12 +701,16 @@ local function CommitMesh(job)
 	-- now; the repaint waits for InitPostEntity, when spawns, sigil nodes and
 	-- the .nav exist to bound it. Painting here, at Lua init, saw no entities
 	-- and rasterised a +-2048 x -256..512 box: pits and high stairs were cut.
+	-- A current graph restores edges without traces. Anything older is traced,
+	-- and that trace writes the graph when it finishes.
 	Mesh.PaintedVersion = version
 	Mesh.NeedRepaint = version < Mesh.PaintVersion
 	if Mesh.NeedRepaint then
 		AI.Warn("mesh data/%s is paint v%d (current v%d): stale, repainting once the map is up", job.path, version, Mesh.PaintVersion)
 	end
-	if Mesh.StartLink then
+	if Mesh.BeginGraphOrLink then
+		Mesh.BeginGraphOrLink()
+	elseif Mesh.StartLink then
 		Mesh.StartLink()
 	end
 	return true, #cells
@@ -785,7 +789,9 @@ function Mesh.FinishBuild()
 	end
 	SendProgress()
 	Mesh.Build = nil
-	if Mesh.StartLink then
+	if Mesh.BeginGraphOrLink then
+		Mesh.BeginGraphOrLink()
+	elseif Mesh.StartLink then
 		Mesh.StartLink()
 	end
 end
@@ -874,6 +880,14 @@ function Mesh.StartBuild(pl, force)
 	Mesh.LinkCount = 0
 	Mesh.LinkedLadders = {}
 	Mesh.Grid = {}
+	Mesh.GraphSave = nil
+	Mesh.GraphVersion = nil
+	Mesh.LaddersFromGraph = nil
+	Mesh.PendingDoors = nil
+	Mesh.DoorsPending = nil
+	if Mesh.GraphPath then
+		file.Delete(Mesh.GraphPath())
+	end
 	Mesh.SendLinkedLadders()
 	AI.Log("mesh paint bounds (%s): x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f, %dx%d columns at %du",
 		how or "?", mins.x, maxs.x, mins.y, maxs.y, mins.z, maxs.z, nx, ny, cell)

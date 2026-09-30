@@ -495,3 +495,11 @@ trinket, trinketwep = GM:AddTrinket("Chemistry Set", "chemistry", false, hpveles
 GM:AddSkillModifier(trinket, SKILLMOD_MEDKIT_EFFECTIVENESS_MUL, 0.06)
 GM:AddSkillModifier(trinket, SKILLMOD_CLOUD_TIME, 0.12)
 trinketwep.PermitDismantle = true
+
+-- Pocket light. Bag slot only: the hotbar accepts weapons, so it never comes to hand.
+GM.RelapseFlashlightItem = "cons_flashlight"
+GM:AddInventoryItemData(GM.RelapseFlashlightItem, "Flashlight", "A pocket light. It takes a slot in the bag and does not come to hand. The beam works only while it is there.", "models/maxofs2d/lamp_flashlight.mdl")
+local flashlightItem = GM.ZSInventoryItemData[GM.RelapseFlashlightItem]
+flashlightItem.TranslationName = "wep_flashlight"
+flashlightItem.TranslationDescription = "wep_flashlight_desc"
+flashlightItem.Icon = "zombiesurvival/killicons/flashlight_1.png"

@@ -1917,7 +1917,11 @@ function GM:DoAltSelectedItemUpdate()
 	local sel = frame and frame.SelInv
 	local data = sel and self.ZSInventoryItemData[sel]
 	if data then
-		self.HumanMenuPanel.SelectedItemLabel:SetText(data.PrintName)
+		local name = data.PrintName
+		if data.TranslationName and RelapseUI and RelapseUI.T then
+			name = RelapseUI.T(data.TranslationName, data.PrintName)
+		end
+		self.HumanMenuPanel.SelectedItemLabel:SetText(name)
 		return
 	end
 	if frame and frame.SelKind == "ammo" and frame.SelId then

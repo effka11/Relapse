@@ -157,6 +157,11 @@ GM:AddStartingItem("remantler",			ITEMCAT_DEPLOYABLES,			50,				"weapon_zs_reman
 item = GM:AddStartingItem("aloe",			ITEMCAT_DEPLOYABLES,			45,				"weapon_zs_aloe")
 item.CycleGridNeed = "medicine_4"
 
+item = GM:AddStartingItem("flashlight",		ITEMCAT_TOOLS,			15,				"cons_flashlight")
+item.RelapsePreviewIcon = "zombiesurvival/killicons/flashlight_1.png"
+item.TranslationName = "wep_flashlight"
+item.TranslationDescription = "wep_flashlight_desc"
+
 GM:AddStartingItem("medkit",			ITEMCAT_TOOLS,			15,				"weapon_zs_medicalkit", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("weapon_zs_medicalkit") end)
 GM:AddStartingItem("wrench",			ITEMCAT_TOOLS,			20,				"weapon_zs_wrench").NoClassicMode = true
 GM:AddStartingItem("crphmr",			ITEMCAT_TOOLS,			40,				"weapon_zs_hammer").NoClassicMode = true
@@ -241,6 +246,11 @@ item.Tier = 5
 item =
 GM:AddPointShopItem("cwsledge",			ITEMCAT_MELEE,			270,				"mg_me_t9sledgehammer", nil, nil, nil, function(pl) pl:GiveEmptyWeapon("mg_me_t9sledgehammer") end)
 item.Tier = 5
+
+item = GM:AddPointShopItem("flashlight",		ITEMCAT_TOOLS,			15,				"cons_flashlight")
+item.RelapsePreviewIcon = "zombiesurvival/killicons/flashlight_1.png"
+item.TranslationName = "wep_flashlight"
+item.TranslationDescription = "wep_flashlight_desc"
 
 GM:AddPointShopItem("crphmr",			ITEMCAT_TOOLS,			25,				"weapon_zs_hammer",			nil,							nil,									nil,											function(pl) pl:GiveEmptyWeapon("weapon_zs_hammer") pl:GiveAmmo(5, "GaussEnergy") end)
 GM:AddPointShopItem("medkit",			ITEMCAT_TOOLS,			15,				"weapon_zs_medicalkit", nil, nil, nil, function(pl)

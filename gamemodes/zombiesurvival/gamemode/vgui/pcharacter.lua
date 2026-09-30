@@ -20,119 +20,6 @@ local CHAR_PAGE_SCARS = 2
 -- Character stat tip
 ---------------------------------------------------------------------------
 
-local GRID_CORE_STATS = {
-	Health = true,
-	Speed = true,
-	RunSpeed = true,
-	Jump = true,
-	Climb = true,
-	Blood = true,
-	ArsenalMargin = true
-}
-
-local GRID_STAT_SKIP = {
-	ArsenalRivalOthers = true,
-	ArsenalRivalSelf = true,
-	ArsenalBreakPoints = true,
-	ArsenalMonopoly = true,
-	SupplySell = true
-}
-
-local GRID_STAT_INFO = {
-	Reload = { key = "reload", name = "char_stat_reload", fallback = "Reload speed", kind = "pct" },
-	Recoil = { key = "recoil", name = "char_stat_recoil", fallback = "Recoil", kind = "pct" },
-	Deploy = { key = "deploy", name = "char_stat_deploy", fallback = "Deploy speed", kind = "pct" },
-	Repair = { key = "repair", name = "char_stat_repair", fallback = "Repair rate", kind = "pct" },
-	RepairPerNail = { key = "repairpernail", name = "char_stat_repairpernail", fallback = "Repair per own nail", kind = "pct" },
-	Phase = { key = "phase", name = "char_stat_phase", fallback = "Barricade phase speed", kind = "pct" },
-	DeviceHealth = { key = "devicehealth", name = "char_stat_devicehealth", fallback = "Mechanical device durability", kind = "pct" },
-	DeviceHandle = { key = "devicehandle", name = "char_stat_devicehandle", fallback = "Device setup speed", kind = "pct" },
-	DeviceRepair = { key = "devicerepair", name = "char_stat_devicerepair", fallback = "Mechanical device repair", kind = "pct" },
-	TurretFire = { key = "turretfire", name = "char_stat_turretfire", fallback = "Turret attack speed", kind = "pct" },
-	GunFire = { key = "gunfire", name = "char_stat_gunfire", fallback = "Fire rate", kind = "pct" },
-	RangedShop = { key = "rangedshop", name = "char_stat_rangedshop", fallback = "Ranged weapon discount", kind = "pct" },
-	SupplyHandle = { key = "supplyhandle", name = "char_stat_supplyhandle", fallback = "Supply setup speed", kind = "pct" },
-	ResupplyAmmo = { key = "crateammo", name = "char_stat_crateammo", fallback = "Crate ammo", kind = "pct" },
-	ArsenalMargin = { key = "arsenalcut", name = "char_stat_arsenalcut", fallback = "Arsenal margin", kind = "pct" },
-	ArsenalCrateCost = { key = "arsenalcratecost", name = "char_stat_arsenalcratecost", fallback = "Arsenal crate cost", kind = "pct" },
-	HammerSwing = { key = "hammerswing", name = "char_stat_hammerswing", fallback = "Hammer attack speed", kind = "pct" },
-	MeleeSwing = { key = "meleeattack", name = "char_stat_meleeattack", fallback = "Melee attack speed", kind = "pct" },
-	MeleeWindup = { key = "meleewindup", name = "char_stat_meleewindup", fallback = "Swing speed", kind = "pct" },
-	MeleeStamina = { key = "meleestamina", name = "char_stat_meleestamina", fallback = "Melee stamina cost", kind = "pct" },
-	NailRange = { key = "nailrange", name = "char_stat_nailrange", fallback = "Nail range", kind = "pct" },
-	MaxNails = { key = "maxnails", name = "char_stat_maxnails", fallback = "Nails per prop" },
-	DoorDamage = { key = "doordamage", name = "char_stat_doordamage", fallback = "Door damage", kind = "pct" },
-	Heal = { key = "heal", name = "char_stat_heal", fallback = "Healing received", kind = "pct" },
-	MedicHeal = { key = "medicheal", name = "char_stat_medicheal", fallback = "Healing effectiveness", kind = "pct" },
-	MedkitCharge = { key = "medkitcharge", name = "char_stat_medkitcharge", fallback = "Medkit recovery speed", kind = "pct" },
-	MeleeDamage = { key = "melee", name = "char_stat_melee", fallback = "Melee damage", kind = "pct" },
-	MeleeMiss = { key = "meleemiss", name = "char_stat_meleemiss", fallback = "Melee miss chance", kind = "pct" },
-	HitSlow = { key = "hitslow", name = "char_stat_hitslow", fallback = "Slow from incoming melee", kind = "pct" },
-	BloodFromMelee = { key = "bloodfrommelee", name = "char_stat_bloodfrommelee", fallback = "Blood armor from melee", kind = "pct" },
-	BloodAbsorb = { key = "bloodabsorb", name = "char_stat_bloodabsorb", fallback = "Blood armor absorption", kind = "pct" },
-	BloodGain = { key = "bloodgain", name = "char_stat_bloodgain", fallback = "Blood armor gain", kind = "pct" },
-	FoodBlood = { key = "foodblood", name = "char_stat_foodblood", fallback = "Blood armor from food", kind = "pct" },
-	BloodReturn = { key = "bloodreturn", name = "char_stat_bloodreturn", fallback = "Absorbed damage returned", kind = "pct" },
-	MeleeViewPunch = { key = "meleepunch", name = "char_stat_meleepunch", fallback = "Incoming melee camera kick", kind = "pct" },
-	AimShake = { key = "aimshake", name = "char_stat_aimshake", fallback = "Aim tremor", kind = "pct" },
-	AimShakeFear = { key = "aimshakefear", name = "char_stat_aimshakefear", fallback = "Fear tremor", kind = "pct" },
-	AimShakeHP = { key = "aimshakehp", name = "char_stat_aimshakehp", fallback = "Low-health tremor", kind = "pct" },
-	AimShakeThreshold = { key = "aimshakethreshold", name = "char_stat_aimshakethreshold", fallback = "Tremor health threshold", kind = "pct" },
-	ZombieHealth = { key = "zombiehealth", name = "char_stat_zombiehealth", fallback = "Zombie max health", kind = "pct" },
-	BarricadeDamage = { key = "barricadedmg", name = "char_stat_barricadedmg", fallback = "Barricade damage", kind = "pct" },
-	LoosePropDamage = { key = "looseprop", name = "char_stat_looseprop", fallback = "Unnailed prop damage", kind = "pct" },
-	ZombieDoorDamage = { key = "zombiedoor", name = "char_stat_zombiedoor", fallback = "Zombie door damage", kind = "pct" },
-	ZombieHumanDamage = { key = "zombiehuman", name = "char_stat_zombiehuman", fallback = "Damage to humans", kind = "pct" },
-	Worth = { key = "worth", name = "char_stat_worth", fallback = "Starting worth" },
-	Scrap = { key = "scrap", name = "char_stat_scrap", fallback = "Starting scrap" },
-	FallResist = { key = "fallresist", name = "char_stat_fall", fallback = "Fall damage", kind = "pp" },
-	StartAmmo = { key = "startammo", name = "char_stat_startammo", fallback = "Starting ammo", kind = "pp" },
-	Points = { key = "gridpoints", name = "char_stat_pointmul", fallback = "Point gain", kind = "pp" },
-	Bandage = { key = "bandage", name = "char_stat_bandage", fallback = "Bandage" },
-	Blood = { key = "bloodadd", name = "char_stat_maxblood", fallback = "Max blood armor" }
-}
-
-local SKILL_STAT_SKIP = {
-	[SKILLMOD_HEALTH] = true,
-	[SKILLMOD_SPEED] = true,
-	[SKILLMOD_JUMPPOWER_MUL] = true,
-	[SKILLMOD_BLOODARMOR] = true,
-	[SKILLMOD_BLOODARMOR_MUL] = true
-}
-
-local SKILL_STAT_INFO = {
-	{ id = SKILLMOD_WORTH, key = "worth", name = "char_stat_worth", fallback = "Starting worth" },
-	{ id = SKILLMOD_POINTS, key = "points", name = "char_stat_points", fallback = "Starting points" },
-	{ id = SKILLMOD_POINT_MULTIPLIER, key = "pointmul", name = "char_stat_pointmul", fallback = "Point gain", kind = "pct" },
-	{ id = SKILLMOD_SCRAP_START, key = "scrap", name = "char_stat_scrap", fallback = "Starting scrap" },
-	{ id = SKILLMOD_RELOADSPEED_MUL, key = "reload", name = "char_stat_reload", fallback = "Reload speed", kind = "pct" },
-	{ id = SKILLMOD_DEPLOYSPEED_MUL, key = "deploy", name = "char_stat_deploy", fallback = "Deploy speed", kind = "pct" },
-	{ id = SKILLMOD_REPAIRRATE_MUL, key = "repair", name = "char_stat_repair", fallback = "Repair rate", kind = "pct" },
-	{ id = SKILLMOD_HEALING_RECEIVED, key = "heal", name = "char_stat_heal", fallback = "Healing received", kind = "pct" },
-	{ id = SKILLMOD_MEDKIT_EFFECTIVENESS_MUL, key = "medkit", name = "char_stat_medkit", fallback = "Medkit healing", kind = "pct" },
-	{ id = SKILLMOD_FALLDAMAGE_DAMAGE_MUL, key = "fall", name = "char_stat_fall", fallback = "Fall damage", kind = "pct" },
-	{ id = SKILLMOD_FALLDAMAGE_THRESHOLD_MUL, key = "fallthreshold", name = "char_stat_fallthreshold", fallback = "Fall threshold", kind = "pct" },
-	{ id = SKILLMOD_FALLDAMAGE_SLOWDOWN_MUL, key = "fallslow", name = "char_stat_fallslow", fallback = "Fall slow", kind = "pct" },
-	{ id = SKILLMOD_BLOODARMOR_DMG_REDUCTION, key = "bloodabsorb", name = "char_stat_bloodabsorb", fallback = "Blood armor absorption", kind = "pct" },
-	{ id = SKILLMOD_BLOODARMOR_GAIN_MUL, key = "bloodgain", name = "char_stat_bloodgain", fallback = "Blood armor gain", kind = "pct" },
-	{ id = SKILLMOD_BARRICADE_PHASE_SPEED_MUL, key = "phase", name = "char_stat_phase", fallback = "Barricade phase speed", kind = "pct" },
-	{ id = SKILLMOD_MELEE_DAMAGE_MUL, key = "melee", name = "char_stat_melee", fallback = "Melee damage", kind = "pct" },
-	{ id = SKILLMOD_AIMSPREAD_MUL, key = "spread", name = "char_stat_spread", fallback = "Aim spread", kind = "pct" },
-	{ id = SKILLMOD_SELF_DAMAGE_MUL, key = "selfdmg", name = "char_stat_selfdmg", fallback = "Self damage", kind = "pct" },
-	{ id = SKILLMOD_KNOCKDOWN_RECOVERY_MUL, key = "knockdown", name = "char_stat_knockdown", fallback = "Knockdown recovery", kind = "pct" },
-	{ id = SKILLMOD_RESUPPLY_DELAY_MUL, key = "resupply", name = "char_stat_resupply", fallback = "Resupply delay", kind = "pct" },
-	{ id = SKILLMOD_ARSENAL_DISCOUNT, key = "discount", name = "char_stat_discount", fallback = "Arsenal discount", kind = "pct" },
-	{ id = SKILLMOD_ENDWAVE_POINTS, key = "endwave", name = "char_stat_endwave", fallback = "End-of-wave points" },
-	{ id = SKILLMOD_FOODRECOVERY_MUL, key = "food", name = "char_stat_food", fallback = "Food recovery", kind = "pct" },
-	{ id = SKILLMOD_FOODEATTIME_MUL, key = "foodeat", name = "char_stat_foodeat", fallback = "Eat time", kind = "pct" },
-	{ id = SKILLMOD_HAMMER_SWING_DELAY_MUL, key = "hammer", name = "char_stat_hammer", fallback = "Hammer delay", kind = "pct" },
-	{ id = SKILLMOD_MELEE_SWING_DELAY_MUL, key = "meleeswing", name = "char_stat_meleeswing", fallback = "Melee swing delay", kind = "pct" },
-	{ id = SKILLMOD_WEAPON_WEIGHT_SLOW_MUL, key = "weightslow", name = "char_stat_weightslow", fallback = "Weapon weight slow", kind = "pct" },
-	{ id = SKILLMOD_LOW_HEALTH_SLOW_MUL, key = "lowhp", name = "char_stat_lowhp", fallback = "Low health slow", kind = "pct" },
-	{ id = SKILLMOD_PROP_CARRY_CAPACITY_MUL, key = "carry", name = "char_stat_carry", fallback = "Carry capacity", kind = "pct" },
-	{ id = SKILLMOD_PROP_THROW_STRENGTH_MUL, key = "throw", name = "char_stat_throw", fallback = "Throw strength", kind = "pct" }
-}
-
 local function FmtStatNumber(n)
 	if math.abs(n - math.floor(n + 0.5)) < 0.05 then
 		return tostring(math.floor(n + 0.5))
@@ -154,43 +41,6 @@ local function FmtStatBonus(n, kind)
 		return "+" .. body .. suffix
 	end
 	return body .. suffix
-end
-
-local function CollectSkillModTotals(pl)
-	local totals = {}
-	local gm_modifiers = GAMEMODE.SkillModifiers
-	if not IsValid(pl) or not gm_modifiers then
-		return totals
-	end
-
-	local function add_skill(skillid)
-		local modifiers = gm_modifiers[skillid]
-		if not modifiers then return end
-		for modid, amount in pairs(modifiers) do
-			totals[modid] = (totals[modid] or 0) + amount
-		end
-	end
-
-	if pl.GetDesiredActiveSkills then
-		local skills = GAMEMODE.Skills
-		for skillid in pairs(table.ToAssoc(pl:GetDesiredActiveSkills())) do
-			local skill = skills and skills[skillid]
-			if skill and skill.Trinket then
-				add_skill(skillid)
-			end
-		end
-	end
-
-	local skills = GAMEMODE.Skills
-	if skills and pl.HasTrinket then
-		for skillid, skill in pairs(skills) do
-			if skill.Trinket and pl:HasTrinket(skill.Trinket) then
-				add_skill(skillid)
-			end
-		end
-	end
-
-	return totals
 end
 
 local function CharacterWalkRun(pl)
@@ -227,25 +77,29 @@ local function CharacterJump(pl)
 	return jump
 end
 
-local function CharacterClimb(pl, sprint)
-	if GAMEMODE and GAMEMODE.GetHumanClimbSpeed then
-		return GAMEMODE:GetHumanClimbSpeed(pl, false, sprint)
-	end
-	local climb = (GAMEMODE and GAMEMODE.HumanClimbSpeed) or 52
-	if GAMEMODE and GAMEMODE.GetUpgradePercentMul then
-		climb = climb * GAMEMODE:GetUpgradePercentMul(pl, "Climb")
-	end
-	if sprint then
-		climb = climb * ((GAMEMODE and GAMEMODE.HumanClimbSprintMul) or (72 / 52))
-	end
-	return climb
-end
-
 local function CharacterArsenalMargin(pl)
 	if GAMEMODE and GAMEMODE.GetArsenalMarginKeepRate then
 		return GAMEMODE:GetArsenalMarginKeepRate(pl)
 	end
 	return (GAMEMODE and GAMEMODE.ArsenalCrateCommission) or 0.04
+end
+
+local function CharacterBloodAbsorb(pl)
+	if GAMEMODE and GAMEMODE.GetBloodArmorAbsorbRatio then
+		return GAMEMODE:GetBloodArmorAbsorbRatio(pl)
+	end
+	local add = 0
+	if IsValid(pl) and isnumber(pl.BloodArmorDamageReductionAdd) then
+		add = pl.BloodArmorDamageReductionAdd
+	end
+	if GAMEMODE and GAMEMODE.GetUpgradePercent then
+		add = add + GAMEMODE:GetUpgradePercent(pl, "BloodAbsorb")
+	end
+	return 0.5 + add
+end
+
+local function StatMulBonus(mul)
+	return (tonumber(mul) or 1) - 1
 end
 
 local function CollectCharacterStats(pl)
@@ -261,102 +115,132 @@ local function CollectCharacterStats(pl)
 			hp = hp + GAMEMODE:GetCycleGridHealthAdd(pl)
 		end
 	end
+	local walkBase = SPEED_NORMAL or 95
+	local runBase = walkBase * ((GAMEMODE and GAMEMODE.HumanSprintMultiplier) or (240 / 95))
+	local jumpBase = DEFAULT_JUMP_POWER or 185
 	local walk, run = CharacterWalkRun(pl)
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_maxhealth", "Max health"),
-		value = FmtStatNumber(hp)
-	}
+	local jump = CharacterJump(pl)
+
+	local function add_core(name, value)
+		rows[#rows + 1] = { name = name, value = value }
+	end
+
+	add_core(Phrase("char_stat_maxhealth", "Max HP"), FmtStatNumber(hp))
 	local blood = 15
 	if GAMEMODE.GetHumanBloodArmorMax then
 		blood = GAMEMODE:GetHumanBloodArmorMax(pl)
 	elseif isnumber(pl.MaxBloodArmor) then
 		blood = pl.MaxBloodArmor
 	end
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_maxblood", "Max blood armor"),
-		value = FmtStatNumber(math.max(0, blood))
-	}
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_walk", "Walk speed"),
-		value = FmtStatNumber(walk)
-	}
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_run", "Run speed"),
-		value = FmtStatNumber(run)
-	}
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_jump", "Jump height"),
-		value = FmtStatNumber(CharacterJump(pl))
-	}
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_climb", "Climb speed"),
-		value = FmtStatNumber(CharacterClimb(pl))
-	}
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_climb_sprint", "Climb sprint"),
-		value = FmtStatNumber(CharacterClimb(pl, true))
-	}
-	rows[#rows + 1] = {
-		name = Phrase("char_stat_arsenalcut", "Arsenal margin"),
-		value = FmtStatNumber(CharacterArsenalMargin(pl) * 100) .. "%"
-	}
+	add_core(Phrase("char_stat_maxblood", "Max blood armor"), FmtStatNumber(math.max(0, blood)))
+	add_core(
+		Phrase("char_stat_bloodabsorb", "Blood armor damage absorption"),
+		FmtStatNumber(CharacterBloodAbsorb(pl) * 100) .. "%"
+	)
+	add_core(Phrase("char_stat_walk", "Walk speed"), FmtStatNumber((walk / walkBase) * 100) .. "%")
+	add_core(Phrase("char_stat_run", "Run speed"), FmtStatNumber((run / runBase) * 100) .. "%")
+	add_core(Phrase("char_stat_jump", "Jump height"), FmtStatNumber((jump / jumpBase) * 100) .. "%")
+	add_core(
+		Phrase("char_stat_arsenalcut", "Arsenal margin"),
+		FmtStatNumber(CharacterArsenalMargin(pl) * 100) .. "%"
+	)
 
-	local extras = {}
-	local function add_extra(order, key, name, amount, kind)
-		if not amount or amount == 0 then return end
-		local row = extras[key]
-		if row then
-			row.amount = row.amount + amount
-			return
-		end
-		extras[key] = {
-			order = order,
-			name = name,
-			amount = amount,
-			kind = kind
-		}
-	end
-
-	local mods = CollectSkillModTotals(pl)
-	for i, info in ipairs(SKILL_STAT_INFO) do
-		local id = info.id
-		if id and not SKILL_STAT_SKIP[id] then
-			add_extra(10 + i, info.key, Phrase(info.name, info.fallback), mods[id] or 0, info.kind)
-		end
-	end
-
-	local gridAdds = GAMEMODE.GetCycleGridStatAdds and GAMEMODE:GetCycleGridStatAdds(pl) or {}
-	local gi = 0
-	for field, amount in pairs(gridAdds) do
-		if GRID_CORE_STATS[field] or GRID_STAT_SKIP[field] then continue end
-		gi = gi + 1
-		local info = GRID_STAT_INFO[field]
-		if info then
-			add_extra(80 + gi, info.key, Phrase(info.name, info.fallback), amount, info.kind)
-		else
-			add_extra(90 + gi, string.lower(field), field, amount)
-		end
-	end
-
-	local sorted = {}
-	for _, row in pairs(extras) do
-		if row.amount ~= 0 then
-			sorted[#sorted + 1] = row
-		end
-	end
-	table.sort(sorted, function(a, b)
-		if a.order ~= b.order then
-			return a.order < b.order
-		end
-		return a.name < b.name
-	end)
-	for _, row in ipairs(sorted) do
+	local function add_bonus(name, amount, kind)
+		amount = tonumber(amount) or 0
+		if amount == 0 then return end
 		rows[#rows + 1] = {
-			name = row.name,
-			value = FmtStatBonus(row.amount, row.kind),
+			name = name,
+			value = FmtStatBonus(amount, kind),
 			extra = true
 		}
 	end
+
+	local gm = GAMEMODE
+	local meleeScar = 0
+	if gm and gm.GetRelapseScarRank and gm.RelapseScarP then
+		local n = gm:GetRelapseScarRank("breaker", pl)
+		if n >= 1 then
+			meleeScar = gm:RelapseScarP(n, 0.10, 0.02)
+		end
+	end
+	local meleeSkill = 0
+	if isnumber(pl.MeleeDamageMultiplier) then
+		meleeSkill = pl.MeleeDamageMultiplier - 1
+	end
+	local meleeAdd = (gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "MeleeDamage") or 0) + meleeSkill + meleeScar
+	add_bonus(Phrase("char_stat_melee", "Melee damage"), meleeAdd, "pct")
+
+	if gm and gm.GetMeleeSwingPercentMul then
+		add_bonus(Phrase("char_stat_meleeattack", "Melee attack speed"), StatMulBonus(gm:GetMeleeSwingPercentMul(pl)), "pct")
+	else
+		add_bonus(Phrase("char_stat_meleeattack", "Melee attack speed"), gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "MeleeSwing") or 0, "pct")
+	end
+
+	local bloodMelee = 0
+	if gm and gm.GetMeleeBloodArmorRate then
+		bloodMelee = gm:GetMeleeBloodArmorRate(pl)
+	elseif gm and gm.GetUpgradePercent then
+		bloodMelee = gm:GetUpgradePercent(pl, "BloodFromMelee")
+	end
+	add_bonus(Phrase("char_stat_bloodfrommelee", "Blood armor from melee damage"), bloodMelee, "pct")
+
+	if gm and gm.GetReloadPercentMul then
+		add_bonus(Phrase("char_stat_reload", "Ranged reload speed"), StatMulBonus(gm:GetReloadPercentMul(pl)), "pct")
+	else
+		add_bonus(Phrase("char_stat_reload", "Ranged reload speed"), gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "Reload") or 0, "pct")
+	end
+
+	add_bonus(Phrase("char_stat_recoil", "Ranged recoil"), gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "Recoil") or 0, "pct")
+
+	if gm and gm.GetMedicHealPercentMul then
+		add_bonus(Phrase("char_stat_medicheal", "Healing effectiveness"), StatMulBonus(gm:GetMedicHealPercentMul(pl)), "pct")
+	else
+		add_bonus(Phrase("char_stat_medicheal", "Healing effectiveness"), gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "MedicHeal") or 0, "pct")
+	end
+
+	if gm and gm.GetHealReceivedPercentMul then
+		add_bonus(Phrase("char_stat_heal", "Healing received"), StatMulBonus(gm:GetHealReceivedPercentMul(pl)), "pct")
+	else
+		add_bonus(Phrase("char_stat_heal", "Healing received"), gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "Heal") or 0, "pct")
+	end
+
+	local deviceRepair = (gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "DeviceRepair") or 0)
+		+ ((gm and gm.RelapseMechanicsRepairScar and gm:RelapseMechanicsRepairScar(pl)) or 0)
+	add_bonus(Phrase("char_stat_devicerepair", "Mechanical repair efficiency"), deviceRepair, "pct")
+
+	local repairSkill = 0
+	if isnumber(pl.RepairRateMul) then
+		repairSkill = pl.RepairRateMul - 1
+	end
+	local barricadeRepair = (gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "Repair") or 0)
+		+ repairSkill
+		+ ((gm and gm.RelapseRepairScar and gm:RelapseRepairScar(pl)) or 0)
+	add_bonus(Phrase("char_stat_repair", "Barricade and protective device repair"), barricadeRepair, "pct")
+
+	local deviceHealth = (gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "DeviceHealth") or 0)
+		+ ((gm and gm.RelapseDeviceHealthScar and gm:RelapseDeviceHealthScar(pl)) or 0)
+	add_bonus(Phrase("char_stat_devicehealth", "Mechanical durability"), deviceHealth, "pct")
+
+	local protect = 0
+	if gm and gm.GetRelapseScarRank and gm.RelapseScarP then
+		local n = gm:GetRelapseScarRank("engineer", pl)
+		if n >= 1 then
+			protect = gm:RelapseScarP(n, 0.15, 0.05)
+		end
+	end
+	protect = protect + (gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "ProtectiveHealth") or 0)
+	add_bonus(Phrase("char_stat_protectivehealth", "Protective device durability"), protect, "pct")
+
+	if gm and gm.GetHammerSwingPercentMul then
+		add_bonus(Phrase("char_stat_hammerswing", "Hammer repair speed"), StatMulBonus(gm:GetHammerSwingPercentMul(pl)), "pct")
+	else
+		add_bonus(Phrase("char_stat_hammerswing", "Hammer repair speed"), gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "HammerSwing") or 0, "pct")
+	end
+
+	add_bonus(Phrase("char_stat_turretfire", "Turret attack speed"), gm and gm.GetUpgradePercent and gm:GetUpgradePercent(pl, "TurretFire") or 0, "pct")
+
+	local nails = gm and gm.GetCycleGridStatAdd and gm:GetCycleGridStatAdd(pl, "MaxNails") or 0
+	add_bonus(Phrase("char_stat_maxnails", "Max nails per prop"), nails)
 
 	return rows
 end

@@ -35,6 +35,11 @@ function meta:NearUncorruptedSigil()
 end
 
 function meta:NearArsenalCrate()
+	local gm = GAMEMODE
+	-- Prep has no sigils yet, and the spawn zone is not visible on the client.
+	if gm and not gm.ZombieEscape and (gm:GetWave() or 0) < 1 then
+		return true
+	end
 	return NearArsenalCrate(self) or self:NearUncorruptedSigil()
 end
 meta.IsNearArsenalCrate = meta.NearArsenalCrate

@@ -888,8 +888,8 @@ function GM:GetArsenalMarginGiveRate(owner, crate)
 	return self:GetArsenalMarginRate(owner, crate) * (1 - self:GetArsenalMarginKeepShare(owner))
 end
 
--- Starting shop (wave 0 / map zone) is list price. After wave 1, F2/E pick
--- the in-range crate with the biggest buyer cut; same cut → closer.
+-- Starting shop and the points shop are both open before wave 1, at list price.
+-- From wave 1, F2/E pick the in-range crate with the biggest buyer cut; same cut → closer.
 -- No crate in range → sigil. No sigil → arsenal zone.
 
 function GM:GetArsenalCrateDiscount(pl, ent)
